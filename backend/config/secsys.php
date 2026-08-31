@@ -1,0 +1,24 @@
+<?php
+
+return [
+    'real_engines_enabled' => env('SECSYS_ENABLE_REAL_ENGINES', false),
+    'engine_runtime' => env('SECSYS_ENGINE_RUNTIME', 'docker'),
+    'engine_timeout_seconds' => (int) env('SECSYS_ENGINE_TIMEOUT_SECONDS', 600),
+    'repository_workspace_root' => env('SECSYS_REPOSITORY_WORKSPACE_ROOT', storage_path('app/private/repository-workspaces')),
+    'engine_output_root' => env('SECSYS_ENGINE_OUTPUT_ROOT', storage_path('app/private/engine-output')),
+    'semgrep_image' => env('SECSYS_SEMGREP_IMAGE', 'semgrep/semgrep:1.74.0'),
+    'gitleaks_image' => env('SECSYS_GITLEAKS_IMAGE', 'zricethezav/gitleaks:v8.28.0'),
+    'trivy_image' => env('SECSYS_TRIVY_IMAGE', 'aquasec/trivy:latest'),
+    'osv_image' => env('SECSYS_OSV_IMAGE', 'ghcr.io/google/osv-scanner:latest'),
+    'hadolint_image' => env('SECSYS_HADOLINT_IMAGE', 'hadolint/hadolint:v2.12.0'),
+    'checkov_image' => env('SECSYS_CHECKOV_IMAGE', 'bridgecrew/checkov:3.2.35'),
+    'syft_image' => env('SECSYS_SYFT_IMAGE', 'anchore/syft:v0.105.0'),
+    'nuclei_image' => env('SECSYS_NUCLEI_IMAGE', 'projectdiscovery/nuclei:latest'),
+    'zap_image' => env('SECSYS_ZAP_IMAGE', 'ghcr.io/zaproxy/zaproxy:stable'),
+    'docker_binary' => env('SECSYS_DOCKER_BINARY', 'docker'),
+    'container_workspace_path' => env('SECSYS_CONTAINER_WORKSPACE_PATH', '/repo'),
+    'container_output_path' => env('SECSYS_CONTAINER_OUTPUT_PATH', '/out'),
+    'docker_host_workspace_root' => env('SECSYS_DOCKER_HOST_WORKSPACE_ROOT'),
+    'docker_host_storage_root' => env('SECSYS_DOCKER_HOST_STORAGE_ROOT'),
+    'git_webhook_auto_scan_enabled' => env('SECSYS_GIT_WEBHOOK_AUTO_SCAN', false),
+];

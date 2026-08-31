@@ -1,0 +1,46 @@
+# Root .gitignore for SecSys / TAMENG Monorepo
+
+# Environment files
+*.env
+*.env.backup
+*.env.production
+*.env.local
+.env
+backend/.env
+backend/.env.backup
+backend/.env.production
+
+# Dependencies
+vendor/
+backend/vendor/
+node_modules/
+frontend/node_modules/
+
+# Frontend builds
+frontend/dist/
+frontend/.vite/
+
+# Backend Storage & Temporary Files
+backend/storage/app/private/
+backend/storage/app/public/
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/framework/testing/*
+backend/storage/logs/*
+!backend/storage/framework/cache/.gitignore
+!backend/storage/framework/sessions/.gitignore
+!backend/storage/framework/views/.gitignore
+!backend/storage/logs/.gitignore
+
+# Operating System & IDE Files
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

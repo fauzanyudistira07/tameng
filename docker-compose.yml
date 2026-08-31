@@ -1,0 +1,95 @@
+services:
+  secsys-mysql:
+    image: mysql:8.4
+    container_name: secsys-mysql
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-secsys}
+      MYSQL_USER: ${DB_USERNAME:-secsys}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-secsys_secret}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_secret}
+    ports:
+      - "${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - secsys_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${DB_ROOT_PASSWORD:-root_secret}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  secsys-redis:
+    image: redis:7-alpine
+    container_name: secsys-redis
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - secsys_redis_data:/data
+
+  secsys-backend:
+    build:
+      context: ./backend
+    container_name: secsys-backend
+    env_file:
+      - ./deploy/backend.env
+    depends_on:
+      secsys-mysql:
+        condition: service_healthy
+      secsys-redis:
+        condition: service_started
+    volumes:
+      - secsys_backend_storage:/var/www/html/storage
+      - ${SECSYS_HOST_REPOSITORY_WORKSPACE_ROOT:-/data/repository-workspaces}:${SECSYS_REPOSITORY_WORKSPACE_ROOT:-/data/repository-workspaces}
+
+  secsys-backend-nginx:
+    image: nginx:1.27-alpine
+    container_name: secsys-backend-nginx
+    depends_on:
+      - secsys-backend
+    ports:
+      - "${BACKEND_HTTP_PORT:-8000}:80"
+    volumes:
+      - ./backend/public:/var/www/html/public:ro
+      - ./docker/nginx/backend.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  secsys-worker:
+    build:
+      context: ./backend
+    container_name: secsys-worker
+    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=300"]
+    env_file:
+      - ./deploy/backend.env
+    depends_on:
+      secsys-mysql:
+        condition: service_healthy
+      secsys-redis:
+        condition: service_started
+    volumes:
+      - secsys_backend_storage:/var/www/html/storage
+      - ${SECSYS_HOST_REPOSITORY_WORKSPACE_ROOT:-/data/repository-workspaces}:${SECSYS_REPOSITORY_WORKSPACE_ROOT:-/data/repository-workspaces}
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  secsys-frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    container_name: secsys-frontend
+    depends_on:
+      - secsys-backend-nginx
+    ports:
+      - "${FRONTEND_HTTP_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  secsys_mysql_data:
+  secsys_redis_data:
+  secsys_backend_storage:

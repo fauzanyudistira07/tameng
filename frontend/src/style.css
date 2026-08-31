@@ -1,0 +1,1242 @@
+/* ==========================================================================
+   TAMENG — Teknologi Analisis dan Monitoring Keamanan
+   Theme: National Cyber Defense & Security Operations (Armor Navy & Shield Gold)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Canvas & Foundations */
+  --bg-main: #edf3fa;               /* Soft Armor Slate-Blue Canvas */
+  --bg-surface: #ffffff;            /* Crisp Card Surface */
+  --bg-surface-elevated: #f4f8fd;   /* Subtle Tinted Inner Panels */
+  --bg-surface-glass: rgba(255, 255, 255, 0.94);
+  
+  /* Sidebar: Deep Armor Navy */
+  --bg-sidebar: #09162e;
+  --bg-sidebar-hover: #122347;
+  --bg-sidebar-active: linear-gradient(135deg, #1e40af, #0284c7);
+  --text-sidebar: #94a3b8;
+  --text-sidebar-bright: #f8fafc;
+  --border-sidebar: #192b4f;
+
+  /* Borders & Dividers */
+  --border-subtle: #dbe6f5;
+  --border-card: #cbd9ed;
+  --border-focus: #1d4ed8;
+  --border-glass: rgba(15, 23, 42, 0.08);
+
+  /* Typography */
+  --text-main: #0b172a;             /* Deep Slate Navy Charcoal */
+  --text-muted: #415570;            /* Readable Slate Blue-Gray */
+  --text-dim: #8295af;              /* Secondary Muted Text */
+  --text-inverse: #ffffff;
+
+  /* TAMENG Signature Brand Accents */
+  --tameng-navy: #0f2b5c;           /* Primary Armor Navy */
+  --tameng-sapphire: #1d4ed8;       /* Dynamic Defense Sapphire */
+  --tameng-gold: #d97706;           /* Shield Gold */
+  --tameng-gold-light: #fef3c7;     /* Shield Gold Tint */
+  --tameng-gold-border: #fde68a;
+  --tameng-teal: #0d9488;           /* Cyber Telemetry Teal */
+  --tameng-teal-light: #ccfbf1;
+
+  --accent-cyan: #0284c7;
+  --accent-blue: #1d4ed8;
+  --accent-indigo: #4338ca;
+
+  /* Severity System */
+  --severity-critical: #be123c;
+  --severity-critical-bg: #ffe4e6;
+  --severity-critical-border: #fecdd3;
+
+  --severity-high: #c2410c;
+  --severity-high-bg: #ffedd5;
+  --severity-high-border: #fed7aa;
+
+  --severity-medium: #b45309;
+  --severity-medium-bg: #fef3c7;
+  --severity-medium-border: #fde68a;
+
+  --severity-low: #1d4ed8;
+  --severity-low-bg: #eff6ff;
+  --severity-low-border: #bfdbfe;
+
+  --severity-info: #0369a1;
+  --severity-info-bg: #e0f2fe;
+  --severity-info-border: #bae6fd;
+
+  --status-success: #047857;
+  --status-success-bg: #d1fae5;
+  --status-success-border: #a7f3d0;
+
+  /* Shadows & Elevations */
+  --shadow-sm: 0 1px 3px rgba(15, 35, 70, 0.06), 0 1px 2px rgba(15, 35, 70, 0.04);
+  --shadow-md: 0 4px 14px rgba(15, 35, 70, 0.08), 0 1px 3px rgba(15, 35, 70, 0.05);
+  --shadow-lg: 0 12px 36px rgba(15, 35, 70, 0.12), 0 2px 8px rgba(15, 35, 70, 0.06);
+
+  /* Fonts */
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Transitions */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==========================================================================
+   Base & Reset
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-main);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(29, 78, 216, 0.04) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(217, 119, 6, 0.03) 0px, transparent 50%);
+  color: var(--text-main);
+  min-height: 100vh;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, .code-text, .mono {
+  font-family: var(--font-mono);
+}
+
+a {
+  color: var(--tameng-sapphire);
+  text-decoration: none;
+  transition: all 0.2s var(--ease-smooth);
+}
+
+a:hover {
+  color: var(--tameng-navy);
+}
+
+/* ==========================================================================
+   App Shell Layout (Dual-Tone Armor Navy Sidebar + Light Canvas)
+   ========================================================================== */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+  background-color: var(--bg-main);
+}
+
+/* Sidebar: TAMENG Command Center */
+.sidebar {
+  background: var(--bg-sidebar);
+  background-image: linear-gradient(180deg, #09162e 0%, #060e1f 100%);
+  border-right: 1px solid var(--border-sidebar);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 50;
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-header {
+  margin-bottom: 24px;
+  padding: 0 6px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #d97706, #f59e0b 50%, #1d4ed8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 20px;
+  box-shadow: 0 3px 12px rgba(217, 119, 6, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.brand-info strong {
+  display: block;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.brand-info span {
+  display: block;
+  font-size: 10.5px;
+  color: #f59e0b;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1.2;
+}
+
+.nav-group {
+  margin-bottom: 22px;
+}
+
+.nav-group-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.1px;
+  color: #526786;
+  padding: 6px 12px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--text-sidebar);
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: all 0.2s var(--ease-smooth);
+}
+
+.nav a .nav-icon {
+  width: 18px;
+  height: 18px;
+  opacity: 0.8;
+  color: #8da4c4;
+  transition: all 0.2s var(--ease-smooth);
+}
+
+.nav a:hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-sidebar-bright);
+}
+
+.nav a:hover .nav-icon {
+  opacity: 1;
+  color: #38bdf8;
+}
+
+.nav a.active {
+  background: var(--bg-sidebar-active);
+  color: #ffffff;
+  font-weight: 700;
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.4);
+}
+
+.nav a.active .nav-icon {
+  opacity: 1;
+  color: #ffffff;
+}
+
+.nav-badge {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  font-weight: 700;
+}
+
+/* Content Area */
+.content {
+  min-width: 0;
+  padding: 32px 40px;
+  background-color: transparent;
+}
+
+/* Topbar */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 30px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--border-card);
+}
+
+.topbar-title-area .eyebrow {
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--tameng-gold);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topbar-title-area h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--tameng-navy);
+}
+
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.current-user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px 6px 8px;
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 40px;
+  box-shadow: var(--shadow-sm);
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1d4ed8, #0f2b5c);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-meta strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.user-meta .role-pill {
+  font-size: 11px;
+  color: var(--tameng-sapphire);
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   Buttons & Controls (TAMENG Defense Theme)
+   ========================================================================== */
+
+button, .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid var(--tameng-sapphire);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1d4ed8, #0f3ba2);
+  color: #ffffff;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 700;
+  transition: all 0.2s var(--ease-smooth);
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.22);
+}
+
+button:hover:not(:disabled), .btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1e40af, #092670);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.32);
+}
+
+button:active:not(:disabled), .btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button:disabled, .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.btn-primary-glow {
+  background: linear-gradient(135deg, #0f3ba2 0%, #1d4ed8 60%, #0284c7 100%);
+  border-color: #0f3ba2;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.3);
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  border-color: #d97706;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25);
+}
+
+.btn-gold:hover:not(:disabled) {
+  background: linear-gradient(135deg, #b45309, #92400e);
+}
+
+.secondary-button, .btn-secondary {
+  background: #ffffff;
+  border-color: var(--border-card);
+  color: var(--tameng-navy);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+.secondary-button:hover:not(:disabled), .btn-secondary:hover:not(:disabled) {
+  background: var(--bg-surface-elevated);
+  border-color: #a9bedb;
+  color: var(--tameng-navy);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #be123c, #9f1239);
+  border-color: #be123c;
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #9f1239, #881337);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #047857, #065f46);
+  border-color: #047857;
+  color: #fff;
+}
+
+.small-button, .btn-sm {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+/* Form Inputs */
+input, select, textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  transition: all 0.2s var(--ease-smooth);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--tameng-sapphire);
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.14);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-dim);
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+label span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* ==========================================================================
+   Panels, Cards & Containers
+   ========================================================================== */
+
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.panel-heading h2 {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--tameng-navy);
+  letter-spacing: -0.2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-heading span {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 1100px) {
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Metrics Cards (TAMENG High-End Defense Style) */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.metrics > div, .stat-card {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s var(--ease-smooth);
+}
+
+.metrics > div:hover, .stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-card);
+}
+
+.metrics > div span, .stat-card span {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.metrics > div strong, .stat-card strong {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--tameng-navy);
+  font-family: var(--font-mono);
+  letter-spacing: -0.5px;
+}
+
+/* Status Panels & Alerts */
+.status-panel {
+  padding: 16px 20px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-panel.error, .inline-alert.error {
+  background: var(--severity-critical-bg);
+  border-color: var(--severity-critical-border);
+  color: var(--severity-critical);
+}
+
+.status-panel.success, .inline-alert.success {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: var(--status-success);
+}
+
+.status-panel.info, .inline-alert.info {
+  background: var(--severity-info-bg);
+  border-color: var(--severity-info-border);
+  color: var(--severity-info);
+}
+
+.inline-alert {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  border: 1px solid var(--border-subtle);
+  margin-top: 8px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.inline-alert.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.inline-alert .alert-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.inline-alert details {
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+
+.inline-alert details summary {
+  cursor: pointer;
+  color: #b91c1c;
+  font-weight: 600;
+  user-select: none;
+}
+
+.inline-alert details pre {
+  margin-top: 6px;
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #7f1d1d;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13.5px;
+}
+
+.data-table th {
+  background: #f1f6fd;
+  color: var(--tameng-navy);
+  font-weight: 800;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-card);
+  white-space: nowrap;
+}
+
+.data-table th:first-child {
+  border-top-left-radius: 8px;
+}
+
+.data-table th:last-child {
+  border-top-right-radius: 8px;
+}
+
+.data-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.data-table tr:hover td {
+  background: #f4f8fd;
+}
+
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Table Toolbar */
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.search-input-wrapper {
+  position: relative;
+  min-width: 260px;
+}
+
+.search-input-wrapper input {
+  padding-left: 36px;
+  min-height: 38px;
+  font-size: 13px;
+}
+
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-smooth);
+}
+
+.filter-pill:hover, .filter-pill.active {
+  background: var(--tameng-sapphire);
+  border-color: var(--tameng-sapphire);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   Badges, Pills & Status Indicators
+   ========================================================================== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-card);
+  color: var(--text-muted);
+}
+
+/* Severity Badges */
+.badge.critical, .badge-severity-critical {
+  background: var(--severity-critical-bg);
+  border-color: var(--severity-critical-border);
+  color: var(--severity-critical);
+}
+
+.badge.high, .badge-severity-high {
+  background: var(--severity-high-bg);
+  border-color: var(--severity-high-border);
+  color: var(--severity-high);
+}
+
+.badge.medium, .badge-severity-medium {
+  background: var(--severity-medium-bg);
+  border-color: var(--severity-medium-border);
+  color: var(--severity-medium);
+}
+
+.badge.low, .badge-severity-low {
+  background: var(--severity-low-bg);
+  border-color: var(--severity-low-border);
+  color: var(--severity-low);
+}
+
+.badge.informational, .badge.info, .badge-severity-info {
+  background: var(--severity-info-bg);
+  border-color: var(--severity-info-border);
+  color: var(--severity-info);
+}
+
+/* Status Badges */
+.badge.is-success, .badge.completed, .badge.active, .badge.verified, .badge.allow, .badge.fixed {
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+  color: var(--status-success);
+}
+
+.badge.is-danger, .badge.failed, .badge.denied, .badge.deny {
+  background: var(--severity-critical-bg);
+  border-color: var(--severity-critical-border);
+  color: var(--severity-critical);
+}
+
+.badge.is-info, .badge.running, .badge.queued, .badge.reviewing {
+  background: var(--severity-info-bg);
+  border-color: var(--severity-info-border);
+  color: var(--severity-info);
+}
+
+.badge.is-muted, .badge.skipped, .badge.inactive, .badge.detached {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: var(--text-dim);
+}
+
+.run-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: #f1f6fd;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--tameng-navy);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Pipeline & Progress Bar
+   ========================================================================== */
+
+.progress-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: #dbe6f5;
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-track span, .progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #1d4ed8, #0284c7);
+  border-radius: 9999px;
+  transition: width 0.5s var(--ease-smooth);
+}
+
+/* Live Status Dots (Clean, Steady & Non-Flickering) */
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--tameng-sapphire);
+  display: inline-block;
+}
+
+.pulse-dot.success { background-color: var(--status-success); }
+.pulse-dot.danger { background-color: var(--severity-critical); }
+.pulse-dot.warning { background-color: var(--tameng-gold); }
+
+/* ==========================================================================
+   Cards & Entity Layouts
+   ========================================================================== */
+
+.profile-list, .card-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.profile-list article, .entity-card {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s var(--ease-smooth);
+}
+
+.profile-list article:hover, .entity-card:hover {
+  border-color: var(--border-card);
+  box-shadow: var(--shadow-md);
+}
+
+.profile-list article h3, .entity-card h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--tameng-navy);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.profile-list article p, .entity-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.profile-list article span, .entity-card span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* Scan Jobs Specific Cards */
+.scan-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scan-card {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 24px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s var(--ease-smooth);
+}
+
+.scan-card:hover {
+  border-color: var(--border-card);
+  box-shadow: var(--shadow-md);
+}
+
+.scan-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scan-card-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scan-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  background: #f4f8fd;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.scan-meta-grid div span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.scan-meta-grid div strong {
+  display: block;
+  font-size: 13.5px;
+  color: var(--tameng-navy);
+  margin-top: 2px;
+}
+
+.scan-card-side {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 24px;
+}
+
+@media (max-width: 900px) {
+  .scan-card {
+    grid-template-columns: 1fr;
+  }
+  .scan-card-side {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 16px;
+  }
+}
+
+/* ==========================================================================
+   Modals & Drawers
+   ========================================================================== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 22, 46, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+  animation: fadeIn 0.2s var(--ease-smooth);
+}
+
+.modal-dialog {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 620px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h3 {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--tameng-navy);
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  background: var(--bg-surface-elevated);
+}
+
+/* ==========================================================================
+   Code & JSON Preview (Terminal Contrast Box)
+   ========================================================================== */
+
+.json-preview {
+  background: #09162e;
+  border: 1px solid #192b4f;
+  border-radius: 8px;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #38bdf8;
+  max-height: 420px;
+  overflow: auto;
+  line-height: 1.6;
+}
+
+.code-snippet {
+  background: #09162e;
+  border: 1px solid #192b4f;
+  border-radius: 8px;
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #f1f5f9;
+  overflow-x: auto;
+}
+
+/* ==========================================================================
+   Login & Auth Pages (TAMENG National Defense Portal)
+   ========================================================================== */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 15%, #dbeafe 0%, transparent 65%),
+              #edf3fa;
+}
+
+.login-panel {
+  width: 100%;
+  max-width: 460px;
+  background: #ffffff;
+  border: 1px solid var(--border-card);
+  border-radius: 18px;
+  padding: 38px 34px;
+  box-shadow: var(--shadow-lg);
+  border-top: 4px solid var(--tameng-gold);
+}
+
+.login-brand {
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+.login-panel .eyebrow {
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--tameng-gold);
+  margin-bottom: 6px;
+}
+
+.login-panel h1 {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--tameng-navy);
+  margin-bottom: 24px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.demo-credentials {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.demo-credentials strong {
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.demo-role-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.demo-role-pills button {
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 11.5px;
+  background: #f4f8fd;
+  border-color: var(--border-card);
+  color: var(--tameng-navy);
+  font-weight: 700;
+}
+
+.demo-role-pills button:hover {
+  background: var(--tameng-sapphire);
+  color: #fff;
+  border-color: var(--tameng-sapphire);
+}
+
+/* Subtle Fade Transitions (No Layout Shifts) */
+@keyframes fadeIn {
+  from { opacity: 0.85; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.15s ease-out;
+}
