@@ -78,13 +78,23 @@ class MyScanRequestController extends Controller
             ]);
         }
 
-        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && ! Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
+        if ($data['scan_type'] === 'repository' && ! Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
             throw ValidationException::withMessages([
-                'asset_url' => ['Scan repository / aplikasi mobile otomatis saat ini mendukung URL repositori GitHub.'],
+                'asset_url' => ['Scan repository source code otomatis saat ini mendukung URL repositori GitHub.'],
             ]);
         }
 
-        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && ! empty($data['is_private']) && empty($data['access_token'])) {
+        if ($data['scan_type'] === 'mobile') {
+            $isGit = Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/']);
+            $isDirectUrl = filter_var($data['asset_url'], FILTER_VALIDATE_URL);
+            if (! $isGit && ! $isDirectUrl) {
+                throw ValidationException::withMessages([
+                    'asset_url' => ['Target mobile harus berupa URL repositori GitHub proyek mobile atau link direct download file .apk / .ipa.'],
+                ]);
+            }
+        }
+
+        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/']) && ! empty($data['is_private']) && empty($data['access_token'])) {
             throw ValidationException::withMessages([
                 'access_token' => ['Untuk private repository, Anda wajib menyertakan GitHub Personal Access Token (PAT).'],
             ]);

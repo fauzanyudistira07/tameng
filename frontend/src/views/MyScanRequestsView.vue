@@ -516,7 +516,7 @@ onUnmounted(() => {
                 form.scan_type === 'repository'
                   ? 'URL Repositori GitHub'
                   : (form.scan_type === 'mobile'
-                      ? 'URL Repositori GitHub Proyek Mobile'
+                      ? 'Link Unduhan File Binary .APK/.IPA atau Repositori GitHub Mobile'
                       : (form.scan_type === 'container'
                           ? 'Nama Docker Image / Tag Registry'
                           : (form.scan_type === 'api' ? 'URL Base API Endpoint' : 'URL Aplikasi Web')))
@@ -525,17 +525,19 @@ onUnmounted(() => {
             <input
               v-model="form.asset_url"
               :placeholder="
-                ['repository', 'mobile'].includes(form.scan_type)
-                  ? 'https://github.com/org/mobile-app'
-                  : (form.scan_type === 'container'
-                      ? 'alpine:latest, nginx:alpine, node:20-alpine, atau ghcr.io/org/app:latest'
-                      : 'https://app.example.com')
+                form.scan_type === 'mobile'
+                  ? 'https://example.com/app-release.apk atau https://github.com/org/mobile-app'
+                  : (form.scan_type === 'repository'
+                      ? 'https://github.com/org/source-code'
+                      : (form.scan_type === 'container'
+                          ? 'alpine:latest, nginx:alpine, node:20-alpine, atau ghcr.io/org/app:latest'
+                          : 'https://app.example.com'))
               "
               :type="['web', 'api', 'repository', 'mobile'].includes(form.scan_type) ? 'url' : 'text'"
               required
             />
             <small v-if="form.scan_type === 'mobile'" style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
-              Mendukung repositori kode sumber Android (Java/Kotlin), iOS (Swift/Obj-C), Flutter, dan React Native.
+              Mendukung pemindaian file binary APK (<code>.apk</code> / <code>.ipa</code> / <code>.aab</code>) langsung via direct URL link maupun repositori kode sumber Android (Java/Kotlin), iOS (Swift/Obj-C), Flutter, dan React Native.
             </small>
             <small v-if="form.scan_type === 'container'" style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
               Mendukung image Docker Hub publik (contoh: <code>nginx:alpine</code>, <code>redis:7</code>, <code>node:20-slim</code>) dan custom registry (contoh: <code>ghcr.io/org/app:v1.0</code>).

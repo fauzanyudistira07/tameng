@@ -17,8 +17,12 @@ class RepositoryWorkspaceSyncer
     public function sync(Repository $repository, ?User $user = null): array
     {
         if (! Str::startsWith($repository->url, ['https://github.com/', 'http://github.com/'])) {
+            if (filter_var($repository->url, FILTER_VALIDATE_URL)) {
+                return $this->syncDirectFile($repository, $user);
+            }
+
             throw ValidationException::withMessages([
-                'url' => ['Saat ini clone otomatis hanya mendukung URL GitHub.'],
+                'url' => ['Saat ini clone otomatis mendukung URL repositori GitHub atau link unduhan langsung file .apk/.ipa.'],
             ]);
         }
 
@@ -123,6 +127,81 @@ class RepositoryWorkspaceSyncer
             'repository' => $repository->refresh(),
             'workspace' => $this->workspaceManager->summarize($repository),
             'commit' => $metadata['workspace_commit'] ?? null,
+        ];
+    }
+
+    /**
+     * Download direct binary/archive file (.apk, .ipa, .aab, .zip) into workspace.
+     */
+    private function syncDirectFile(Repository $repository, ?User $user = null): array
+    {
+        $workspaceRoot = $this->workspaceManager->root();
+        $workspaceName = Str::slug($repository->project_id.'-'.$repository->name);
+
+        if ($workspaceName === '') {
+            $workspaceName = 'repository-'.$repository->id;
+        }
+
+        $workspacePath = $workspaceRoot.DIRECTORY_SEPARATOR.$workspaceName;
+        File::ensureDirectoryExists($workspacePath);
+
+        // Determine filename
+        $parsedPath = parse_url($repository->url, PHP_URL_PATH) ?? '';
+        $filename = basename($parsedPath);
+        if ($filename === '' || ! preg_match('/\.(apk|ipa|aab|zip)$/i', $filename)) {
+            $filename = 'app.apk';
+        }
+
+        $targetFilePath = $workspacePath.DIRECTORY_SEPARATOR.$filename;
+
+        // Download file via curl
+        $downloadProcess = new Process([
+            'curl', '-sL',
+            '--connect-timeout', '15',
+            '--max-time', '300',
+            $repository->url,
+            '-o', $targetFilePath,
+        ]);
+        $downloadProcess->setTimeout(300);
+        $downloadProcess->run();
+
+        if (! $downloadProcess->isSuccessful() || ! File::exists($targetFilePath) || File::size($targetFilePath) === 0) {
+            @File::deleteDirectory($workspacePath);
+            throw ValidationException::withMessages([
+                'repository' => ['Gagal mengunduh file binary APK dari URL yang diberikan. Pastikan link dapat diakses secara publik.'],
+            ]);
+        }
+
+        // Auto extract APK/ZIP contents so that manifest, assets, and classes are available for SAST engines
+        if (class_exists(\ZipArchive::class) && in_array(strtolower(pathinfo($filename, PATHINFO_EXTENSION)), ['apk', 'zip', 'ipa', 'aab'], true)) {
+            $zip = new \ZipArchive();
+            if ($zip->open($targetFilePath) === true) {
+                $zip->extractTo($workspacePath);
+                $zip->close();
+            }
+        }
+
+        $fileHash = md5_file($targetFilePath);
+        $repository = $this->workspaceManager->attach($repository, $workspacePath);
+        $metadata = $repository->metadata ?? [];
+        $metadata['remote_url'] = $repository->url;
+        $metadata['is_direct_file'] = true;
+        $metadata['file_name'] = $filename;
+        $metadata['file_size'] = File::size($targetFilePath);
+        $metadata['workspace_commit'] = $fileHash;
+        $metadata['workspace_synced_at'] = now()->toISOString();
+
+        $repository->forceFill([
+            'verification_status' => 'verified',
+            'verified_at' => now(),
+            'verified_by' => $user?->id,
+            'metadata' => $metadata,
+        ])->save();
+
+        return [
+            'repository' => $repository->refresh(),
+            'workspace' => $this->workspaceManager->summarize($repository),
+            'commit' => $fileHash,
         ];
     }
 
