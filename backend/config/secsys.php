@@ -13,6 +13,7 @@ return [
     'hadolint_image' => env('SECSYS_HADOLINT_IMAGE', 'hadolint/hadolint:v2.12.0'),
     'checkov_image' => env('SECSYS_CHECKOV_IMAGE', 'bridgecrew/checkov:3.2.35'),
     'syft_image' => env('SECSYS_SYFT_IMAGE', 'anchore/syft:v0.105.0'),
+    'grype_image' => env('SECSYS_GRYPE_IMAGE', 'anchore/grype:v0.74.0'),
     'nuclei_image' => env('SECSYS_NUCLEI_IMAGE', 'projectdiscovery/nuclei:latest'),
     'zap_image' => env('SECSYS_ZAP_IMAGE', 'ghcr.io/zaproxy/zaproxy:stable'),
     'docker_binary' => env('SECSYS_DOCKER_BINARY', 'docker'),

@@ -51,9 +51,9 @@ class MyScanRequestController extends Controller
         AuditLogger $auditLogger,
     ): JsonResponse {
         $data = $request->validate([
-            'scan_type' => ['required', Rule::in(['repository', 'web', 'api'])],
+            'scan_type' => ['required', Rule::in(['repository', 'web', 'api', 'container'])],
             'project_name' => ['required', 'string', 'max:255'],
-            'asset_url' => ['required', 'url', 'max:2048'],
+            'asset_url' => ['required', 'string', 'max:2048'],
             'default_branch' => ['nullable', 'string', 'max:120'],
             'is_private' => ['nullable', 'boolean'],
             'access_token' => ['nullable', 'string', 'max:500'],
@@ -63,8 +63,20 @@ class MyScanRequestController extends Controller
             'auth_header_value' => ['nullable', 'string', 'max:2000'],
             'auth_username' => ['nullable', 'string', 'max:255'],
             'auth_password' => ['nullable', 'string', 'max:500'],
-            'notes' => ['nullable', 'string', 'max:2000'],
+            'notes' => ['nullable', 'string', 'max:2048'],
         ]);
+
+        if (in_array($data['scan_type'], ['web', 'api'], true) && ! filter_var($data['asset_url'], FILTER_VALIDATE_URL)) {
+            throw ValidationException::withMessages([
+                'asset_url' => ['URL target web/API harus berformat URL valid (contoh: https://app.example.com).'],
+            ]);
+        }
+
+        if ($data['scan_type'] === 'container' && ! preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.\-\/:@]*$/', $data['asset_url'])) {
+            throw ValidationException::withMessages([
+                'asset_url' => ['Nama Docker image / tag registry tidak valid (contoh: alpine:latest, nginx:alpine, atau ghcr.io/org/app:latest).'],
+            ]);
+        }
 
         if ($data['scan_type'] === 'repository' && ! Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
             throw ValidationException::withMessages([
@@ -278,6 +290,7 @@ class MyScanRequestController extends Controller
         return match ($scanType) {
             'web' => 'web_safe_scan',
             'api' => 'api_safe_scan',
+            'container' => 'container_security_scan',
             default => 'source_code_scan',
         };
     }
@@ -306,6 +319,29 @@ class MyScanRequestController extends Controller
             ]);
 
             return [$repository, null];
+        }
+
+        if ($data['scan_type'] === 'container') {
+            $imageTag = trim($data['asset_url']);
+            $host = parse_url('//'.$imageTag, PHP_URL_HOST);
+
+            $target = Target::query()->create([
+                'project_id' => $project->id,
+                'type' => 'container',
+                'name' => $imageTag,
+                'base_url' => $imageTag,
+                'hostname' => $host ?: null,
+                'verification_status' => 'verified',
+                'verified_at' => now(),
+                'verified_by' => $userId,
+                'metadata' => [
+                    'source' => 'user_scan_request',
+                    'image_tag' => $imageTag,
+                    'submitted_url' => $imageTag,
+                ],
+            ]);
+
+            return [null, $target];
         }
 
         $host = parse_url($data['asset_url'], PHP_URL_HOST);
@@ -360,10 +396,16 @@ class MyScanRequestController extends Controller
 
     private function createAllowedScope(array $data, Project $project, ?Target $target, int $userId): Scope
     {
+        $type = match ($data['scan_type']) {
+            'api' => 'api_route',
+            'container' => 'container_image',
+            default => 'url',
+        };
+
         return Scope::query()->create([
             'project_id' => $project->id,
             'target_id' => $target?->id,
-            'type' => $data['scan_type'] === 'api' ? 'api_route' : 'url',
+            'type' => $type,
             'pattern' => $data['asset_url'],
             'effect' => 'allow',
             'status' => 'active',

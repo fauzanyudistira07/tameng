@@ -80,6 +80,16 @@ class DatabaseSeeder extends Seeder
                 'active_testing' => true,
                 'is_active' => true,
             ],
+            [
+                'key' => 'container_security_scan',
+                'name' => 'Container & Docker Security Scan',
+                'description' => 'Container image vulnerability, CVE, OS packages, and SBOM inventory analysis.',
+                'allowed_target_types' => json_encode(['repository', 'container']),
+                'engine_keys' => json_encode(['trivy', 'grype', 'hadolint', 'syft']),
+                'policy' => json_encode(['network' => 'disabled', 'requires_image_or_dockerfile' => true]),
+                'active_testing' => false,
+                'is_active' => true,
+            ],
         ];
 
         DB::table('scan_profiles')->upsert($profiles, ['key'], [

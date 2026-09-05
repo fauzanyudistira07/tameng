@@ -4,6 +4,7 @@ namespace App\Services\Engines;
 
 use App\Services\Engines\Adapters\CheckovAdapter;
 use App\Services\Engines\Adapters\GitleaksAdapter;
+use App\Services\Engines\Adapters\GrypeAdapter;
 use App\Services\Engines\Adapters\HadolintAdapter;
 use App\Services\Engines\Adapters\NiktoAdapter;
 use App\Services\Engines\Adapters\NucleiAdapter;
@@ -26,6 +27,7 @@ class EngineAdapterResolver
         private readonly HadolintAdapter $hadolintAdapter,
         private readonly CheckovAdapter $checkovAdapter,
         private readonly SyftAdapter $syftAdapter,
+        private readonly GrypeAdapter $grypeAdapter,
         private readonly NucleiAdapter $nucleiAdapter,
         private readonly ZapAdapter $zapAdapter,
         private readonly TestSslAdapter $testSslAdapter,
@@ -42,6 +44,7 @@ class EngineAdapterResolver
             'hadolint' => $this->hadolintAdapter,
             'checkov' => $this->checkovAdapter,
             'syft' => $this->syftAdapter,
+            'grype' => $this->grypeAdapter,
             'nuclei' => $this->nucleiAdapter,
             'zap' => $this->zapAdapter,
             'testssl' => $this->testSslAdapter,

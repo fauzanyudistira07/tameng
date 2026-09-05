@@ -39,6 +39,7 @@ services:
     volumes:
       - secsys_backend_storage:/var/www/html/storage
       - ${SECSYS_HOST_REPOSITORY_WORKSPACE_ROOT:-/data/repository-workspaces}:${SECSYS_REPOSITORY_WORKSPACE_ROOT:-/data/repository-workspaces}
+      - /var/run/docker.sock:/var/run/docker.sock
 
   secsys-backend-nginx:
     image: nginx:1.27-alpine
@@ -60,7 +61,7 @@ services:
     build:
       context: ./backend
     container_name: secsys-worker
-    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=300"]
+    command: ["php", "artisan", "queue:work", "--tries=1", "--timeout=900"]
     env_file:
       - ./deploy/backend.env
     depends_on:
@@ -77,7 +78,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     container_name: secsys-frontend
     depends_on:
       - secsys-backend-nginx

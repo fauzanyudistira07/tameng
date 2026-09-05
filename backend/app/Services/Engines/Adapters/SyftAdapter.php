@@ -27,10 +27,12 @@ class SyftAdapter extends RepositoryDockerAdapter
         return [0, 1];
     }
 
-    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath): array
+    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath, ?string $imageTag = null): array
     {
+        $targetSource = $imageTag ?: "dir:{$containerWorkspacePath}";
+
         return [
-            "dir:{$containerWorkspacePath}",
+            $targetSource,
             '-o',
             'json',
             '--file',

@@ -3,7 +3,7 @@
 return [
     'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
-    'allowed_methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    'allowed_methods' => ['*'],
 
     'allowed_origins' => array_values(array_unique(array_filter([
         env('FRONTEND_URL'),
@@ -15,15 +15,11 @@ return [
         'http://localhost:8080',
     ]))),
 
-    'allowed_origins_patterns' => [],
-
-    'allowed_headers' => [
-        'Accept',
-        'Authorization',
-        'Content-Type',
-        'X-XSRF-TOKEN',
-        'X-Requested-With',
+    'allowed_origins_patterns' => [
+        '#^https?://.*#',
     ],
+
+    'allowed_headers' => ['*'],
 
     'exposed_headers' => [],
 

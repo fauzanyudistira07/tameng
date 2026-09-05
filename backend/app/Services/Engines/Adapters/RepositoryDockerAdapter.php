@@ -36,10 +36,13 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
             return EngineExecutionResult::skipped($commandSpec, 'ENGINE_RUNTIME_NOT_SUPPORTED');
         }
 
-        $plan->scanJob->loadMissing('repository');
+        $plan->scanJob->loadMissing(['repository', 'target']);
         $workspacePath = $plan->scanJob->repository?->metadata['local_path'] ?? null;
+        $imageTag = $plan->scanJob->target?->type === 'container'
+            ? ($plan->scanJob->target->metadata['image_tag'] ?? $plan->scanJob->target->base_url)
+            : null;
 
-        if (! $workspacePath || ! File::isDirectory($workspacePath)) {
+        if (! $imageTag && (! $workspacePath || ! File::isDirectory($workspacePath))) {
             return EngineExecutionResult::skipped($commandSpec, 'LOCAL_REPOSITORY_WORKSPACE_NOT_FOUND');
         }
 
@@ -73,6 +76,31 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
         $reportPath = $this->reportPath($plan);
         $outputDirectory = dirname($reportPath);
 
+        $mounts = [
+            '-v',
+            $this->dockerStorageMountSource($outputDirectory).":{$containerOutputPath}:rw",
+        ];
+
+        if ($workspacePath && File::isDirectory($workspacePath)) {
+            $mounts[] = '-v';
+            $mounts[] = $this->dockerMountSource($workspacePath).":{$containerWorkspacePath}:ro";
+        }
+
+        if ($imageTag) {
+            $mounts[] = '-v';
+            $mounts[] = '/var/run/docker.sock:/var/run/docker.sock';
+        }
+
+        if ($this->key() === 'grype') {
+            $mounts[] = '-v';
+            $mounts[] = '/data/secsys-cache/grype:/root/.cache/grype';
+        }
+
+        if ($this->key() === 'trivy') {
+            $mounts[] = '-v';
+            $mounts[] = '/data/secsys-cache/trivy:/root/.cache/trivy';
+        }
+
         $command = [
             $dockerBinary,
             'run',
@@ -82,12 +110,9 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
             '--memory',
             $memoryLimit,
             '--security-opt=no-new-privileges',
-            '-v',
-            $this->dockerMountSource($workspacePath).":{$containerWorkspacePath}:ro",
-            '-v',
-            $this->dockerStorageMountSource($outputDirectory).":{$containerOutputPath}:rw",
+            ...$mounts,
             $image,
-            ...$this->containerCommand($containerWorkspacePath, $containerOutputPath),
+            ...$this->containerCommand($containerWorkspacePath, $containerOutputPath, $imageTag),
         ];
 
         $process = new Process($command);

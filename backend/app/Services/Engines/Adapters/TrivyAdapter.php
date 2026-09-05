@@ -19,8 +19,21 @@ class TrivyAdapter extends RepositoryDockerAdapter
         return 'trivy-report.json';
     }
 
-    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath): array
+    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath, ?string $imageTag = null): array
     {
+        if ($imageTag) {
+            return [
+                'image',
+                '--scanners',
+                'vuln',
+                '--format',
+                'json',
+                '--output',
+                "{$containerOutputPath}/{$this->reportFilename()}",
+                $imageTag,
+            ];
+        }
+
         return [
             'fs',
             '--scanners',

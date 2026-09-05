@@ -30,7 +30,19 @@ class HadolintAdapter extends RepositoryDockerAdapter
 
     public function execute(EngineRunPlan $plan): EngineExecutionResult
     {
-        $plan->scanJob->loadMissing('repository');
+        $plan->scanJob->loadMissing(['repository', 'target']);
+
+        if ($plan->scanJob->target?->type === 'container') {
+            $commandSpec = [
+                ...$plan->toCommandSpec(),
+                'mode' => 'real_adapter_guarded',
+                'runtime' => config('secsys.engine_runtime'),
+                'scanner_execution' => false,
+            ];
+
+            return EngineExecutionResult::skipped($commandSpec, 'HADOLINT_REQUIRES_DOCKERFILE');
+        }
+
         $workspacePath = $plan->scanJob->repository?->metadata['local_path'] ?? null;
 
         // Skip gracefully if repository has no Dockerfile

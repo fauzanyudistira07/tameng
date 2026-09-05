@@ -228,6 +228,21 @@ class EngineRegistry
                 ],
             ],
             [
+                'key' => 'grype',
+                'name' => 'Anchore Grype',
+                'category' => 'container_security',
+                'target_types' => ['repository', 'container'],
+                'risk_level' => 'passive',
+                'external_binary' => 'grype',
+                'adapter' => 'implemented',
+                'required_input' => ['verified_repository_or_image', 'working_copy_or_image_ref'],
+                'produces' => ['container_findings', 'dependency_findings'],
+                'safety_controls' => [
+                    'read_only_working_copy',
+                    'timeout_required',
+                ],
+            ],
+            [
                 'key' => 'mobsf',
                 'name' => 'MobSF',
                 'category' => 'mobile_scanning',

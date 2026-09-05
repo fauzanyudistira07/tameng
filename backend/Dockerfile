@@ -13,6 +13,10 @@ WORKDIR /var/www/html
 
 RUN apk add --no-cache \
     bash \
+    git \
+    curl \
+    openssh-client \
+    ca-certificates \
     docker-cli \
     icu-dev \
     libzip-dev \

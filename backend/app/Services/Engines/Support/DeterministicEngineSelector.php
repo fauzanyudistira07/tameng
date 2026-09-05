@@ -25,7 +25,12 @@ class DeterministicEngineSelector
             }
         }
 
-        // 2. Web & API Target selection
+        // 2. Container Target selection (Docker Image / Registry Tag)
+        if (in_array($targetType, ['container', 'container_image', 'docker_image'], true)) {
+            return ['trivy', 'grype', 'syft'];
+        }
+
+        // 3. Web & API Target selection
         if (in_array($targetType, ['web', 'api', 'web_target', 'web_app'], true)) {
             $engines = SecurityEngine::active()
                 ->whereIn('code', ['nuclei', 'zap', 'testssl', 'nikto'])

@@ -39,6 +39,20 @@ class CheckovAdapter extends RepositoryDockerAdapter
             $containerOutputPath,
             '--soft-fail',
             '--compact',
+            '--skip-path',
+            "{$containerWorkspacePath}/vendor",
+            '--skip-path',
+            "{$containerWorkspacePath}/node_modules",
+            '--skip-path',
+            "{$containerWorkspacePath}/.git",
+            '--skip-path',
+            "{$containerWorkspacePath}/storage",
+            '--skip-path',
+            "{$containerWorkspacePath}/dist",
+            '--skip-path',
+            "{$containerWorkspacePath}/build",
+            '--skip-framework',
+            'sca_package',
         ];
     }
 

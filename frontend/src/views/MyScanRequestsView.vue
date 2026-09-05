@@ -110,6 +110,7 @@ function scanTypeLabel(type: string) {
   return (
     {
       repository: 'Repository GitHub',
+      container: 'Container Image',
       web: 'Website URL',
       api: 'API Endpoint',
     }[type] ?? type
@@ -141,6 +142,9 @@ function estimateScanDuration(item: any): string {
   }
 
   if (item.status === 'running') {
+    if (item.scan_type === 'container') {
+      return '~30 - 90 detik lagi (Eksekusi Trivy, Grype & Syft SBOM)'
+    }
     if (item.scan_type === 'web' || item.scan_type === 'api') {
       return '~1 - 2 menit lagi (Eksekusi DAST Nuclei & Web Exposure)'
     }
@@ -232,6 +236,49 @@ function formatFailureReason(raw: string) {
     hasDetail: message.length > 80 || message !== summary,
     rawDetail: message,
   }
+}
+
+function formatEngineReason(raw: string, status?: string): string {
+  if (!raw) return ''
+
+  if (/HADOLINT_REQUIRES_DOCKERFILE/i.test(raw)) {
+    return 'Hadolint menganalisis Dockerfile (Dilewati untuk target direct container image)'
+  }
+  if (/NO_DOCKERFILE_FOUND/i.test(raw)) {
+    return 'Tidak ada file Dockerfile pada repositori (Analisis Dockerfile dilewati)'
+  }
+  if (/NO_LOCKFILE_FOUND|NO_SBOM_FOUND/i.test(raw)) {
+    return 'Tidak ada file manifest dependensi (Analisis SCA dilewati)'
+  }
+  if (/ENGINE_PROCESS_TIMEOUT/i.test(raw)) {
+    return 'Batas waktu pemindaian engine habis (Timeout)'
+  }
+  if (/GRYPE_PROCESS_FAILED/i.test(raw)) {
+    return 'Pemindaian kerentanan OS & dependensi Grype mengalami kendala'
+  }
+  if (/TRIVY_PROCESS_FAILED/i.test(raw)) {
+    return 'Pemindaian kerentanan CVE Trivy mengalami kendala'
+  }
+  if (/SYFT_PROCESS_FAILED/i.test(raw)) {
+    return 'Penyusunan katalog SBOM Syft mengalami kendala'
+  }
+  if (/SEMGREP_PROCESS_FAILED/i.test(raw)) {
+    return 'Parsing struktur kode sumber mengalami kendala'
+  }
+  if (/GITLEAKS_PROCESS_FAILED/i.test(raw)) {
+    return 'Pemindaian riwayat secret git mengalami kendala'
+  }
+  if (/NUCLEI_PROCESS_FAILED/i.test(raw)) {
+    return 'Target web/API tidak merespons pengujian DAST'
+  }
+  if (/DENIED/i.test(raw)) {
+    return 'Ditolak oleh kebijakan otorisasi pemindaian'
+  }
+
+  return raw
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/^\w/, (c) => c.toUpperCase())
 }
 
 function resetForm() {
@@ -420,12 +467,19 @@ onUnmounted(() => {
             <span>Tipe Pemindaian</span>
             <select v-model="form.scan_type" required>
               <option value="repository">Repositori Git (Source Code, Secrets, Dependencies, SBOM, Dockerfile, IaC)</option>
+              <option value="container">Container Image (Docker Hub / Registry Tag — Trivy, Grype & Syft)</option>
               <option value="web">Aplikasi Web / Website (DAST - Nuclei Web Exposure & Vulnerabilities)</option>
               <option value="api">REST API Endpoint (DAST - Nuclei API Security Assessment)</option>
-              <option value="container" disabled>Container Image — Segera Hadir</option>
               <option value="mobile" disabled>Mobile Binary (APK/IPA) — Segera Hadir</option>
             </select>
           </label>
+
+          <div v-if="form.scan_type === 'container'" class="inline-alert info" style="margin-top: 4px; margin-bottom: 8px; font-size: 11.5px; padding: 10px 14px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--tameng-sapphire); border-radius: 4px;">
+            <strong style="color: var(--tameng-sapphire); display: block; margin-bottom: 2px;">Pemindaian Container Image Terisolasi</strong>
+            <span style="color: var(--text-muted);">
+              Suite scanner (Aqua Trivy, Anchore Grype, dan Anchore Syft) akan memindai kerentanan OS packages, CVE pustaka dependensi, serta membuat katalog Software Bill of Materials (SBOM) lengkap.
+            </span>
+          </div>
 
           <div v-if="['web', 'api'].includes(form.scan_type)" class="inline-alert info" style="margin-top: 4px; margin-bottom: 8px; font-size: 11.5px; padding: 10px 14px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--tameng-sapphire); border-radius: 4px;">
             <strong style="color: var(--tameng-sapphire); display: block; margin-bottom: 2px;">Pemindaian Dinamis DAST Terisolasi</strong>
@@ -436,17 +490,34 @@ onUnmounted(() => {
 
           <label>
             <span>Nama Proyek / Layanan</span>
-            <input v-model="form.project_name" placeholder="Contoh: Backend Auth Service" required />
+            <input v-model="form.project_name" placeholder="Contoh: Production Web App / Backend Service" required />
           </label>
 
           <label>
-            <span>{{ form.scan_type === 'repository' ? 'URL Repositori GitHub' : (form.scan_type === 'api' ? 'URL Base API Endpoint' : 'URL Aplikasi Web') }}</span>
+            <span>
+              {{
+                form.scan_type === 'repository'
+                  ? 'URL Repositori GitHub'
+                  : (form.scan_type === 'container'
+                      ? 'Nama Docker Image / Tag Registry'
+                      : (form.scan_type === 'api' ? 'URL Base API Endpoint' : 'URL Aplikasi Web'))
+              }}
+            </span>
             <input
               v-model="form.asset_url"
-              :placeholder="form.scan_type === 'repository' ? 'https://github.com/org/repo' : 'https://app.example.com'"
-              type="url"
+              :placeholder="
+                form.scan_type === 'repository'
+                  ? 'https://github.com/org/repo'
+                  : (form.scan_type === 'container'
+                      ? 'alpine:latest, nginx:alpine, node:20-alpine, atau ghcr.io/org/app:latest'
+                      : 'https://app.example.com')
+              "
+              :type="['web', 'api', 'repository'].includes(form.scan_type) ? 'url' : 'text'"
               required
             />
+            <small v-if="form.scan_type === 'container'" style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
+              Mendukung image Docker Hub publik (contoh: <code>nginx:alpine</code>, <code>redis:7</code>, <code>node:20-slim</code>) dan custom registry (contoh: <code>ghcr.io/org/app:v1.0</code>).
+            </small>
           </label>
 
           <!-- Optional DAST Authentication for Deep / Grey-box Scan -->
@@ -759,8 +830,17 @@ onUnmounted(() => {
               Temuan: <strong>{{ run.runtime_metrics?.finding_count ?? 0 }}</strong> |
               Durasi: {{ run.runtime_metrics?.duration_ms ? `${(run.runtime_metrics.duration_ms / 1000).toFixed(1)}s` : '-' }}
             </div>
-            <div v-if="run.failure_reason" style="font-size: 11px; color: var(--severity-critical); margin-top: 4px;">
-              {{ run.failure_reason }}
+            <div
+              v-if="run.failure_reason"
+              style="font-size: 11px; margin-top: 8px; padding: 4px 8px; border-radius: 4px; line-height: 1.4;"
+              :style="{
+                background: run.status === 'skipped' ? 'rgba(100, 116, 139, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                color: run.status === 'skipped' ? 'var(--text-muted)' : 'var(--severity-critical)',
+                borderLeft: run.status === 'skipped' ? '2px solid var(--text-muted)' : '2px solid var(--severity-critical)'
+              }"
+            >
+              <span v-if="run.status === 'skipped'">ℹ️ {{ formatEngineReason(run.failure_reason, run.status) }}</span>
+              <span v-else>⚠️ {{ formatEngineReason(run.failure_reason, run.status) }}</span>
             </div>
           </div>
 

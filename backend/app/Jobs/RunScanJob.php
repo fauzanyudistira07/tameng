@@ -165,8 +165,12 @@ class RunScanJob implements ShouldQueue
             'required_engine_count' => count($engineKeys),
         ])->save();
 
-        foreach ($engineKeys as $engineKey) {
+        $totalEngines = max(1, count($engineKeys));
+        foreach ($engineKeys as $engineIndex => $engineKey) {
             $scanRun = $engineRunner->execute($scanJob, $engineKey);
+
+            $incrementalProgress = (int) round((($engineIndex + 1) / $totalEngines) * 95);
+            $scanJob->forceFill(['progress' => $incrementalProgress])->save();
 
             $auditLogger->recordSystem('engine.run_auto', $scanRun->status === 'failed' ? 'failed' : 'success', [
                 'user_id' => $user->id,
@@ -198,8 +202,7 @@ class RunScanJob implements ShouldQueue
         $completedCount = $runs->where('status', 'completed')->count();
         $failedCount = $runs->where('status', 'failed')->count();
         $hasDenied = $runs->contains(fn (ScanRun $run): bool => $run->status === 'denied');
-
-        $finalStatus = $hasDenied ? 'denied' : ($failedCount > 0 ? 'failed' : 'completed');
+        $finalStatus = $hasDenied ? 'denied' : ($completedCount > 0 ? 'completed' : ($failedCount > 0 ? 'failed' : 'completed'));
         $progress = $terminalRuns->count() >= $totalEngines ? 100 : (int) round(($terminalRuns->count() / $totalEngines) * 100);
 
         // Update engine_plan array with actual individual engine statuses
