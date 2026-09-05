@@ -41,17 +41,28 @@ class DeterministicEngineSelector
         }
 
         // 3. Mobile App selection
-        if ($targetType === 'mobile_app') {
-            return SecurityEngine::active()
-                ->where('domain', 'MOBILE')
-                ->pluck('code')
-                ->all() ?: ['mobsf'];
+        if (in_array($targetType, ['mobile', 'mobile_app', 'apk', 'ipa', 'android', 'ios'], true)) {
+            return ['mobsf', 'semgrep', 'gitleaks', 'trivy'];
         }
 
         // 4. Repository Target: Inspect workspace markers
         $engines = ['semgrep', 'gitleaks', 'trivy', 'osv']; // Core baseline
 
         if ($workspacePath && File::isDirectory($workspacePath)) {
+            // Check for Mobile Application Markers (Android / iOS / Flutter / React Native)
+            $hasMobile = File::exists($workspacePath.'/AndroidManifest.xml')
+                || File::exists($workspacePath.'/build.gradle')
+                || File::exists($workspacePath.'/build.gradle.kts')
+                || File::exists($workspacePath.'/Podfile')
+                || File::isDirectory($workspacePath.'/android')
+                || File::isDirectory($workspacePath.'/ios')
+                || ! empty(File::glob($workspacePath.'/*.swift'))
+                || ! empty(File::glob($workspacePath.'/*.kt'));
+
+            if ($hasMobile) {
+                $engines[] = 'mobsf';
+            }
+
             // Check for Dockerfile
             if (File::exists($workspacePath.DIRECTORY_SEPARATOR.'Dockerfile') || ! empty(File::glob($workspacePath.'/*Dockerfile*'))) {
                 $engines[] = 'hadolint';

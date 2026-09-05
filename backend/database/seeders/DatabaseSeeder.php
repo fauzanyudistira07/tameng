@@ -90,6 +90,16 @@ class DatabaseSeeder extends Seeder
                 'active_testing' => false,
                 'is_active' => true,
             ],
+            [
+                'key' => 'mobile_app_scan',
+                'name' => 'Mobile Application Security Scan',
+                'description' => 'Static analysis, permission checks, cryptographic audit, and mobile vulnerability scanning via MobSF.',
+                'allowed_target_types' => json_encode(['repository', 'mobile']),
+                'engine_keys' => json_encode(['mobsf', 'semgrep', 'gitleaks', 'trivy']),
+                'policy' => json_encode(['network' => 'disabled', 'requires_mobile_artifact_or_repo' => true]),
+                'active_testing' => false,
+                'is_active' => true,
+            ],
         ];
 
         DB::table('scan_profiles')->upsert($profiles, ['key'], [

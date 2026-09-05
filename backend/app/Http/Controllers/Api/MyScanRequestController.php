@@ -51,7 +51,7 @@ class MyScanRequestController extends Controller
         AuditLogger $auditLogger,
     ): JsonResponse {
         $data = $request->validate([
-            'scan_type' => ['required', Rule::in(['repository', 'web', 'api', 'container'])],
+            'scan_type' => ['required', Rule::in(['repository', 'web', 'api', 'container', 'mobile'])],
             'project_name' => ['required', 'string', 'max:255'],
             'asset_url' => ['required', 'string', 'max:2048'],
             'default_branch' => ['nullable', 'string', 'max:120'],
@@ -78,13 +78,13 @@ class MyScanRequestController extends Controller
             ]);
         }
 
-        if ($data['scan_type'] === 'repository' && ! Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
+        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && ! Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
             throw ValidationException::withMessages([
-                'asset_url' => ['Scan repository otomatis saat ini hanya mendukung URL GitHub.'],
+                'asset_url' => ['Scan repository / aplikasi mobile otomatis saat ini mendukung URL repositori GitHub.'],
             ]);
         }
 
-        if ($data['scan_type'] === 'repository' && ! empty($data['is_private']) && empty($data['access_token'])) {
+        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && ! empty($data['is_private']) && empty($data['access_token'])) {
             throw ValidationException::withMessages([
                 'access_token' => ['Untuk private repository, Anda wajib menyertakan GitHub Personal Access Token (PAT).'],
             ]);
@@ -291,13 +291,14 @@ class MyScanRequestController extends Controller
             'web' => 'web_safe_scan',
             'api' => 'api_safe_scan',
             'container' => 'container_security_scan',
+            'mobile' => 'mobile_app_scan',
             default => 'source_code_scan',
         };
     }
 
     private function createAsset(array $data, Project $project, int $userId): array
     {
-        if ($data['scan_type'] === 'repository') {
+        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
             $isPrivate = (bool) ($data['is_private'] ?? ! empty($data['access_token']));
             $encryptedToken = ! empty($data['access_token']) ? Crypt::encryptString($data['access_token']) : null;
 
@@ -312,6 +313,7 @@ class MyScanRequestController extends Controller
                 'verified_by' => $userId,
                 'metadata' => [
                     'source' => 'user_scan_request',
+                    'scan_type' => $data['scan_type'],
                     'submitted_url' => $data['asset_url'],
                     'is_private' => $isPrivate,
                     'access_token' => $encryptedToken,
@@ -399,6 +401,7 @@ class MyScanRequestController extends Controller
         $type = match ($data['scan_type']) {
             'api' => 'api_route',
             'container' => 'container_image',
+            'mobile' => 'mobile_app',
             default => 'url',
         };
 

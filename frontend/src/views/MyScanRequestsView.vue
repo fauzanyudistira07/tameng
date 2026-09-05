@@ -113,6 +113,7 @@ function scanTypeLabel(type: string) {
       container: 'Container Image',
       web: 'Website URL',
       api: 'API Endpoint',
+      mobile: 'Aplikasi Mobile',
     }[type] ?? type
   )
 }
@@ -144,6 +145,9 @@ function estimateScanDuration(item: any): string {
   if (item.status === 'running') {
     if (item.scan_type === 'container') {
       return '~30 - 90 detik lagi (Eksekusi Trivy, Grype & Syft SBOM)'
+    }
+    if (item.scan_type === 'mobile') {
+      return '~1 - 2 menit lagi (Eksekusi MobSF Mobile Security Framework)'
     }
     if (item.scan_type === 'web' || item.scan_type === 'api') {
       return '~1 - 2 menit lagi (Eksekusi DAST Nuclei & Web Exposure)'
@@ -262,6 +266,9 @@ function formatEngineReason(raw: string, status?: string): string {
   if (/SYFT_PROCESS_FAILED/i.test(raw)) {
     return 'Penyusunan katalog SBOM Syft mengalami kendala'
   }
+  if (/MOBSF_PROCESS_FAILED/i.test(raw)) {
+    return 'Pemindaian keamanan mobile MobSF mengalami kendala'
+  }
   if (/SEMGREP_PROCESS_FAILED/i.test(raw)) {
     return 'Parsing struktur kode sumber mengalami kendala'
   }
@@ -324,7 +331,7 @@ async function submitScanRequest() {
   successMessage.value = ''
 
   try {
-    const isRepo = form.scan_type === 'repository'
+    const isRepo = ['repository', 'mobile'].includes(form.scan_type)
     const isWeb = ['web', 'api'].includes(form.scan_type)
     const isFormLogin = isWeb && form.auth_type === 'form_login'
     const isBasic = isWeb && form.auth_type === 'basic'
@@ -467,12 +474,19 @@ onUnmounted(() => {
             <span>Tipe Pemindaian</span>
             <select v-model="form.scan_type" required>
               <option value="repository">Repositori Git (Source Code, Secrets, Dependencies, SBOM, Dockerfile, IaC)</option>
+              <option value="mobile">Aplikasi Mobile (Android / iOS / Flutter / React Native — MobSF)</option>
               <option value="container">Container Image (Docker Hub / Registry Tag — Trivy, Grype & Syft)</option>
               <option value="web">Aplikasi Web / Website (DAST - Nuclei Web Exposure & Vulnerabilities)</option>
               <option value="api">REST API Endpoint (DAST - Nuclei API Security Assessment)</option>
-              <option value="mobile" disabled>Mobile Binary (APK/IPA) — Segera Hadir</option>
             </select>
           </label>
+
+          <div v-if="form.scan_type === 'mobile'" class="inline-alert info" style="margin-top: 4px; margin-bottom: 8px; font-size: 11.5px; padding: 10px 14px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--tameng-sapphire); border-radius: 4px;">
+            <strong style="color: var(--tameng-sapphire); display: block; margin-bottom: 2px;">Pemindaian Keamanan Mobile Terintegrasi (MobSF)</strong>
+            <span style="color: var(--text-muted);">
+              Engine MobSF (Mobile Security Framework) akan memindai konfigurasi AndroidManifest / Info.plist, izin aplikasi (*permissions*), celah kriptografi, penyimpanan lokal tidak aman, dan standar kepatuhan OWASP Mobile Top 10 (MASVS).
+            </span>
+          </div>
 
           <div v-if="form.scan_type === 'container'" class="inline-alert info" style="margin-top: 4px; margin-bottom: 8px; font-size: 11.5px; padding: 10px 14px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--tameng-sapphire); border-radius: 4px;">
             <strong style="color: var(--tameng-sapphire); display: block; margin-bottom: 2px;">Pemindaian Container Image Terisolasi</strong>
@@ -490,7 +504,7 @@ onUnmounted(() => {
 
           <label>
             <span>Nama Proyek / Layanan</span>
-            <input v-model="form.project_name" placeholder="Contoh: Production Web App / Backend Service" required />
+            <input v-model="form.project_name" placeholder="Contoh: Mobile Banking Android / iOS App" required />
           </label>
 
           <label>
@@ -498,23 +512,28 @@ onUnmounted(() => {
               {{
                 form.scan_type === 'repository'
                   ? 'URL Repositori GitHub'
-                  : (form.scan_type === 'container'
-                      ? 'Nama Docker Image / Tag Registry'
-                      : (form.scan_type === 'api' ? 'URL Base API Endpoint' : 'URL Aplikasi Web'))
+                  : (form.scan_type === 'mobile'
+                      ? 'URL Repositori GitHub Proyek Mobile'
+                      : (form.scan_type === 'container'
+                          ? 'Nama Docker Image / Tag Registry'
+                          : (form.scan_type === 'api' ? 'URL Base API Endpoint' : 'URL Aplikasi Web')))
               }}
             </span>
             <input
               v-model="form.asset_url"
               :placeholder="
-                form.scan_type === 'repository'
-                  ? 'https://github.com/org/repo'
+                ['repository', 'mobile'].includes(form.scan_type)
+                  ? 'https://github.com/org/mobile-app'
                   : (form.scan_type === 'container'
                       ? 'alpine:latest, nginx:alpine, node:20-alpine, atau ghcr.io/org/app:latest'
                       : 'https://app.example.com')
               "
-              :type="['web', 'api', 'repository'].includes(form.scan_type) ? 'url' : 'text'"
+              :type="['web', 'api', 'repository', 'mobile'].includes(form.scan_type) ? 'url' : 'text'"
               required
             />
+            <small v-if="form.scan_type === 'mobile'" style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
+              Mendukung repositori kode sumber Android (Java/Kotlin), iOS (Swift/Obj-C), Flutter, dan React Native.
+            </small>
             <small v-if="form.scan_type === 'container'" style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
               Mendukung image Docker Hub publik (contoh: <code>nginx:alpine</code>, <code>redis:7</code>, <code>node:20-slim</code>) dan custom registry (contoh: <code>ghcr.io/org/app:v1.0</code>).
             </small>
@@ -590,7 +609,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="form.scan_type === 'repository'" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div v-if="['repository', 'mobile'].includes(form.scan_type)" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <label>
               <span>Default Git Branch</span>
               <input v-model="form.default_branch" placeholder="main" required />
@@ -605,7 +624,7 @@ onUnmounted(() => {
             </label>
           </div>
 
-          <label v-if="form.scan_type === 'repository' && form.is_private">
+          <label v-if="['repository', 'mobile'].includes(form.scan_type) && form.is_private">
             <span style="display: flex; justify-content: space-between; align-items: center;">
               <span>GitHub Personal Access Token (PAT)</span>
               <strong style="color: var(--severity-critical); font-size: 11px;">*Terenkripsi Aman</strong>
