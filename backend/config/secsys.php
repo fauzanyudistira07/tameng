@@ -15,6 +15,7 @@ return [
     'syft_image' => env('SECSYS_SYFT_IMAGE', 'anchore/syft:v0.105.0'),
     'grype_image' => env('SECSYS_GRYPE_IMAGE', 'anchore/grype:v0.74.0'),
     'mobsf_image' => env('SECSYS_MOBSF_IMAGE', 'opensecurity/mobsfscan:latest'),
+    'testssl_image' => env('SECSYS_TESTSSL_IMAGE', 'drwetter/testssl.sh:3.0'),
     'nuclei_image' => env('SECSYS_NUCLEI_IMAGE', 'projectdiscovery/nuclei:latest'),
     'zap_image' => env('SECSYS_ZAP_IMAGE', 'ghcr.io/zaproxy/zaproxy:stable'),
     'docker_binary' => env('SECSYS_DOCKER_BINARY', 'docker'),

@@ -14,7 +14,7 @@ class SecurityEngineSeeder extends Seeder
      */
     public function run(): void
     {
-        $readyEngines = ['semgrep', 'gitleaks', 'trivy', 'osv', 'zap', 'nuclei', 'hadolint', 'checkov', 'syft', 'grype'];
+        $readyEngines = ['semgrep', 'gitleaks', 'trivy', 'osv', 'zap', 'nuclei', 'hadolint', 'checkov', 'syft', 'grype', 'mobsf', 'testssl'];
 
         $engines = [
             // 1. SOURCE_CODE

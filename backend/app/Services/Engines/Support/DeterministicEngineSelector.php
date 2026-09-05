@@ -30,14 +30,14 @@ class DeterministicEngineSelector
             return ['trivy', 'grype', 'syft'];
         }
 
-        // 3. Web & API Target selection
-        if (in_array($targetType, ['web', 'api', 'web_target', 'web_app'], true)) {
+        // 3. Web, API & TLS/SSL Target selection
+        if (in_array($targetType, ['web', 'api', 'web_target', 'web_app', 'tls', 'ssl'], true)) {
             $engines = SecurityEngine::active()
                 ->whereIn('code', ['nuclei', 'zap', 'testssl', 'nikto'])
                 ->pluck('code')
                 ->all();
 
-            return ! empty($engines) ? $engines : ['nuclei', 'testssl', 'nikto'];
+            return ! empty($engines) ? $engines : ['nuclei', 'testssl', 'zap'];
         }
 
         // 3. Mobile App selection

@@ -275,6 +275,9 @@ function formatEngineReason(raw: string, status?: string): string {
   if (/GITLEAKS_PROCESS_FAILED/i.test(raw)) {
     return 'Pemindaian riwayat secret git mengalami kendala'
   }
+  if (/TESTSSL_PROCESS_FAILED|TESTSSL_EXECUTION_ERROR/i.test(raw)) {
+    return 'Pemindaian konfigurasi TLS/SSL testssl mengalami kendala'
+  }
   if (/NUCLEI_PROCESS_FAILED/i.test(raw)) {
     return 'Target web/API tidak merespons pengujian DAST'
   }
@@ -498,7 +501,7 @@ onUnmounted(() => {
           <div v-if="['web', 'api'].includes(form.scan_type)" class="inline-alert info" style="margin-top: 4px; margin-bottom: 8px; font-size: 11.5px; padding: 10px 14px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid var(--tameng-sapphire); border-radius: 4px;">
             <strong style="color: var(--tameng-sapphire); display: block; margin-bottom: 2px;">Pemindaian Dinamis DAST Terisolasi</strong>
             <span style="color: var(--text-muted);">
-              Engine Nuclei akan memindai konfigurasi keamanan web, sertifikat TLS/SSL, header keamanan, eksposur API, dan kerentanan CVE secara otomatis dengan kontrol rate limiting.
+              Engine <strong>Nuclei</strong> dan <strong>TestSSL (testssl.sh)</strong> akan menguji kerentanan perimeter web, sertifikat TLS/SSL, cipher suites usang (SWEET32, BEAST, POODLE, ROBOT, RC4), header keamanan, dan eksposur endpoint secara otomatis.
             </span>
           </div>
 
