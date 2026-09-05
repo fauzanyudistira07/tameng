@@ -37,6 +37,10 @@ COPY --from=vendor /app /var/www/html
 COPY docker/entrypoint.sh /usr/local/bin/secsys-entrypoint
 COPY docker/start.sh /usr/local/bin/secsys-start
 
+RUN echo "upload_max_filesize = 200M" > /usr/local/etc/php/conf.d/uploads.ini \
+  && echo "post_max_size = 200M" >> /usr/local/etc/php/conf.d/uploads.ini \
+  && echo "memory_limit = 512M" >> /usr/local/etc/php/conf.d/uploads.ini
+
 RUN chown -R www-data:www-data storage bootstrap/cache \
   && chmod -R ug+rw storage bootstrap/cache \
   && chmod +x /usr/local/bin/secsys-entrypoint /usr/local/bin/secsys-start

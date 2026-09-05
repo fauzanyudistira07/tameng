@@ -49,7 +49,7 @@ class DeterministicEngineSelector
         $engines = ['semgrep', 'gitleaks', 'trivy', 'osv']; // Core baseline
 
         if ($workspacePath && File::isDirectory($workspacePath)) {
-            // Check for Mobile Application Markers (Android / iOS / Flutter / React Native)
+            // Check for Mobile Application Markers (Android / iOS / Flutter / React Native / Binaries)
             $hasMobile = File::exists($workspacePath.'/AndroidManifest.xml')
                 || File::exists($workspacePath.'/build.gradle')
                 || File::exists($workspacePath.'/build.gradle.kts')
@@ -57,7 +57,11 @@ class DeterministicEngineSelector
                 || File::isDirectory($workspacePath.'/android')
                 || File::isDirectory($workspacePath.'/ios')
                 || ! empty(File::glob($workspacePath.'/*.swift'))
-                || ! empty(File::glob($workspacePath.'/*.kt'));
+                || ! empty(File::glob($workspacePath.'/*.kt'))
+                || ! empty(File::glob($workspacePath.'/*.apk'))
+                || ! empty(File::glob($workspacePath.'/*.ipa'))
+                || ! empty(File::glob($workspacePath.'/*.aab'))
+                || ! empty(File::glob($workspacePath.'/*.dex'));
 
             if ($hasMobile) {
                 $engines[] = 'mobsf';

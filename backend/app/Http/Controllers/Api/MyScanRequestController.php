@@ -50,10 +50,15 @@ class MyScanRequestController extends Controller
         AuthorizationGateway $gateway,
         AuditLogger $auditLogger,
     ): JsonResponse {
+        $hasUpload = $request->hasFile('file') || $request->hasFile('mobile_file');
+        $uploadedFile = $request->file('file') ?: $request->file('mobile_file');
+
         $data = $request->validate([
             'scan_type' => ['required', Rule::in(['repository', 'web', 'api', 'container', 'mobile'])],
             'project_name' => ['required', 'string', 'max:255'],
-            'asset_url' => ['required', 'string', 'max:2048'],
+            'asset_url' => [$hasUpload ? 'nullable' : 'required', 'string', 'max:2048'],
+            'file' => ['nullable', 'file', 'max:204800'],
+            'mobile_file' => ['nullable', 'file', 'max:204800'],
             'default_branch' => ['nullable', 'string', 'max:120'],
             'is_private' => ['nullable', 'boolean'],
             'access_token' => ['nullable', 'string', 'max:500'],
@@ -66,42 +71,52 @@ class MyScanRequestController extends Controller
             'notes' => ['nullable', 'string', 'max:2048'],
         ]);
 
-        if (in_array($data['scan_type'], ['web', 'api'], true) && ! filter_var($data['asset_url'], FILTER_VALIDATE_URL)) {
+        if ($hasUpload && $uploadedFile) {
+            $ext = strtolower($uploadedFile->getClientOriginalExtension());
+            if (! in_array($ext, ['apk', 'ipa', 'aab', 'zip'], true)) {
+                throw ValidationException::withMessages([
+                    'file' => ['File yang diunggah harus berformat binary aplikasi mobile (.apk, .ipa, .aab, atau .zip).'],
+                ]);
+            }
+            $data['asset_url'] = 'file://'.$uploadedFile->getClientOriginalName();
+        }
+
+        if (in_array($data['scan_type'], ['web', 'api'], true) && ! filter_var($data['asset_url'] ?? '', FILTER_VALIDATE_URL)) {
             throw ValidationException::withMessages([
                 'asset_url' => ['URL target web/API harus berformat URL valid (contoh: https://app.example.com).'],
             ]);
         }
 
-        if ($data['scan_type'] === 'container' && ! preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.\-\/:@]*$/', $data['asset_url'])) {
+        if ($data['scan_type'] === 'container' && ! preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.\-\/:@]*$/', $data['asset_url'] ?? '')) {
             throw ValidationException::withMessages([
                 'asset_url' => ['Nama Docker image / tag registry tidak valid (contoh: alpine:latest, nginx:alpine, atau ghcr.io/org/app:latest).'],
             ]);
         }
 
-        if ($data['scan_type'] === 'repository' && ! Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
+        if ($data['scan_type'] === 'repository' && ! Str::startsWith($data['asset_url'] ?? '', ['https://github.com/', 'http://github.com/'])) {
             throw ValidationException::withMessages([
                 'asset_url' => ['Scan repository source code otomatis saat ini mendukung URL repositori GitHub.'],
             ]);
         }
 
-        if ($data['scan_type'] === 'mobile') {
-            $isGit = Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/']);
-            $isDirectUrl = filter_var($data['asset_url'], FILTER_VALIDATE_URL);
+        if ($data['scan_type'] === 'mobile' && ! $hasUpload) {
+            $isGit = Str::startsWith($data['asset_url'] ?? '', ['https://github.com/', 'http://github.com/']);
+            $isDirectUrl = filter_var($data['asset_url'] ?? '', FILTER_VALIDATE_URL);
             if (! $isGit && ! $isDirectUrl) {
                 throw ValidationException::withMessages([
-                    'asset_url' => ['Target mobile harus berupa URL repositori GitHub proyek mobile atau link direct download file .apk / .ipa.'],
+                    'asset_url' => ['Target mobile harus berupa file upload .apk/.ipa, URL repositori GitHub, atau link unduhan direct .apk.'],
                 ]);
             }
         }
 
-        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/']) && ! empty($data['is_private']) && empty($data['access_token'])) {
+        if (in_array($data['scan_type'], ['repository', 'mobile'], true) && Str::startsWith($data['asset_url'] ?? '', ['https://github.com/', 'http://github.com/']) && ! empty($data['is_private']) && empty($data['access_token'])) {
             throw ValidationException::withMessages([
                 'access_token' => ['Untuk private repository, Anda wajib menyertakan GitHub Personal Access Token (PAT).'],
             ]);
         }
 
         $user = $request->user();
-        $scanJob = DB::transaction(function () use ($data, $user, $gateway, $auditLogger): ScanJob {
+        $scanJob = DB::transaction(function () use ($data, $user, $gateway, $auditLogger, $uploadedFile): ScanJob {
             $profile = ScanProfile::query()
                 ->where('key', $this->profileKey($data['scan_type']))
                 ->where('is_active', true)
@@ -116,7 +131,7 @@ class MyScanRequestController extends Controller
                 'owner_id' => $user->id,
             ]);
 
-            [$repository, $target] = $this->createAsset($data, $project, $user->id);
+            [$repository, $target] = $this->createAsset($data, $project, $user->id, $uploadedFile);
             $scope = $this->createAllowedScope($data, $project, $target, $user->id);
 
             $authorization = Authorization::query()->create([
@@ -306,8 +321,88 @@ class MyScanRequestController extends Controller
         };
     }
 
-    private function createAsset(array $data, Project $project, int $userId): array
+    private function createAsset(array $data, Project $project, int $userId, $uploadedFile = null): array
     {
+        // 1. Uploaded File (Binary APK / IPA / AAB / ZIP)
+        if ($uploadedFile) {
+            $workspaceRoot = app(\App\Services\RepositoryWorkspaceManager::class)->root();
+            $workspaceName = Str::slug($project->id.'-'.$project->name);
+            if ($workspaceName === '') {
+                $workspaceName = 'project-'.$project->id;
+            }
+
+            $workspacePath = $workspaceRoot.DIRECTORY_SEPARATOR.$workspaceName;
+            \Illuminate\Support\Facades\File::ensureDirectoryExists($workspacePath);
+
+            $originalName = $uploadedFile->getClientOriginalName();
+            $targetFilePath = $workspacePath.DIRECTORY_SEPARATOR.$originalName;
+            $uploadedFile->move($workspacePath, $originalName);
+
+            // Auto-extract archive contents (ZIP / APK / IPA / AAB)
+            $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+            if (class_exists(\ZipArchive::class) && in_array($ext, ['apk', 'zip', 'ipa', 'aab'], true)) {
+                $zip = new \ZipArchive();
+                if ($zip->open($targetFilePath) === true) {
+                    $zip->extractTo($workspacePath);
+                    $zip->close();
+                }
+            }
+
+            $fileHash = md5_file($targetFilePath) ?: Str::random(32);
+            $fileSize = \Illuminate\Support\Facades\File::size($targetFilePath);
+
+            $repository = Repository::query()->create([
+                'project_id' => $project->id,
+                'provider' => 'file_upload',
+                'name' => $originalName,
+                'url' => 'file://'.$originalName,
+                'default_branch' => 'main',
+                'verification_status' => 'verified',
+                'verified_at' => now(),
+                'verified_by' => $userId,
+                'metadata' => [
+                    'source' => 'user_scan_request',
+                    'scan_type' => $data['scan_type'],
+                    'is_direct_file' => true,
+                    'file_name' => $originalName,
+                    'file_size' => $fileSize,
+                    'workspace_commit' => $fileHash,
+                    'local_path' => $workspacePath,
+                    'workspace_status' => 'attached',
+                    'scanner_execution_ready' => true,
+                    'workspace_attached_at' => now()->toISOString(),
+                ],
+            ]);
+
+            return [$repository, null];
+        }
+
+        // 2. Direct Mobile Download URL (e.g. https://.../app.apk)
+        if ($data['scan_type'] === 'mobile' && ! Str::startsWith($data['asset_url'] ?? '', ['https://github.com/', 'http://github.com/']) && filter_var($data['asset_url'] ?? '', FILTER_VALIDATE_URL)) {
+            $parsedPath = parse_url($data['asset_url'], PHP_URL_PATH) ?? '';
+            $filename = basename($parsedPath) ?: 'app.apk';
+
+            $repository = Repository::query()->create([
+                'project_id' => $project->id,
+                'provider' => 'direct_download',
+                'name' => $filename,
+                'url' => $data['asset_url'],
+                'default_branch' => 'main',
+                'verification_status' => 'verified',
+                'verified_at' => now(),
+                'verified_by' => $userId,
+                'metadata' => [
+                    'source' => 'user_scan_request',
+                    'scan_type' => 'mobile',
+                    'submitted_url' => $data['asset_url'],
+                    'is_direct_file' => true,
+                    'file_name' => $filename,
+                ],
+            ]);
+
+            return [$repository, null];
+        }
+
         if (in_array($data['scan_type'], ['repository', 'mobile'], true) && Str::startsWith($data['asset_url'], ['https://github.com/', 'http://github.com/'])) {
             $isPrivate = (bool) ($data['is_private'] ?? ! empty($data['access_token']));
             $encryptedToken = ! empty($data['access_token']) ? Crypt::encryptString($data['access_token']) : null;

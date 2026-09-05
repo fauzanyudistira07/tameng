@@ -25,6 +25,56 @@ const pageSize = ref(5)
 const findingsPage = ref(1)
 const findingsPageSize = ref(10)
 
+const mobileFile = ref<File | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const isDragging = ref(false)
+const mobileMode = ref<'upload' | 'url'>('upload')
+
+const mobileFileName = computed(() => mobileFile.value?.name ?? '')
+const mobileFileSize = computed(() => {
+  if (!mobileFile.value) return ''
+  const mb = mobileFile.value.size / (1024 * 1024)
+  return mb >= 1 ? `${mb.toFixed(2)} MB` : `${(mobileFile.value.size / 1024).toFixed(1)} KB`
+})
+
+function onFileSelected(event: Event) {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    handleMobileFile(target.files[0])
+  }
+}
+
+function onDropFile(event: DragEvent) {
+  isDragging.value = false
+  if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
+    handleMobileFile(event.dataTransfer.files[0])
+  }
+}
+
+function handleMobileFile(file: File) {
+  const ext = file.name.split('.').pop()?.toLowerCase() || ''
+  if (!['apk', 'ipa', 'aab', 'zip'].includes(ext)) {
+    errorMessage.value = 'Format file tidak didukung. Mohon unggah file aplikasi mobile (.apk, .ipa, .aab, .zip).'
+    return
+  }
+  if (file.size > 200 * 1024 * 1024) {
+    errorMessage.value = 'Ukuran file melebihi batas maksimum 200MB.'
+    return
+  }
+  errorMessage.value = ''
+  mobileFile.value = file
+  if (!form.project_name) {
+    form.project_name = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+  }
+}
+
+function removeMobileFile() {
+  mobileFile.value = null
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''
+  }
+}
+
 const form = reactive({
   scan_type: 'repository',
   project_name: '',
@@ -305,6 +355,11 @@ function resetForm() {
   form.auth_username = ''
   form.auth_password = ''
   form.notes = ''
+  mobileFile.value = null
+  mobileMode.value = 'upload'
+  if (fileInputRef.value) {
+    fileInputRef.value.value = ''
+  }
 }
 
 async function loadData(silent = false) {
@@ -334,7 +389,34 @@ async function submitScanRequest() {
   successMessage.value = ''
 
   try {
-    const isRepo = ['repository', 'mobile'].includes(form.scan_type)
+    if (form.scan_type === 'mobile' && mobileMode.value === 'upload') {
+      if (!mobileFile.value) {
+        errorMessage.value = 'Silakan pilih atau seret file binary aplikasi mobile (.apk / .ipa / .aab) terlebih dahulu.'
+        isSaving.value = false
+        return
+      }
+
+      if (!form.project_name.trim()) {
+        form.project_name = mobileFile.value.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+      }
+
+      const formData = new FormData()
+      formData.append('scan_type', 'mobile')
+      formData.append('project_name', form.project_name.trim())
+      formData.append('file', mobileFile.value)
+      if (form.notes) {
+        formData.append('notes', form.notes)
+      }
+
+      const request = await createMyScanRequest(formData)
+      selectedRequestId.value = request.id
+      successMessage.value = `File APK '${mobileFile.value.name}' berhasil diunggah! Engine MobSF sedang memindai kerentanan binary.`
+      resetForm()
+      await loadData(true)
+      return
+    }
+
+    const isRepo = form.scan_type === 'repository' || (form.scan_type === 'mobile' && form.asset_url.includes('github.com'))
     const isWeb = ['web', 'api'].includes(form.scan_type)
     const isFormLogin = isWeb && form.auth_type === 'form_login'
     const isBasic = isWeb && form.auth_type === 'basic'
@@ -360,7 +442,7 @@ async function submitScanRequest() {
     await loadData(true)
   } catch (error: any) {
     console.error('Gagal membuat scan.', error)
-    const backendMessage = error?.response?.data?.message || error?.response?.data?.errors?.asset_url?.[0] || error?.response?.data?.errors?.access_token?.[0]
+    const backendMessage = error?.response?.data?.message || error?.response?.data?.errors?.file?.[0] || error?.response?.data?.errors?.asset_url?.[0] || error?.response?.data?.errors?.access_token?.[0]
     errorMessage.value = backendMessage || 'Gagal membuat permintaan scan. Periksa URL repositori/target dan izin scope.'
   } finally {
     isSaving.value = false
@@ -510,35 +592,122 @@ onUnmounted(() => {
             <input v-model="form.project_name" placeholder="Contoh: Mobile Banking Android / iOS App" required />
           </label>
 
-          <label>
+          <!-- Mobile App Target (Binary Upload vs Download URL/GitHub) -->
+          <div v-if="form.scan_type === 'mobile'" style="margin-top: 4px; margin-bottom: 12px;">
+            <span style="display: block; font-size: 12.5px; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+              Metode Input Aplikasi Mobile
+            </span>
+
+            <div class="segmented-group" style="margin-bottom: 12px;">
+              <button
+                type="button"
+                :class="['segmented-btn', { active: mobileMode === 'upload' }]"
+                @click="mobileMode = 'upload'"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Unggah File Binary (.apk / .ipa / .aab)</span>
+              </button>
+              <button
+                type="button"
+                :class="['segmented-btn', { active: mobileMode === 'url' }]"
+                @click="mobileMode = 'url'"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                <span>Link Unduhan URL / Repositori GitHub</span>
+              </button>
+            </div>
+
+            <!-- Upload Dropzone -->
+            <div
+              v-if="mobileMode === 'upload'"
+              class="mobile-upload-zone"
+              :class="{ 'is-dragging': isDragging, 'has-file': !!mobileFile }"
+              @dragover.prevent="isDragging = true"
+              @dragleave.prevent="isDragging = false"
+              @drop.prevent="onDropFile"
+            >
+              <input
+                ref="fileInputRef"
+                type="file"
+                accept=".apk,.ipa,.aab,.zip"
+                style="display: none;"
+                @change="onFileSelected"
+              />
+
+              <div v-if="!mobileFile" style="text-align: center; padding: 26px 18px;">
+                <div class="upload-icon-circle">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                </div>
+                <h4 style="margin: 12px 0 4px 0; font-size: 14px; font-weight: 700; color: var(--text-main);">
+                  Tarik & Lepas File APK / IPA Anda di sini
+                </h4>
+                <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 14px 0;">
+                  Mendukung binary <code>.apk</code>, <code>.ipa</code>, <code>.aab</code>, atau <code>.zip</code> (Maksimal 200MB)
+                </p>
+                <button type="button" class="btn secondary-button" style="display: inline-flex; align-items: center; gap: 8px;" @click="fileInputRef?.click()">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <span>Pilih File dari Komputer</span>
+                </button>
+              </div>
+
+              <div v-else class="file-preview-card">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  <div class="apk-badge-box">
+                    <span style="font-weight: 800; font-size: 11px; letter-spacing: 0.5px; color: #fff;">APK</span>
+                  </div>
+                  <div>
+                    <strong style="display: block; font-size: 13.5px; color: var(--text-main); word-break: break-all;">
+                      {{ mobileFileName }}
+                    </strong>
+                    <span style="font-size: 11.5px; color: var(--text-muted); display: block; margin-top: 2px;">
+                      Ukuran: {{ mobileFileSize }} &bull; <strong style="color: var(--status-success);">Siap Dipindai MobSF</strong>
+                    </span>
+                  </div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <button type="button" class="small-button secondary-button" @click="fileInputRef?.click()">Ganti</button>
+                  <button type="button" class="small-button danger-button" @click="removeMobileFile">Hapus</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Mobile Download URL / GitHub Input -->
+            <div v-if="mobileMode === 'url'">
+              <input
+                v-model="form.asset_url"
+                placeholder="https://example.com/app-release.apk atau https://github.com/org/mobile-app"
+                type="url"
+                required
+              />
+              <small style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
+                Mendukung link unduhan direct binary APK atau repositori source code mobile GitHub.
+              </small>
+            </div>
+          </div>
+
+          <!-- URL / Image Input for Repository, Container, Web, and API -->
+          <label v-if="form.scan_type !== 'mobile'">
             <span>
               {{
                 form.scan_type === 'repository'
                   ? 'URL Repositori GitHub'
-                  : (form.scan_type === 'mobile'
-                      ? 'Link Unduhan File Binary .APK/.IPA atau Repositori GitHub Mobile'
-                      : (form.scan_type === 'container'
-                          ? 'Nama Docker Image / Tag Registry'
-                          : (form.scan_type === 'api' ? 'URL Base API Endpoint' : 'URL Aplikasi Web')))
+                  : (form.scan_type === 'container'
+                      ? 'Nama Docker Image / Tag Registry'
+                      : (form.scan_type === 'api' ? 'URL Base API Endpoint' : 'URL Aplikasi Web'))
               }}
             </span>
             <input
               v-model="form.asset_url"
               :placeholder="
-                form.scan_type === 'mobile'
-                  ? 'https://example.com/app-release.apk atau https://github.com/org/mobile-app'
-                  : (form.scan_type === 'repository'
-                      ? 'https://github.com/org/source-code'
-                      : (form.scan_type === 'container'
-                          ? 'alpine:latest, nginx:alpine, node:20-alpine, atau ghcr.io/org/app:latest'
-                          : 'https://app.example.com'))
+                form.scan_type === 'repository'
+                  ? 'https://github.com/org/source-code'
+                  : (form.scan_type === 'container'
+                      ? 'alpine:latest, nginx:alpine, node:20-alpine, atau ghcr.io/org/app:latest'
+                      : 'https://app.example.com')
               "
-              :type="['web', 'api', 'repository', 'mobile'].includes(form.scan_type) ? 'url' : 'text'"
+              :type="['web', 'api', 'repository'].includes(form.scan_type) ? 'url' : 'text'"
               required
             />
-            <small v-if="form.scan_type === 'mobile'" style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
-              Mendukung pemindaian file binary APK (<code>.apk</code> / <code>.ipa</code> / <code>.aab</code>) langsung via direct URL link maupun repositori kode sumber Android (Java/Kotlin), iOS (Swift/Obj-C), Flutter, dan React Native.
-            </small>
             <small v-if="form.scan_type === 'container'" style="color: var(--text-dim); font-size: 11px; margin-top: 4px; display: block;">
               Mendukung image Docker Hub publik (contoh: <code>nginx:alpine</code>, <code>redis:7</code>, <code>node:20-slim</code>) dan custom registry (contoh: <code>ghcr.io/org/app:v1.0</code>).
             </small>
@@ -614,7 +783,8 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="['repository', 'mobile'].includes(form.scan_type)" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <!-- Git Branch & PAT for Repository or GitHub Mobile Scans -->
+          <div v-if="form.scan_type === 'repository' || (form.scan_type === 'mobile' && mobileMode === 'url' && form.asset_url.includes('github.com'))" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <label>
               <span>Default Git Branch</span>
               <input v-model="form.default_branch" placeholder="main" required />
@@ -629,7 +799,7 @@ onUnmounted(() => {
             </label>
           </div>
 
-          <label v-if="['repository', 'mobile'].includes(form.scan_type) && form.is_private">
+          <label v-if="(form.scan_type === 'repository' || (form.scan_type === 'mobile' && mobileMode === 'url' && form.asset_url.includes('github.com'))) && form.is_private">
             <span style="display: flex; justify-content: space-between; align-items: center;">
               <span>GitHub Personal Access Token (PAT)</span>
               <strong style="color: var(--severity-critical); font-size: 11px;">*Terenkripsi Aman</strong>

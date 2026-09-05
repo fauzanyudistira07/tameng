@@ -6,7 +6,9 @@ export async function getMyScanRequests(config = {}) {
 }
 
 export async function createMyScanRequest(payload) {
-  const response = await api.post('/api/my/scan-requests', payload)
+  const isFormData = typeof FormData !== 'undefined' && payload instanceof FormData
+  const config = isFormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}
+  const response = await api.post('/api/my/scan-requests', payload, config)
   return response.data.scan_request
 }
 

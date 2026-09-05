@@ -1240,3 +1240,97 @@ label span {
 .fade-in {
   animation: fadeIn 0.15s ease-out;
 }
+
+/* ==========================================================================
+   Mobile APK / Binary Upload Component Styles
+   ========================================================================== */
+
+.segmented-group {
+  display: flex;
+  background: #f1f5f9;
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 4px;
+}
+
+.segmented-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.segmented-btn:hover {
+  color: var(--text-main);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.segmented-btn.active {
+  background: #ffffff;
+  color: var(--tameng-sapphire);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  font-weight: 800;
+}
+
+.mobile-upload-zone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.mobile-upload-zone:hover,
+.mobile-upload-zone.is-dragging {
+  border-color: var(--tameng-sapphire);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.mobile-upload-zone.has-file {
+  border-style: solid;
+  border-color: #e2e8f0;
+  background: #ffffff;
+}
+
+.upload-icon-circle {
+  width: 50px;
+  height: 50px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--tameng-sapphire);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-preview-card {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.apk-badge-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+

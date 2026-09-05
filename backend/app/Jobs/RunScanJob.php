@@ -116,12 +116,13 @@ class RunScanJob implements ShouldQueue
             $scanJob->refresh();
         }
 
-        $scanJob->loadMissing(['repository', 'target']);
+        $scanJob->loadMissing(['repository', 'target', 'authorization']);
         $workspacePath = $scanJob->repository?->metadata['local_path'] ?? null;
+        $scanType = $scanJob->repository?->metadata['scan_type'] ?? 'repository';
 
         // Deterministically select and enrich relevant engines for this target workspace or web target
         if ($workspacePath && $scanJob->repository_id) {
-            $selectedEngineCodes = $engineSelector->selectEngines('repository', $workspacePath);
+            $selectedEngineCodes = $engineSelector->selectEngines($scanType, $workspacePath);
             $currentPlanned = collect($scanJob->engine_plan)->pluck('engine_key')->filter()->all();
             $engineKeys = array_values(array_unique(array_merge($currentPlanned, $selectedEngineCodes)));
         } elseif ($scanJob->target_id && $scanJob->target) {
@@ -157,6 +158,11 @@ class RunScanJob implements ShouldQueue
             $engineKeys = array_values(array_unique(array_merge($currentPlanned, $selectedEngineCodes)));
         } else {
             $engineKeys = collect($scanJob->engine_plan)->pluck('engine_key')->filter()->values()->all();
+        }
+
+        // Only run engines that are authorized in this scan authorization snapshot
+        if ($scanJob->authorization && is_array($scanJob->authorization->allowed_engines) && ! empty($scanJob->authorization->allowed_engines)) {
+            $engineKeys = array_values(array_intersect($engineKeys, $scanJob->authorization->allowed_engines));
         }
 
         $updatedEnginePlan = collect($engineKeys)->map(fn ($k) => ['engine_key' => $k])->all();
