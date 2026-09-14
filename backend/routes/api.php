@@ -21,13 +21,16 @@ use App\Http\Controllers\Api\GitWebhookController;
 use App\Http\Controllers\Api\SecurityEngineController;
 use App\Http\Controllers\Api\UserManagementController;
 
-Route::post('/login', [AuthController::class, 'login'])->middleware('guest');
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 Route::get('/health', HealthController::class);
 Route::post('/webhooks/git', [GitWebhookController::class, 'handle']);
 
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', CurrentUserController::class);
+    Route::put('/user', [CurrentUserController::class, 'update']);
     Route::get('/overview', SystemOverviewController::class);
     Route::get('/my/scan-requests', [MyScanRequestController::class, 'index'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer');

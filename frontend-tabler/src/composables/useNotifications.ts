@@ -58,16 +58,23 @@ function formatRelativeTime(dateStr?: string): string {
   }
 }
 
-export function useNotifications() {
-  const notifications = ref<NotificationItem[]>([])
-  const activeFilter = ref<'all' | 'unread' | 'starred'>('all')
-  const isLoading = ref(false)
+// Shared module-level state & cache to avoid re-fetching on every page navigation
+const notifications = ref<NotificationItem[]>([])
+const activeFilter = ref<'all' | 'unread' | 'starred'>('all')
+const isLoading = ref(false)
+let lastFetchedTime = 0
+const NOTIFICATION_CACHE_TTL_MS = 60 * 1000 // 60 seconds cache
 
+export function useNotifications() {
   const readSet = getStoredSet(STORAGE_READ_KEY)
   const starredSet = getStoredSet(STORAGE_STARRED_KEY)
   const dismissedSet = getStoredSet(STORAGE_DISMISSED_KEY)
 
-  async function loadRealTamengNotifications() {
+  async function loadRealTamengNotifications(force = false) {
+    if (!force && notifications.value.length > 0 && (Date.now() - lastFetchedTime < NOTIFICATION_CACHE_TTL_MS)) {
+      return
+    }
+    if (isLoading.value) return
     isLoading.value = true
     try {
       const items: NotificationItem[] = []
@@ -188,6 +195,7 @@ export function useNotifications() {
       // Sort all notifications by timestamp descending (newest first)
       items.sort((a, b) => b.timestamp - a.timestamp)
       notifications.value = items
+      lastFetchedTime = Date.now()
     } catch (err) {
       console.error('[Notifications] Global load error:', err)
     } finally {

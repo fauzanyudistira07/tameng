@@ -8,7 +8,10 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -22,6 +25,8 @@ class AuthController extends Controller
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
         ]);
+
+        $remember = $request->boolean('remember');
 
         $targetUser = User::where('email', $credentials['email'])->first();
 
@@ -55,8 +60,12 @@ class AuthController extends Controller
             ]);
         }
 
-        // 2. Attempt authentication
-        if (! Auth::attempt($credentials)) {
+        // 2. Attempt authentication (clear prior session if any)
+        if (Auth::check()) {
+            Auth::guard('web')->logout();
+        }
+
+        if (! Auth::attempt($credentials, $remember)) {
             if ($targetUser) {
                 $attempts = ($targetUser->failed_login_attempts ?? 0) + 1;
                 $updateData = ['failed_login_attempts' => $attempts];
@@ -201,6 +210,107 @@ class AuthController extends Controller
         }
 
         return response()->json(['message' => 'Logged out.']);
+    }
+
+    public function forgotPassword(Request $request, AuditLogger $auditLogger): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $user = User::where('email', $validated['email'])->first();
+
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['Alamat email tidak ditemukan dalam sistem.'],
+            ]);
+        }
+
+        if ($user->status !== 'active') {
+            throw ValidationException::withMessages([
+                'email' => ['Akun ini berstatus tidak aktif. Hubungi Administrator SOC.'],
+            ]);
+        }
+
+        // Generate a secure 6-digit verification code
+        $resetCode = (string) random_int(100000, 999999);
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            [
+                'token' => Hash::make($resetCode),
+                'created_at' => now(),
+            ]
+        );
+
+        $auditLogger->record($request, 'auth.password_reset_requested', 'success', [
+            'user_id' => $user->id,
+            'target_type' => 'user',
+            'target_id' => $user->id,
+            'metadata' => [
+                'email' => $user->email,
+                'ip' => $request->ip(),
+            ],
+        ]);
+
+        return response()->json([
+            'message' => 'Kode verifikasi reset password berhasil dibuat.',
+            'email' => $user->email,
+            'reset_code' => $resetCode,
+        ]);
+    }
+
+    public function resetPassword(Request $request, AuditLogger $auditLogger): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+            'token' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $record = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
+
+        if (! $record || ! Hash::check($validated['token'], $record->token)) {
+            throw ValidationException::withMessages([
+                'token' => ['Kode verifikasi tidak valid atau telah kadaluarsa.'],
+            ]);
+        }
+
+        if (Carbon::parse($record->created_at)->addMinutes(30)->isPast()) {
+            DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+            throw ValidationException::withMessages([
+                'token' => ['Kode verifikasi telah kadaluarsa (melebihi 30 menit). Silakan minta kode baru.'],
+            ]);
+        }
+
+        $user = User::where('email', $validated['email'])->first();
+        if (! $user) {
+            throw ValidationException::withMessages([
+                'email' => ['Pengguna tidak ditemukan.'],
+            ]);
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($validated['password']),
+            'failed_login_attempts' => 0,
+            'locked_until' => null,
+        ])->save();
+
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        $auditLogger->record($request, 'auth.password_reset_completed', 'success', [
+            'user_id' => $user->id,
+            'target_type' => 'user',
+            'target_id' => $user->id,
+            'metadata' => [
+                'email' => $user->email,
+                'ip' => $request->ip(),
+            ],
+        ]);
+
+        return response()->json([
+            'message' => 'Password berhasil diperbarui. Silakan login dengan password baru Anda.',
+        ]);
     }
 
     private function serializeUser($user): array

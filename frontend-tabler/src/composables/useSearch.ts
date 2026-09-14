@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { apiFetch } from '../services/api'
 
 export interface SearchItem {
@@ -291,9 +291,11 @@ export function useSearch() {
   const searchInputRef = ref<HTMLInputElement | null>(null)
   const selectedIndex = ref(0)
 
-  // Trigger real data fetch
-  onMounted(() => {
-    fetchTamengData()
+  // Lazy load data only when search is actually opened or user starts typing
+  watch([isSearchOpen, searchQuery], ([open, query]) => {
+    if ((open || (query && query.trim().length > 0)) && !isLoaded && !isLoadingTameng.value) {
+      fetchTamengData()
+    }
   })
 
   const searchResults = computed(() => {

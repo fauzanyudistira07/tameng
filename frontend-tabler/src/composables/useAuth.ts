@@ -1,5 +1,5 @@
 import { ref, computed, onMounted } from 'vue'
-import { apiFetch, ensureAuthenticated } from '../services/api'
+import { apiFetch, ensureAuthenticated, logoutUser } from '../services/api'
 
 export interface UserRole {
   id?: number
@@ -39,6 +39,16 @@ export interface User {
   preference?: UserPreference | null
 }
 
+export interface UpdateProfilePayload {
+  name: string
+  username?: string
+  email: string
+  phone?: string
+  department?: string
+  password?: string
+  password_confirmation?: string
+}
+
 const currentUser = ref<User | null>(null)
 const isLoadingUser = ref(false)
 const isProfileModalOpen = ref(false)
@@ -52,53 +62,51 @@ export function useAuth() {
     isProfileModalOpen.value = false
   }
 
-  async function loadUser() {
-    if (currentUser.value) return currentUser.value
+  async function loadUser(force = false) {
+    if (currentUser.value && !force) return currentUser.value
     isLoadingUser.value = true
     try {
-      await ensureAuthenticated()
+      const isAuthed = await ensureAuthenticated()
+      if (!isAuthed) {
+        currentUser.value = null
+        return null
+      }
       const data = await apiFetch('/api/user')
       if (data?.user) {
         currentUser.value = data.user
       }
     } catch (err) {
       console.warn('[useAuth] Error loading user:', err)
-      if (!currentUser.value) {
-        currentUser.value = {
-          id: 1,
-          name: 'System Admin',
-          email: 'admin@secsys.local',
-          status: 'active',
-          role: {
-            id: 1,
-            name: 'super_admin',
-            display_name: 'Super Admin'
-          }
-        }
-      }
+      currentUser.value = null
     } finally {
       isLoadingUser.value = false
     }
     return currentUser.value
   }
 
-  async function updateProfile(payload: { name: string; email: string; password?: string }) {
-    if (!currentUser.value?.id) {
-      throw new Error('Pengguna tidak ditemukan')
-    }
-
+  async function updateProfile(payload: UpdateProfilePayload) {
     const body: Record<string, any> = {
-      role_id: (currentUser.value as any).role_id || currentUser.value.role?.id || 1,
       name: payload.name.trim(),
       email: payload.email.trim(),
-      status: currentUser.value.status || 'active'
     }
 
+    if (payload.username !== undefined) {
+      body.username = payload.username.trim()
+    }
+    if (payload.phone !== undefined) {
+      body.phone = payload.phone.trim()
+    }
+    if (payload.department !== undefined) {
+      body.department = payload.department.trim()
+    }
     if (payload.password && payload.password.trim().length > 0) {
       body.password = payload.password.trim()
+      if (payload.password_confirmation) {
+        body.password_confirmation = payload.password_confirmation.trim()
+      }
     }
 
-    const res = await apiFetch(`/api/users/${currentUser.value.id}`, {
+    const res = await apiFetch('/api/user', {
       method: 'PUT',
       body: JSON.stringify(body)
     })
@@ -117,7 +125,7 @@ export function useAuth() {
   })
 
   const userInitials = computed(() => {
-    const name = currentUser.value?.name || 'System Admin'
+    const name = currentUser.value?.name || 'TAMENG'
     const parts = name.trim().split(' ')
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase()
@@ -126,12 +134,12 @@ export function useAuth() {
   })
 
   const roleDisplayName = computed(() => {
-    return currentUser.value?.role?.display_name || 'Super Admin'
+    return currentUser.value?.role?.display_name || 'Personel SOC'
   })
 
   async function handleLogout() {
     try {
-      await apiFetch('/api/logout', { method: 'POST' })
+      await logoutUser()
     } catch {
       // ignore
     }

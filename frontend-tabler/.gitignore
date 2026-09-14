@@ -22,9 +22,15 @@ node_modules/
 # TypeScript build info
 *.tsbuildinfo
 
+# Archive files
+*.zip
+*.tar.gz
+
 # Demo stock images/media (not needed for production)
 public/static/tracks/
-public/static/photos/
+public/static/photos/*
+!public/static/photos/Cover_Login_Dark.jpeg
+!public/static/photos/Cover_Login_Light.jpeg
 public/static/products/
 public/static/projects/
 public/static/sponsor-banner-homepage.svg
