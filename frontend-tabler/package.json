@@ -1,0 +1,23 @@
+{
+  "name": "frontend-tabler",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tabler/core": "^1.0.0-beta20",
+    "@tabler/icons-vue": "^3.30.0",
+    "vue": "^3.5.41",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "jsdom": "^30.0.1",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.0"
+  }
+}

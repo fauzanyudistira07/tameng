@@ -60,6 +60,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/users', [UserManagementController::class, 'index'])->middleware('role:super_admin,security_admin');
     Route::post('/users', [UserManagementController::class, 'store'])->middleware('role:super_admin');
     Route::put('/users/{user}', [UserManagementController::class, 'update'])->middleware('role:super_admin');
+    Route::post('/users/{user}/unlock', [UserManagementController::class, 'unlock'])->middleware('role:super_admin');
+    Route::post('/users/{user}/projects', [UserManagementController::class, 'assignProjects'])->middleware('role:super_admin');
+    Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])->middleware('role:super_admin');
 
     Route::get('/projects', [ProjectController::class, 'index'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
