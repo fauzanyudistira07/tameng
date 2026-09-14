@@ -44,7 +44,6 @@ const showNewPassword = ref(false)
 const isForgotLoading = ref(false)
 const forgotError = ref('')
 const forgotSuccess = ref('')
-const generatedCodeNotice = ref('')
 
 onMounted(() => {
   initTheme()
@@ -88,20 +87,17 @@ function openForgot() {
   newPasswordConfirm.value = ''
   forgotError.value = ''
   forgotSuccess.value = ''
-  generatedCodeNotice.value = ''
 }
 
 function closeForgot() {
   isForgotMode.value = false
   forgotError.value = ''
   forgotSuccess.value = ''
-  generatedCodeNotice.value = ''
 }
 
 async function handleSendResetCode() {
   forgotError.value = ''
   forgotSuccess.value = ''
-  generatedCodeNotice.value = ''
 
   if (!forgotEmail.value) {
     forgotError.value = 'Silakan masukkan alamat email Anda.'
@@ -111,11 +107,8 @@ async function handleSendResetCode() {
   isForgotLoading.value = true
   try {
     const res = await requestPasswordReset(forgotEmail.value.trim())
-    forgotSuccess.value = res.message || 'Kode verifikasi reset password telah dibuat.'
-    if (res.reset_code) {
-      generatedCodeNotice.value = res.reset_code
-      resetToken.value = res.reset_code
-    }
+    forgotSuccess.value = res.message || 'Kode verifikasi telah dikirim ke alamat email Anda.'
+    resetToken.value = ''
     forgotStep.value = 'reset'
   } catch (err: any) {
     forgotError.value = err?.message || 'Gagal membuat permintaan reset password.'
@@ -300,15 +293,17 @@ async function handleResetPassword() {
 
             <!-- Forgot Success / Verification Code Notice -->
             <div v-if="forgotSuccess" class="alert alert-success mb-3" role="alert">
-              <div class="d-flex align-items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon text-success" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <div class="d-flex align-items-start gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon text-success mt-1" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                   <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                   <path d="M5 12l5 5l10 -10" />
                 </svg>
-                <span>{{ forgotSuccess }}</span>
-              </div>
-              <div v-if="generatedCodeNotice" class="mt-2 pt-2 border-top border-success-subtle small">
-                Kode Verifikasi Anda: <strong class="fs-4 text-success font-monospace ms-1">{{ generatedCodeNotice }}</strong>
+                <div>
+                  <div class="fw-bold">{{ forgotSuccess }}</div>
+                  <div class="text-secondary small mt-1">
+                    Silakan periksa kotak masuk (Inbox) atau folder Spam pada email Anda untuk melihat kode 6-digit.
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -393,6 +388,10 @@ async function handleResetPassword() {
                   Simpan Password Baru
                 </button>
               </div>
+              <div class="text-center text-secondary small mt-2">
+                Tidak menerima email?
+                <a href="#" @click.prevent="forgotStep = 'request'" class="ms-1">Kirim ulang kode</a>
+              </div>
             </form>
 
             <div class="text-center text-secondary mt-3">
@@ -412,3 +411,11 @@ async function handleResetPassword() {
     </div>
   </div>
 </template>
+
+<style>
+/* Sembunyikan icon reveal password bawaan browser (Edge/IE) agar hanya icon kustom di paling belakang yang aktif */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none !important;
+}
+</style>

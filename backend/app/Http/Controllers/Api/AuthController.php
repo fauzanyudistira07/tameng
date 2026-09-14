@@ -6,12 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\AuthenticationLog;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Mail\ResetPasswordCodeMail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -243,6 +246,20 @@ class AuthController extends Controller
             ]
         );
 
+        // Send real email
+        try {
+            Mail::to($user->email)->send(new ResetPasswordCodeMail($user, $resetCode));
+        } catch (\Throwable $e) {
+            Log::error('Failed to send password reset email: ' . $e->getMessage(), [
+                'email' => $user->email,
+                'exception' => $e,
+            ]);
+
+            throw ValidationException::withMessages([
+                'email' => ['Gagal mengirim email verifikasi (' . $e->getMessage() . '). Pastikan pengaturan SMTP di sistem sudah terkonfigurasi dengan benar.'],
+            ]);
+        }
+
         $auditLogger->record($request, 'auth.password_reset_requested', 'success', [
             'user_id' => $user->id,
             'target_type' => 'user',
@@ -254,9 +271,8 @@ class AuthController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Kode verifikasi reset password berhasil dibuat.',
+            'message' => 'Kode verifikasi telah dikirim ke email ' . $user->email . '. Silakan buka kotak masuk atau folder spam email Anda.',
             'email' => $user->email,
-            'reset_code' => $resetCode,
         ]);
     }
 

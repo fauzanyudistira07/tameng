@@ -36,3 +36,11 @@ onMounted(() => {
     <ModalProfile />
   </template>
 </template>
+
+<style>
+/* Sembunyikan icon reveal bawaan browser (Edge/IE) agar konsisten menggunakan icon kustom di paling belakang */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none !important;
+}
+</style>
