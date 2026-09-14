@@ -3,14 +3,6 @@ node_modules/
 .pnp
 .pnp.js
 
-# Build output
-dist/
-dist-ssr/
-*.local
-
-# Static media assets (binary files, not source code)
-public/static/tracks/
-
 # Environment files
 .env
 .env.local
@@ -30,13 +22,11 @@ public/static/tracks/
 # TypeScript build info
 *.tsbuildinfo
 
-# Archive files
-*.zip
-
-# Tabler library static files (served separately, not source code)
-public/dist/
-public/demo.html
-public/static/
-
-# All public assets (Tabler library + static media)
-public/
+# Demo stock images/media (not needed for production)
+public/static/tracks/
+public/static/photos/
+public/static/products/
+public/static/projects/
+public/static/sponsor-banner-homepage.svg
+public/static/sponsor-banner-readme.png
+public/static/tabler-preview.png
