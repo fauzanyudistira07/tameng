@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from '../views/DashboardView.vue'
+import ScanJobsView from '../views/ScanJobsView.vue'
 import UsersView from '../views/UsersView.vue'
 import LoginView from '../views/LoginView.vue'
 import { checkAuth, getIsAuthenticated } from '../services/api'
@@ -15,6 +16,11 @@ const routes = [
     path: '/',
     name: 'dashboard',
     component: DashboardView
+  },
+  {
+    path: '/scan-jobs',
+    name: 'scan-jobs',
+    component: ScanJobsView
   },
   {
     path: '/users',

@@ -95,7 +95,11 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
             </router-link>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="/scan-jobs">
+            <router-link
+              class="nav-link"
+              :class="{ active: route.path === '/scan-jobs' }"
+              to="/scan-jobs"
+            >
               <span class="nav-link-icon d-md-none d-lg-inline-block">
                 <!-- icon: activity -->
                 <svg
@@ -115,7 +119,7 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
                 </svg>
               </span>
               <span class="nav-link-title"> Pekerjaan Scan </span>
-            </a>
+            </router-link>
           </li>
           <li class="nav-item">
             <a class="nav-link" href="/scan-saya">
