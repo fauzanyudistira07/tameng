@@ -758,7 +758,9 @@ onUnmounted(() => {
               <div class="card-header">
                 <h3 class="card-title">Pemantauan Pemindaian Terkini</h3>
                 <div class="card-actions">
-                  <span class="text-secondary small">5 Terakhir</span>
+                  <router-link to="/scan-jobs" class="btn btn-sm btn-outline-primary">
+                    Lihat Semua Scan →
+                  </router-link>
                 </div>
               </div>
               <div class="table-responsive">
