@@ -131,10 +131,10 @@ async function loadScanJobs(showLoading = false) {
 async function loadAuthorizations() {
   try {
     const res = await apiFetch('/api/authorizations')
-    if (res && Array.isArray(res.data)) {
-      authorizations.value = res.data.filter((a: any) => a.status === 'active')
-    } else if (Array.isArray(res)) {
-      authorizations.value = res.filter((a: any) => a.status === 'active')
+    const list = res?.authorizations || res?.data || (Array.isArray(res) ? res : [])
+    authorizations.value = list.filter((a: any) => a.status === 'active')
+    if (authorizations.value.length > 0 && !selectedAuthId.value) {
+      selectedAuthId.value = authorizations.value[0].id
     }
   } catch (err) {
     console.warn('[ScanJobs] Gagal memuat authorisasi:', err)
@@ -347,14 +347,131 @@ async function handleRerun(job: ScanJob) {
   }
 }
 
-// Modal Create Scan Job
-const currentSelectedAuth = computed(() => {
-  return authorizations.value.find(a => String(a.id) === String(selectedAuthId.value))
+// Modal Create Scan Job (User-Friendly Guided Selector)
+const formProjectId = ref<number | ''>('')
+const formTargetKey = ref<string>('')
+const formProfileId = ref<number | ''>('')
+
+// Unique Projects from active authorizations
+const availableProjects = computed(() => {
+  const map = new Map<number, { id: number; name: string; code: string }>()
+  for (const auth of authorizations.value) {
+    if (auth.project && !map.has(auth.project.id)) {
+      map.set(auth.project.id, {
+        id: auth.project.id,
+        name: auth.project.name,
+        code: auth.project.code
+      })
+    }
+  }
+  return Array.from(map.values())
+})
+
+// Targets available under the selected project
+const availableTargets = computed(() => {
+  if (!formProjectId.value) return []
+  const map = new Map<string, { key: string; name: string; type: string; badgeClass: string; icon: string }>()
+
+  for (const auth of authorizations.value) {
+    if (auth.project_id === formProjectId.value) {
+      if (auth.repository) {
+        const isMobile = auth.repository.metadata?.scan_type === 'mobile' || auth.repository.metadata?.is_direct_file
+        const key = `repo:${auth.repository.id}`
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            name: auth.repository.name,
+            type: isMobile ? 'Mobile App' : 'Git Repository',
+            badgeClass: isMobile ? 'bg-purple-lt' : 'bg-azure-lt',
+            icon: isMobile ? 'device-mobile' : 'git-branch'
+          })
+        }
+      } else if (auth.target) {
+        const isContainer = auth.target.type === 'container'
+        const key = `target:${auth.target.id}`
+        if (!map.has(key)) {
+          map.set(key, {
+            key,
+            name: auth.target.name || auth.target.base_url || 'Target Host',
+            type: isContainer ? 'Container Image' : 'Web / DAST Target',
+            badgeClass: isContainer ? 'bg-teal-lt' : 'bg-indigo-lt',
+            icon: isContainer ? 'box' : 'world'
+          })
+        }
+      }
+    }
+  }
+  return Array.from(map.values())
+})
+
+// Profiles available for selected project & target
+const availableProfiles = computed(() => {
+  if (!formProjectId.value || !formTargetKey.value) return []
+  const isRepo = formTargetKey.value.startsWith('repo:')
+  const targetId = Number(formTargetKey.value.split(':')[1])
+
+  const map = new Map<number, { id: number; name: string; description?: string }>()
+  for (const auth of authorizations.value) {
+    if (auth.project_id === formProjectId.value) {
+      const matchTarget = isRepo ? auth.repository_id === targetId : auth.target_id === targetId
+      if (matchTarget) {
+        const profile = auth.scan_profile || (auth as any).scanProfile
+        if (profile && !map.has(profile.id)) {
+          map.set(profile.id, {
+            id: profile.id,
+            name: profile.name,
+            description: profile.description
+          })
+        }
+      }
+    }
+  }
+  return Array.from(map.values())
+})
+
+// Automatically resolved active authorization permit
+const resolvedAuthorization = computed(() => {
+  if (!formProjectId.value || !formTargetKey.value) return null
+  const isRepo = formTargetKey.value.startsWith('repo:')
+  const targetId = Number(formTargetKey.value.split(':')[1])
+
+  return authorizations.value.find(auth => {
+    if (auth.project_id !== formProjectId.value) return false
+    const matchTarget = isRepo ? auth.repository_id === targetId : auth.target_id === targetId
+    if (!matchTarget) return false
+    if (formProfileId.value && auth.scan_profile_id !== formProfileId.value) return false
+    return true
+  }) || null
+})
+
+// Watchers for guided cascading selection
+watch(formProjectId, (newVal) => {
+  formTargetKey.value = ''
+  formProfileId.value = ''
+  if (newVal) {
+    const targets = availableTargets.value
+    if (targets.length > 0) {
+      formTargetKey.value = targets[0].key
+    }
+  }
+})
+
+watch(formTargetKey, (newVal) => {
+  formProfileId.value = ''
+  if (newVal) {
+    const profiles = availableProfiles.value
+    if (profiles.length > 0) {
+      formProfileId.value = profiles[0].id
+    }
+  }
 })
 
 function openCreateModal() {
-  if (authorizations.value.length > 0) {
-    selectedAuthId.value = authorizations.value[0].id
+  if (authorizations.value.length === 0) {
+    loadAuthorizations()
+  }
+  if (availableProjects.value.length > 0 && !formProjectId.value) {
+    formProjectId.value = availableProjects.value[0].id
   }
   isCreateModalOpen.value = true
 }
@@ -364,9 +481,9 @@ function closeCreateModal() {
 }
 
 async function handleCreateScan() {
-  const auth = currentSelectedAuth.value
+  const auth = resolvedAuthorization.value
   if (!auth) {
-    showAlert('danger', 'Silakan pilih otorisasi pemindaian yang valid.')
+    showAlert('danger', 'Silakan pilih target dan profil pemindaian yang valid.')
     return
   }
 
@@ -414,8 +531,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page-body">
-    <div class="container-xl">
+  <div class="page-body mt-0">
+    <div class="container-fluid">
       <!-- Flash Alert Message -->
       <div
         v-if="alertMessage"
@@ -446,63 +563,6 @@ onUnmounted(() => {
           </div>
           <!-- Top Action Buttons -->
           <div class="col-auto ms-auto d-flex align-items-center gap-2">
-            <!-- Sync Indicator -->
-            <span class="text-secondary small d-none d-md-inline-block font-monospace">
-              <span class="status-dot status-green me-1"></span>
-              Update: {{ lastSyncedAt || '-' }}
-            </span>
-
-            <!-- Toggle Auto Refresh -->
-            <button
-              class="btn btn-outline-secondary"
-              :class="{ active: autoRefreshEnabled }"
-              @click="toggleAutoRefresh"
-              :title="autoRefreshEnabled ? 'Matikan auto-refresh' : 'Aktifkan auto-refresh'"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="icon"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                stroke-width="2"
-                stroke="currentColor"
-                fill="none"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
-                <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
-              </svg>
-              <span class="d-none d-sm-inline ms-1">Auto-Sync</span>
-            </button>
-
-            <!-- Refresh Manual -->
-            <button
-              class="btn btn-icon btn-outline-secondary"
-              @click="loadScanJobs(true)"
-              :disabled="isLoading"
-              title="Refresh data sekarang"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="icon"
-                :class="{ 'animate-spin': isLoading }"
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                stroke-width="2"
-                stroke="currentColor"
-                fill="none"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
-                <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
-              </svg>
-            </button>
 
             <!-- Button New Scan -->
             <button class="btn btn-primary" @click="openCreateModal">
@@ -556,7 +616,7 @@ onUnmounted(() => {
               <div class="row align-items-center">
                 <div class="col-auto">
                   <span class="bg-azure text-white avatar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a9 9 0 1 0 9 9" /><path d="M12 7v5l3 3" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-clock"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 7v5l3 3" /></svg>
                   </span>
                 </div>
                 <div class="col">
@@ -599,7 +659,7 @@ onUnmounted(() => {
               <div class="row align-items-center">
                 <div class="col-auto">
                   <span class="bg-danger text-white avatar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-alert-triangle"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" /><path d="M12 16h.01" /></svg>
                   </span>
                 </div>
                 <div class="col">
@@ -1026,48 +1086,84 @@ onUnmounted(() => {
               Pilih otorisasi keamanan aktif untuk menentukan target aset, izin scope, dan konfigurasi profil mesin pemindai secara otomatis.
             </p>
 
-            <!-- Dropdown Otorisasi -->
+            <!-- Step 1: Pilih Proyek -->
             <div class="mb-3">
-              <label class="form-label required">Otorisasi Keamanan Aktif</label>
-              <select v-model="selectedAuthId" class="form-select">
-                <option v-for="auth in authorizations" :key="auth.id" :value="auth.id">
-                  #{{ auth.code }} — {{ auth.project?.name || 'Proyek' }} ({{ auth.scan_profile?.name || 'Profil Scan' }})
+              <label class="form-label required">1. Pilih Proyek</label>
+              <div v-if="availableProjects.length === 0" class="alert alert-warning py-2 small mb-0">
+                <span class="status-dot status-warning me-1"></span>
+                Belum ada proyek dengan izin pemindaian aktif di sistem.
+              </div>
+              <select v-else v-model="formProjectId" class="form-select">
+                <option value="" disabled>-- Pilih Proyek Terdaftar --</option>
+                <option v-for="proj in availableProjects" :key="proj.id" :value="proj.id">
+                  {{ proj.name }} ({{ proj.code }})
                 </option>
               </select>
             </div>
 
-            <!-- Preview Data Otorisasi Terpilih -->
-            <div v-if="currentSelectedAuth" class="card bg-light-subtle border mb-3">
+            <!-- Step 2: Pilih Target Aset -->
+            <div v-if="formProjectId" class="mb-3">
+              <label class="form-label required">2. Pilih Target / Repositori</label>
+              <div v-if="availableTargets.length === 0" class="alert alert-warning py-2 small mb-0">
+                Tidak ada target aktif yang terdaftar untuk proyek ini.
+              </div>
+              <select v-else v-model="formTargetKey" class="form-select">
+                <option value="" disabled>-- Pilih Target yang Akan Dipindai --</option>
+                <option v-for="tgt in availableTargets" :key="tgt.key" :value="tgt.key">
+                  [{{ tgt.type }}] {{ tgt.name }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Step 3: Pilih Profil Pemindaian -->
+            <div v-if="formTargetKey && availableProfiles.length > 0" class="mb-3">
+              <label class="form-label required">3. Mode / Profil Pemindaian</label>
+              <select v-model="formProfileId" class="form-select">
+                <option v-for="prof in availableProfiles" :key="prof.id" :value="prof.id">
+                  {{ prof.name }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Kartu Pratinjau Siap Luncur -->
+            <div v-if="resolvedAuthorization" class="card bg-light-subtle border mb-3">
+              <div class="card-status-top bg-primary"></div>
               <div class="card-body py-3">
                 <div class="row g-3">
                   <div class="col-sm-6">
-                    <div class="text-secondary small">Nama Proyek</div>
-                    <div class="fw-bold">{{ currentSelectedAuth.project?.name || '-' }}</div>
-                    <div class="text-muted small font-monospace">{{ currentSelectedAuth.project?.code }}</div>
+                    <div class="text-secondary small">Proyek Terpilih</div>
+                    <div class="fw-bold">{{ resolvedAuthorization.project?.name || '-' }}</div>
+                    <div class="text-muted small font-monospace">{{ resolvedAuthorization.project?.code }}</div>
                   </div>
                   <div class="col-sm-6">
-                    <div class="text-secondary small">Profil Pemindaian</div>
-                    <div class="fw-bold text-primary">{{ currentSelectedAuth.scan_profile?.name || 'Profil Default' }}</div>
-                    <div class="text-muted small">{{ currentSelectedAuth.scan_profile?.description || '-' }}</div>
+                    <div class="text-secondary small">Mode Pemindaian</div>
+                    <div class="fw-bold text-primary">{{ resolvedAuthorization.scan_profile?.name || (resolvedAuthorization as any).scanProfile?.name || 'Profil Default' }}</div>
+                    <div class="text-muted small">{{ resolvedAuthorization.scan_profile?.description || (resolvedAuthorization as any).scanProfile?.description || '-' }}</div>
                   </div>
                   <div class="col-12">
                     <div class="text-secondary small">Target Aset yang Diperiksa</div>
                     <div class="fw-medium font-monospace mt-1">
-                      <span v-if="currentSelectedAuth.repository" class="badge bg-azure-lt me-1">Git Repository</span>
-                      <span v-else-if="currentSelectedAuth.target" class="badge bg-teal-lt me-1">Target Web/Host</span>
-                      {{ currentSelectedAuth.repository?.name || currentSelectedAuth.target?.name || currentSelectedAuth.target?.base_url || '-' }}
+                      <span v-if="resolvedAuthorization.repository" class="badge bg-azure-lt me-1">Git Repository</span>
+                      <span v-else-if="resolvedAuthorization.target" class="badge bg-teal-lt me-1">Target Web/Host</span>
+                      {{ resolvedAuthorization.repository?.name || resolvedAuthorization.target?.name || resolvedAuthorization.target?.base_url || '-' }}
                     </div>
                   </div>
                   <div class="col-12">
-                    <div class="text-secondary small mb-1">Mesin Pemindai Diizinkan (Sandbox)</div>
+                    <div class="text-secondary small mb-1">Mesin Pemindai Siap Eksekusi (Sandbox)</div>
                     <div class="d-flex flex-wrap gap-1">
                       <span
-                        v-for="eng in currentSelectedAuth.allowed_engines || currentSelectedAuth.scan_profile?.engine_keys || []"
+                        v-for="eng in resolvedAuthorization.allowed_engines || resolvedAuthorization.scan_profile?.engine_keys || (resolvedAuthorization as any).scanProfile?.engine_keys || []"
                         :key="eng"
                         class="badge bg-success-lt font-monospace"
                       >
                         {{ eng }}
                       </span>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <div class="text-muted small d-flex align-items-center gap-1 font-monospace">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm text-success" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                      Izin Otorisasi Sah: #{{ resolvedAuthorization.code }}
                     </div>
                   </div>
                 </div>
@@ -1082,7 +1178,7 @@ onUnmounted(() => {
             <button
               type="button"
               class="btn btn-primary"
-              :disabled="isSubmitting || !currentSelectedAuth"
+              :disabled="isSubmitting || !resolvedAuthorization"
               @click="handleCreateScan"
             >
               <svg

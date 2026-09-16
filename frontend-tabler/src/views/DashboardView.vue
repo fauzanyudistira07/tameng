@@ -537,7 +537,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Page Body -->
-    <div class="page-body">
+    <div class="page-body mt-0">
       <div class="container-fluid">
         <!-- ROW 1: 4 Key Telemetry Cards -->
         <div class="row row-deck row-cards mb-4">
@@ -758,9 +758,7 @@ onUnmounted(() => {
               <div class="card-header">
                 <h3 class="card-title">Pemantauan Pemindaian Terkini</h3>
                 <div class="card-actions">
-                  <router-link to="/scan-jobs" class="btn btn-sm btn-outline-primary">
-                    Lihat Semua Scan →
-                  </router-link>
+                  <span class="text-secondary small">5 Terakhir</span>
                 </div>
               </div>
               <div class="table-responsive">

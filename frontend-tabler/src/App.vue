@@ -38,6 +38,11 @@ onMounted(() => {
 </template>
 
 <style>
+/* Hilangkan margin-top pada page-body agar menempel pas dengan header/navbar */
+.page-body {
+  margin-top: 0 !important;
+}
+
 /* Sembunyikan icon reveal bawaan browser (Edge/IE) agar konsisten menggunakan icon kustom di paling belakang */
 input::-ms-reveal,
 input::-ms-clear {
