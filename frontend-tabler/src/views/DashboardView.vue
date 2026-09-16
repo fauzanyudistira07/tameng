@@ -520,16 +520,23 @@ onUnmounted(() => {
 <template>
   <div>
     <!-- Page Header (Monitoring Mode Only) -->
-    <div class="page-header d-print-none">
+    <div class="page-header d-print-none mb-3">
       <div class="container-fluid">
         <div class="row g-2 align-items-center">
           <div class="col">
-            <div class="page-pretitle">
-              TAMENG SOC
+            <div class="page-pretitle text-secondary text-uppercase fw-bold fs-6">
+              Pusat Operasi Keamanan Siber &middot; Monitoring &amp; Telemetri
             </div>
-            <h2 class="page-title">
-              Dashboard
-              <span v-if="isSyncing" class="spinner-border spinner-border-sm text-secondary ms-2" role="status" title="Menyinkronkan data..."></span>
+            <h2 class="page-title d-flex align-items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon text-primary" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M4 4h6v8h-6z" />
+                <path d="M4 16h6v4h-6z" />
+                <path d="M14 12h6v8h-6z" />
+                <path d="M14 4h6v4h-6z" />
+              </svg>
+              <span>Dasbor Keamanan</span>
+              <span v-if="isSyncing" class="spinner-border spinner-border-sm text-secondary ms-1" role="status" title="Menyinkronkan data..."></span>
             </h2>
           </div>
         </div>
@@ -537,7 +544,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Page Body -->
-    <div class="page-body mt-0">
+    <div class="page-body">
       <div class="container-fluid">
         <!-- ROW 1: 4 Key Telemetry Cards -->
         <div class="row row-deck row-cards mb-4">

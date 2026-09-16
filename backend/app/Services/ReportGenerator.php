@@ -89,6 +89,7 @@ class ReportGenerator
             ],
             'risk_summary' => $summary,
             'findings' => $findings->map(fn (Finding $finding): array => [
+                'id' => $finding->id,
                 'code' => $finding->code,
                 'severity' => $finding->severity,
                 'status' => $finding->status,

@@ -65,4 +65,13 @@ class Finding extends Model
     {
         return $this->hasMany(FindingEvidence::class);
     }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if (is_numeric($value)) {
+            return $this->where('id', $value)->first();
+        }
+
+        return $this->where('code', $value)->first() ?? $this->where('id', $value)->first();
+    }
 }

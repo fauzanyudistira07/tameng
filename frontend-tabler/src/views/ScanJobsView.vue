@@ -366,8 +366,46 @@ function getEngineRunStatusClass(status: string): string {
     case 'failed': return 'bg-danger-lt text-danger'
     case 'denied': return 'bg-danger-lt text-danger'
     case 'skipped': return 'bg-secondary-lt text-secondary'
-    default: return 'bg-secondary-lt'
+    default: return 'bg-secondary-lt text-secondary'
   }
+}
+
+function getEngineBadgeClass(job: ScanJob, engineKey: string): string {
+  if (job.scan_runs && job.scan_runs.length > 0) {
+    const run = job.scan_runs.find(r => r.engine_key === engineKey)
+    if (run) {
+      return getEngineRunStatusClass(run.status)
+    }
+  }
+  if (job.status === 'completed') {
+    return 'bg-success-lt text-success'
+  }
+  if (job.status === 'running') {
+    return 'bg-primary-lt text-primary'
+  }
+  if (['failed', 'denied'].includes(job.status)) {
+    return 'bg-danger-lt text-danger'
+  }
+  return 'bg-secondary-lt text-secondary'
+}
+
+function getJobEngines(job: ScanJob): Array<{ engine_key: string, statusClass: string }> {
+  const engineKeys: string[] = []
+  if (job.engine_plan && Array.isArray(job.engine_plan) && job.engine_plan.length > 0) {
+    job.engine_plan.forEach(e => {
+      const key = e.engine_key || e
+      if (typeof key === 'string' && !engineKeys.includes(key)) engineKeys.push(key)
+    })
+  }
+  if (job.scan_runs && Array.isArray(job.scan_runs) && job.scan_runs.length > 0) {
+    job.scan_runs.forEach(r => {
+      if (r.engine_key && !engineKeys.includes(r.engine_key)) engineKeys.push(r.engine_key)
+    })
+  }
+  return engineKeys.map(key => ({
+    engine_key: key,
+    statusClass: getEngineBadgeClass(job, key)
+  }))
 }
 
 function toggleExpandRow(jobId: number) {
@@ -706,11 +744,15 @@ onUnmounted(() => {
       <div class="page-header d-print-none mb-3">
         <div class="row g-2 align-items-center">
           <div class="col">
-            <div class="page-pretitle text-secondary">
-              OPERASIONAL & ORKESTRASI SANDBOX
+            <div class="page-pretitle text-secondary text-uppercase fw-bold fs-6">
+              Operasional &amp; Orkestrasi &middot; Mesin Pemindai Sandbox
             </div>
             <h2 class="page-title d-flex align-items-center gap-2">
-              <span>Pekerjaan Pemindaian Keamanan</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon text-primary" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M3 12h4l3 8l4 -16l3 8h4" />
+              </svg>
+              <span>Pekerjaan Scan</span>
             </h2>
           </div>
           <!-- Top Action Buttons -->
@@ -1019,13 +1061,14 @@ onUnmounted(() => {
                       <span class="badge bg-blue-lt text-truncate" style="max-width: 220px;" :title="job.scan_profile?.name">
                         {{ job.scan_profile?.name || 'Deterministic Plan' }}
                       </span>
-                      <!-- Engine Badges List -->
+                      <!-- Engine Badges List with dynamic execution status colors -->
                       <div class="d-flex flex-wrap gap-1 mt-1">
-                        <template v-if="job.engine_plan && job.engine_plan.length > 0">
+                        <template v-if="getJobEngines(job).length > 0">
                           <span
-                            v-for="eng in job.engine_plan"
+                            v-for="eng in getJobEngines(job)"
                             :key="eng.engine_key"
-                            class="badge bg-secondary-lt font-monospace small px-1 py-0"
+                            class="badge font-monospace px-1 py-0 fs-6"
+                            :class="eng.statusClass"
                           >
                             {{ eng.engine_key }}
                           </span>

@@ -122,7 +122,11 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
             </router-link>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="/scan-saya">
+            <router-link
+              class="nav-link"
+              :class="{ active: route.path === '/scan-mandiri' || route.path === '/scan-saya' }"
+              to="/scan-mandiri"
+            >
               <span class="nav-link-icon d-md-none d-lg-inline-block">
                 <!-- icon: scan -->
                 <svg
@@ -146,7 +150,7 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
                 </svg>
               </span>
               <span class="nav-link-title"> Scan Mandiri </span>
-            </a>
+            </router-link>
           </li>
 
           <!-- 2. Inventaris & Aset -->

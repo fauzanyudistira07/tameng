@@ -155,7 +155,9 @@ export async function apiFetch<T = any>(endpoint: string, options: TamengRequest
   const xsrf = getCookie('XSRF-TOKEN')
   if (xsrf && ['POST', 'PUT', 'DELETE', 'PATCH'].includes((requestOptions.method || 'GET').toUpperCase())) {
     headers['X-XSRF-TOKEN'] = xsrf
-    headers['Content-Type'] = headers['Content-Type'] || 'application/json'
+    if (typeof FormData === 'undefined' || !(requestOptions.body instanceof FormData)) {
+      headers['Content-Type'] = headers['Content-Type'] || 'application/json'
+    }
   }
 
   let res = await fetch(endpoint, {
