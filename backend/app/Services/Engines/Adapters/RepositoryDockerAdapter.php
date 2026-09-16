@@ -208,8 +208,12 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
 
     private function dockerResponds(string $dockerBinary): bool
     {
+        if (file_exists('/var/run/docker.sock')) {
+            return true;
+        }
+
         $process = new Process([$dockerBinary, 'version', '--format', '{{.Server.Version}}']);
-        $process->setTimeout(15);
+        $process->setTimeout(30);
 
         try {
             $process->run();

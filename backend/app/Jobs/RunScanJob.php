@@ -257,4 +257,17 @@ class RunScanJob implements ShouldQueue
             $webhookNotifier->notifyScanResult($scanJob);
         }
     }
+
+    public function failed(?Throwable $exception): void
+    {
+        $scanJob = ScanJob::query()->find($this->scanJobId);
+        if ($scanJob && in_array($scanJob->status, ['queued', 'running'], true)) {
+            $scanJob->forceFill([
+                'status' => 'failed',
+                'progress' => 100,
+                'finished_at' => now(),
+                'failure_reason' => $exception ? \Illuminate\Support\Str::limit($exception->getMessage(), 250) : 'QUEUE_JOB_TIMEOUT',
+            ])->save();
+        }
+    }
 }

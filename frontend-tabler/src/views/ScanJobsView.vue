@@ -106,6 +106,8 @@ const pageSize = ref(10)
 const autoRefreshEnabled = ref(true)
 let pollTimer: any = null
 const lastSyncedAt = ref<string>('')
+const nowTimestamp = ref<number>(Date.now())
+let secondTickerTimer: any = null
 
 // Alert / Notification
 const alertMessage = ref<{ type: 'success' | 'danger' | 'info'; text: string } | null>(null)
@@ -166,6 +168,20 @@ function stopPolling() {
   }
 }
 
+function startTicker() {
+  stopTicker()
+  secondTickerTimer = setInterval(() => {
+    nowTimestamp.value = Date.now()
+  }, 1000)
+}
+
+function stopTicker() {
+  if (secondTickerTimer) {
+    clearInterval(secondTickerTimer)
+    secondTickerTimer = null
+  }
+}
+
 function toggleAutoRefresh() {
   autoRefreshEnabled.value = !autoRefreshEnabled.value
   if (autoRefreshEnabled.value) {
@@ -195,16 +211,10 @@ const filteredJobs = computed(() => {
     if (filterStatus.value === 'completed' && job.status !== 'completed') return false
     if (filterStatus.value === 'failed' && !['failed', 'denied'].includes(job.status)) return false
 
-    // Search Query
+    // Search Query: MURNI HANYA NAMA PROYEK
     if (!q) return true
-    const code = (job.code || '').toLowerCase()
     const projName = (job.project?.name || '').toLowerCase()
-    const projCode = (job.project?.code || '').toLowerCase()
-    const repoName = (job.repository?.name || '').toLowerCase()
-    const targetName = (job.target?.name || job.target?.base_url || '').toLowerCase()
-    const profileName = (job.scan_profile?.name || '').toLowerCase()
-
-    return code.includes(q) || projName.includes(q) || projCode.includes(q) || repoName.includes(q) || targetName.includes(q) || profileName.includes(q)
+    return projName.includes(q)
   })
 })
 
@@ -246,7 +256,7 @@ function calculateDuration(job: ScanJob): string {
 
   if (job.status === 'running') {
     if (job.started_at) {
-      const diffSec = Math.max(0, Math.round((Date.now() - new Date(job.started_at).getTime()) / 1000))
+      const diffSec = Math.max(0, Math.round((nowTimestamp.value - new Date(job.started_at).getTime()) / 1000))
       const m = Math.floor(diffSec / 60)
       const s = diffSec % 60
       return `Berjalan: ${m > 0 ? `${m}m ${s}s` : `${s}s`}`
@@ -287,6 +297,43 @@ function assetBadgeInfo(job: ScanJob) {
     label: '-',
     badgeClass: 'bg-secondary-lt',
     icon: 'cube'
+  }
+}
+
+function isJobPartialSuccess(job: ScanJob): boolean {
+  if (job.status !== 'completed') return false
+  if (job.failure_reason) return true
+  if (job.scan_runs && job.scan_runs.some(r => ['failed', 'denied'].includes(r.status))) {
+    return true
+  }
+  return false
+}
+
+function getJobStatusBadgeClass(job: ScanJob): string {
+  if (isJobPartialSuccess(job)) {
+    return 'bg-warning text-warning-fg'
+  }
+  switch (job.status) {
+    case 'completed': return 'bg-success text-success-fg'
+    case 'running': return 'bg-primary text-primary-fg'
+    case 'queued': return 'bg-azure text-azure-fg'
+    case 'failed': return 'bg-danger text-danger-fg'
+    case 'denied': return 'bg-danger text-danger-fg'
+    default: return 'bg-secondary text-secondary-fg'
+  }
+}
+
+function getJobStatusLabel(job: ScanJob): string {
+  if (isJobPartialSuccess(job)) {
+    return 'Selesai Parsial'
+  }
+  switch (job.status) {
+    case 'completed': return 'Selesai'
+    case 'running': return 'Berjalan'
+    case 'queued': return 'Antrean'
+    case 'failed': return 'Gagal'
+    case 'denied': return 'Ditolak'
+    default: return job.status
   }
 }
 
@@ -331,6 +378,18 @@ function toggleExpandRow(jobId: number) {
   }
 }
 
+function handleRowClick(event: MouseEvent, jobId: number) {
+  const target = event.target as HTMLElement
+  if (target.closest('button') || target.closest('a') || target.closest('.btn')) {
+    return
+  }
+  const selection = window.getSelection()
+  if (selection && selection.toString().trim().length > 0) {
+    return
+  }
+  toggleExpandRow(jobId)
+}
+
 function showAlert(type: 'success' | 'danger' | 'info', text: string) {
   alertMessage.value = { type, text }
   setTimeout(() => {
@@ -340,19 +399,29 @@ function showAlert(type: 'success' | 'danger' | 'info', text: string) {
   }, 5000)
 }
 
-// Rerun Scan Job
-async function handleRerun(job: ScanJob) {
-  if (isRerunningId.value !== null) return
-  if (!confirm(`Konfirmasi untuk menjalankan ulang pekerjaan scan #${job.code}?`)) {
-    return
-  }
+// Modal Rerun Confirmation
+const rerunConfirmJob = ref<ScanJob | null>(null)
 
+function promptRerun(job: ScanJob) {
+  rerunConfirmJob.value = job
+}
+
+function closeRerunModal() {
+  rerunConfirmJob.value = null
+}
+
+async function confirmAndExecuteRerun() {
+  if (!rerunConfirmJob.value || isRerunningId.value !== null) return
+  const job = rerunConfirmJob.value
   isRerunningId.value = job.id
   try {
     const res = await apiFetch(`/api/scan-jobs/${job.id}/rerun`, {
       method: 'POST'
     })
-    showAlert('success', res?.message || `Pekerjaan scan #${job.code} berhasil dijalankan ulang.`)
+    const newJob = res?.scan_job
+    showAlert('success', `Pekerjaan #${job.code} berhasil di-rerun menjadi #${newJob?.code || 'baru'}.`)
+    closeRerunModal()
+    filterStatus.value = 'all'
     await loadScanJobs(false)
   } catch (err: any) {
     showAlert('danger', err?.message || 'Gagal menjalankan ulang pemindaian.')
@@ -546,28 +615,92 @@ onMounted(async () => {
     loadAuthorizations()
   ])
   startPolling()
+  startTicker()
 })
 
 onUnmounted(() => {
   stopPolling()
+  stopTicker()
 })
 </script>
 
 <template>
   <div class="page-body mt-0">
     <div class="container-fluid">
-      <!-- Flash Alert Message -->
+    <!-- Flash Toast Notification (Floating Modern Tabler) -->
+    <transition name="toast-slide">
       <div
         v-if="alertMessage"
-        class="alert alert-dismissible mb-3"
-        :class="`alert-${alertMessage.type}`"
-        role="alert"
+        class="toast-container position-fixed end-0 p-3"
+        style="top: 72px; z-index: 1070; max-width: 480px;"
       >
-        <div class="d-flex align-items-center">
-          <div>{{ alertMessage.text }}</div>
+        <div
+          class="alert alert-dismissible shadow-lg border-0 d-flex align-items-start gap-2 mb-0 py-3"
+          :class="`alert-${alertMessage.type}`"
+          role="alert"
+          style="backdrop-filter: blur(8px); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4) !important;"
+        >
+          <div class="alert-icon pt-0">
+            <svg
+              v-if="alertMessage.type === 'success'"
+              xmlns="http://www.w3.org/2000/svg"
+              class="icon text-success"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              stroke-width="2"
+              stroke="currentColor"
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+              <path d="M5 12l5 5l10 -10" />
+            </svg>
+            <svg
+              v-else-if="alertMessage.type === 'danger'"
+              xmlns="http://www.w3.org/2000/svg"
+              class="icon text-danger"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              stroke-width="2"
+              stroke="currentColor"
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+              <path d="M12 9v4" />
+              <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />
+              <path d="M12 16h.01" />
+            </svg>
+            <svg
+              v-else
+              xmlns="http://www.w3.org/2000/svg"
+              class="icon text-info"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              stroke-width="2"
+              stroke="currentColor"
+              fill="none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+              <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" />
+              <path d="M12 9h.01" />
+              <path d="M11 12h1v4h1" />
+            </svg>
+          </div>
+          <div class="flex-fill pe-2">
+            <div class="fw-medium small">{{ alertMessage.text }}</div>
+          </div>
+          <a class="btn-close ms-auto" @click="alertMessage = null" aria-label="close"></a>
         </div>
-        <a class="btn-close" @click="alertMessage = null" aria-label="close"></a>
       </div>
+    </transition>
 
       <!-- Page Header -->
       <div class="page-header d-print-none mb-3">
@@ -578,10 +711,6 @@ onUnmounted(() => {
             </div>
             <h2 class="page-title d-flex align-items-center gap-2">
               <span>Pekerjaan Pemindaian Keamanan</span>
-              <span v-if="runningCount > 0" class="badge bg-primary-lt">
-                <span class="status-dot status-dot-animated status-blue me-1"></span>
-                {{ runningCount }} Aktif
-              </span>
             </h2>
           </div>
           <!-- Top Action Buttons -->
@@ -646,9 +775,6 @@ onUnmounted(() => {
                   <div class="font-weight-medium">Berjalan / Antrean</div>
                   <div class="text-secondary fs-3 fw-bold d-flex align-items-center gap-2">
                     <span>{{ activeCount }}</span>
-                    <span v-if="runningCount > 0" class="badge bg-primary text-primary-fg small fs-6">
-                      {{ runningCount }} Berjalan
-                    </span>
                   </div>
                 </div>
               </div>
@@ -751,19 +877,32 @@ onUnmounted(() => {
             </li>
           </ul>
 
-          <!-- Search Input -->
+          <!-- Restyled Modern Search Input -->
           <div class="card-actions my-1">
-            <div class="input-icon">
-              <span class="input-icon-addon">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
-              </span>
-              <input
-                type="text"
-                v-model="searchQuery"
-                class="form-control form-control-sm"
-                placeholder="Cari kode, proyek, atau target..."
-                style="min-width: 240px;"
-              />
+            <div class="search-box-wrapper position-relative">
+              <div class="input-icon">
+                <span class="input-icon-addon text-primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+                </span>
+                <input
+                  type="text"
+                  v-model="searchQuery"
+                  class="form-control form-control-sm modern-search-input"
+                  :class="{ 'has-query': searchQuery }"
+                  placeholder="Cari nama proyek..."
+                  @keydown.esc="searchQuery = ''"
+                />
+                <!-- Tombol Hapus Cepat (X) -->
+                <button
+                  v-if="searchQuery"
+                  type="button"
+                  class="btn btn-sm btn-link p-0 text-muted search-clear-btn"
+                  @click="searchQuery = ''"
+                  title="Hapus pencarian (Esc)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -805,12 +944,16 @@ onUnmounted(() => {
 
               <!-- Rows -->
               <template v-for="job in paginatedJobs" :key="job.id">
-                <tr :class="{ 'table-active': expandedJobId === job.id }">
+                <tr
+                  class="scan-job-row"
+                  :class="{ 'table-active': expandedJobId === job.id }"
+                  @click="handleRowClick($event, job.id)"
+                >
                   <!-- Expand Trigger -->
                   <td>
                     <button
                       class="btn btn-icon btn-ghost-secondary btn-sm"
-                      @click="toggleExpandRow(job.id)"
+                      @click.stop="toggleExpandRow(job.id)"
                       :title="expandedJobId === job.id ? 'Tutup rincian' : 'Buka log rincian mesin'"
                     >
                       <svg
@@ -903,7 +1046,8 @@ onUnmounted(() => {
                         <div
                           class="progress-bar"
                           :class="{
-                            'bg-success': job.status === 'completed',
+                            'bg-warning': isJobPartialSuccess(job),
+                            'bg-success': job.status === 'completed' && !isJobPartialSuccess(job),
                             'bg-primary progress-bar-striped progress-bar-animated': job.status === 'running',
                             'bg-azure': job.status === 'queued',
                             'bg-danger': ['failed', 'denied'].includes(job.status)
@@ -916,8 +1060,26 @@ onUnmounted(() => {
 
                   <!-- 5. Status -->
                   <td>
-                    <span class="badge" :class="getStatusBadgeClass(job.status)">
-                      {{ getStatusLabel(job.status) }}
+                    <span class="badge d-inline-flex align-items-center gap-1" :class="getJobStatusBadgeClass(job)">
+                      <svg
+                        v-if="isJobPartialSuccess(job)"
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="icon icon-xs"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        stroke-width="2"
+                        stroke="currentColor"
+                        fill="none"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                        <path d="M12 9v4" />
+                        <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />
+                        <path d="M12 16h.01" />
+                      </svg>
+                      {{ getJobStatusLabel(job) }}
                     </span>
                   </td>
 
@@ -928,7 +1090,7 @@ onUnmounted(() => {
                       <button
                         class="btn btn-sm btn-outline-secondary"
                         :disabled="isRerunningId === job.id || job.status === 'running'"
-                        @click="handleRerun(job)"
+                        @click.stop="promptRerun(job)"
                         title="Jalankan ulang pemindaian ini"
                       >
                         <svg
@@ -953,8 +1115,9 @@ onUnmounted(() => {
 
                       <!-- Detail Inspector Toggle -->
                       <button
-                        class="btn btn-sm btn-ghost-primary"
-                        @click="toggleExpandRow(job.id)"
+                        class="btn btn-sm"
+                        :class="expandedJobId === job.id ? 'btn-primary' : 'btn-ghost-primary'"
+                        @click.stop="toggleExpandRow(job.id)"
                       >
                         Log Mesin
                       </button>
@@ -1232,6 +1395,117 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- Modal Konfirmasi Rerun Modern Tabler -->
+    <div
+      v-if="rerunConfirmJob"
+      class="modal modal-blur fade show d-block"
+      tabindex="-1"
+      style="background-color: rgba(0, 0, 0, 0.65); z-index: 1060;"
+      @click.self="closeRerunModal"
+    >
+      <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg border-0">
+          <button
+            type="button"
+            class="btn-close"
+            aria-label="Close"
+            @click="closeRerunModal"
+          ></button>
+          <div class="modal-status bg-primary"></div>
+          <div class="modal-body text-center py-4">
+            <!-- Icon Rerun / Refresh -->
+            <div class="avatar avatar-lg bg-primary-lt rounded-circle mx-auto mb-3 shadow-sm">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="icon icon-lg text-primary"
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+                <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+              </svg>
+            </div>
+            <h3 class="modal-title mb-1">Jalankan Ulang Pemindaian?</h3>
+            <div class="text-secondary small mb-3">
+              Pekerjaan pemindaian akan didaftarkan kembali ke antrean sandbox dengan profil dan target aset yang sama.
+            </div>
+
+            <!-- Detail ringkas -->
+            <div class="card card-sm bg-body text-start border mb-0">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                  <span class="text-secondary small">Kode Scan:</span>
+                  <span class="font-monospace fw-bold small text-primary">#{{ rerunConfirmJob.code }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                  <span class="text-secondary small">Proyek:</span>
+                  <span class="fw-medium small text-truncate" style="max-width: 170px;">{{ rerunConfirmJob.project?.name || '-' }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                  <span class="text-secondary small">Target Aset:</span>
+                  <span class="fw-medium small font-monospace text-truncate" style="max-width: 170px;">{{ rerunConfirmJob.repository?.name || rerunConfirmJob.target?.name || '-' }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-secondary small">Mode Profil:</span>
+                  <span class="badge bg-blue-lt small">{{ rerunConfirmJob.scan_profile?.name || '-' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-transparent border-top-0 pt-0">
+            <div class="w-100">
+              <div class="row g-2">
+                <div class="col-6">
+                  <button
+                    type="button"
+                    class="btn btn-secondary w-100"
+                    :disabled="isRerunningId !== null"
+                    @click="closeRerunModal"
+                  >
+                    Batal
+                  </button>
+                </div>
+                <div class="col-6">
+                  <button
+                    type="button"
+                    class="btn btn-primary w-100"
+                    :disabled="isRerunningId !== null"
+                    @click="confirmAndExecuteRerun"
+                  >
+                    <svg
+                      v-if="isRerunningId !== null"
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="icon animate-spin me-1"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      stroke-width="2"
+                      stroke="currentColor"
+                      fill="none"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+                      <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+                    </svg>
+                    <span>{{ isRerunningId !== null ? 'Memproses...' : 'Ya, Rerun' }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1247,5 +1521,77 @@ onUnmounted(() => {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+/* Toast Slide Transition */
+.toast-slide-enter-active,
+.toast-slide-leave-active {
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-16px) scale(0.96);
+}
+
+.toast-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-12px) scale(0.96);
+}
+
+/* Restyled Search Bar */
+.search-box-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.modern-search-input {
+  width: 270px;
+  border-radius: 8px;
+  padding-right: 34px;
+  background-color: rgba(var(--tblr-body-bg-rgb), 0.7);
+  font-size: 0.825rem;
+  border: 1px solid var(--tblr-border-color);
+}
+
+.modern-search-input:focus {
+  border-color: var(--tblr-primary);
+  background-color: var(--tblr-bg-surface);
+  box-shadow: 0 0 0 3px rgba(var(--tblr-primary-rgb), 0.18);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(var(--tblr-body-color-rgb), 0.1);
+  z-index: 5;
+  transition: all 0.15s ease;
+}
+
+.search-clear-btn:hover {
+  background: rgba(214, 57, 57, 0.2);
+  color: var(--tblr-danger) !important;
+}
+
+/* Scan Job Clickable Row */
+.scan-job-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.scan-job-row:hover > td {
+  background-color: rgba(var(--tblr-primary-rgb), 0.05);
+}
+
+.scan-job-row.table-active > td {
+  background-color: rgba(var(--tblr-primary-rgb), 0.08);
 }
 </style>

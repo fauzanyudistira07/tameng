@@ -84,12 +84,13 @@ class ZapAdapter implements EngineAdapter
             '--memory', $memoryLimit,
             '--security-opt=no-new-privileges',
             '-v', "{$outputDirectory}:/zap/wrk:rw",
-            '-t',
             $image,
             'zap-baseline.py',
             '-t', $targetUrl,
             '-J', 'zap-report.json',
-            '-m', '3', // 3 minutes max spider
+            '-m', '1', // 1 minute max spider
+            '-T', '3', // 3 minutes max passive scan & startup
+            '-I',
             ...$zapExtraArgs,
         ];
 
@@ -97,7 +98,7 @@ class ZapAdapter implements EngineAdapter
         $commandSpec['scanner_execution'] = true;
         $commandSpec['container_image'] = $image;
 
-        $process = new Process($dockerArgs, null, null, null, 300);
+        $process = new Process($dockerArgs, null, null, null, 360);
 
         try {
             $process->run();

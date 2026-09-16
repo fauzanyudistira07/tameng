@@ -280,9 +280,18 @@ class NucleiAdapter implements EngineAdapter
 
     private function binaryExists(string $binary): bool
     {
+        if (file_exists('/var/run/docker.sock') || file_exists('/usr/bin/docker')) {
+            return true;
+        }
+
         $process = new Process([$binary, '--version']);
         $process->setTimeout(10);
-        $process->run();
+
+        try {
+            $process->run();
+        } catch (\Throwable) {
+            return false;
+        }
 
         return $process->isSuccessful();
     }
