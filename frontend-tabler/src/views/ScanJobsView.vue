@@ -34,6 +34,9 @@ interface ScanProfile {
 interface Authorization {
   id: number
   code: string
+  status?: string
+  valid_from?: string
+  valid_until?: string
   project_id: number
   repository_id?: number | null
   target_id?: number | null
@@ -132,7 +135,12 @@ async function loadAuthorizations() {
   try {
     const res = await apiFetch('/api/authorizations')
     const list = res?.authorizations || res?.data || (Array.isArray(res) ? res : [])
-    authorizations.value = list.filter((a: any) => a.status === 'active')
+    const now = Date.now()
+    authorizations.value = list.filter((a: any) => {
+      if (a.status !== 'active') return false
+      if (a.valid_until && new Date(a.valid_until).getTime() < now) return false
+      return true
+    })
     if (authorizations.value.length > 0 && !selectedAuthId.value) {
       selectedAuthId.value = authorizations.value[0].id
     }
@@ -217,6 +225,12 @@ function formatTime(isoStr: string | null | undefined): string {
   const d = new Date(isoStr)
   return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
     ' (' + d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) + ')'
+}
+
+function formatShortDate(isoStr: string | null | undefined): string {
+  if (!isoStr) return '-'
+  const d = new Date(isoStr)
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function calculateDuration(job: ScanJob): string {
@@ -511,7 +525,16 @@ async function handleCreateScan() {
     closeCreateModal()
     await loadScanJobs(false)
   } catch (err: any) {
-    showAlert('danger', err?.message || 'Gagal memulai pekerjaan pemindaian.')
+    const rawMsg = err?.message || 'Gagal memulai pekerjaan pemindaian.'
+    let userMsg = rawMsg
+    if (rawMsg.includes('AUTHORIZATION_NOT_IN_VALID_WINDOW')) {
+      userMsg = 'Izin otorisasi telah kedaluwarsa atau belum masuk masa aktif (Authorization out of valid window).'
+    } else if (rawMsg.includes('AUTHORIZATION_NOT_ACTIVE')) {
+      userMsg = 'Izin otorisasi untuk target/profil ini berstatus tidak aktif.'
+    } else if (rawMsg.includes('REPOSITORY_NOT_VERIFIED') || rawMsg.includes('TARGET_NOT_VERIFIED')) {
+      userMsg = 'Aset target belum berstatus terverifikasi (verified).'
+    }
+    showAlert('danger', userMsg)
   } finally {
     isSubmitting.value = false
   }
@@ -1161,9 +1184,14 @@ onUnmounted(() => {
                     </div>
                   </div>
                   <div class="col-12">
-                    <div class="text-muted small d-flex align-items-center gap-1 font-monospace">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm text-success" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
-                      Izin Otorisasi Sah: #{{ resolvedAuthorization.code }}
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pt-2 border-top">
+                      <div class="text-muted small d-flex align-items-center gap-1 font-monospace">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm text-success" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                        Izin Otorisasi Sah: #{{ resolvedAuthorization.code }}
+                      </div>
+                      <div v-if="resolvedAuthorization.valid_until" class="small text-secondary">
+                        Berlaku s.d. <span class="fw-bold text-azure">{{ formatShortDate(resolvedAuthorization.valid_until) }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
