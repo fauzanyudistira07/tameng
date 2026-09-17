@@ -216,9 +216,13 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
           </li>
 
           <!-- 3. Tata Kelola & Mesin -->
-          <li class="nav-item dropdown">
+          <li
+            class="nav-item dropdown"
+            :class="{ active: ['/scopes', '/authorizations', '/engines'].includes(route.path) }"
+          >
             <a
               class="nav-link dropdown-toggle"
+              :class="{ active: ['/scopes', '/authorizations', '/engines'].includes(route.path) }"
               href="#navbar-governance"
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
@@ -248,25 +252,46 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
               </span>
               <span class="nav-link-title"> Tata Kelola & Mesin </span>
             </a>
-            <div class="dropdown-menu">
+            <div
+              class="dropdown-menu"
+              :class="{ show: ['/scopes', '/authorizations', '/engines'].includes(route.path) }"
+            >
               <div class="dropdown-menu-columns">
                 <div class="dropdown-menu-column">
-                  <a class="dropdown-item" href="/scopes">
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/scopes' }"
+                    to="/scopes"
+                  >
                     Ruang Lingkup (Scope)
-                  </a>
-                  <a class="dropdown-item" href="/authorizations">
+                  </router-link>
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/authorizations' }"
+                    to="/authorizations"
+                  >
                     Otorisasi Scan
-                  </a>
-                  <a class="dropdown-item" href="/engines"> Engine Registry </a>
+                  </router-link>
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/engines' }"
+                    to="/engines"
+                  >
+                    Engine Registry
+                  </router-link>
                 </div>
               </div>
             </div>
           </li>
 
           <!-- 4. Analisis & Laporan -->
-          <li class="nav-item dropdown">
+          <li
+            class="nav-item dropdown"
+            :class="{ active: ['/findings', '/reports'].includes(route.path) }"
+          >
             <a
               class="nav-link dropdown-toggle"
+              :class="{ active: ['/findings', '/reports'].includes(route.path) }"
               href="#navbar-reports"
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
@@ -299,15 +324,26 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
               </span>
               <span class="nav-link-title"> Analisis & Laporan </span>
             </a>
-            <div class="dropdown-menu">
+            <div
+              class="dropdown-menu"
+              :class="{ show: ['/findings', '/reports'].includes(route.path) }"
+            >
               <div class="dropdown-menu-columns">
                 <div class="dropdown-menu-column">
-                  <a class="dropdown-item" href="/findings">
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/findings' }"
+                    to="/findings"
+                  >
                     Temuan Kerentanan
-                  </a>
-                  <a class="dropdown-item" href="/reports">
+                  </router-link>
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/reports' }"
+                    to="/reports"
+                  >
                     Laporan Keamanan
-                  </a>
+                  </router-link>
                 </div>
               </div>
             </div>
@@ -316,11 +352,11 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
           <!-- 5. Administrasi & Audit -->
           <li
             class="nav-item dropdown"
-            :class="{ active: route.path === '/users' }"
+            :class="{ active: ['/audit-logs', '/users'].includes(route.path) }"
           >
             <a
               class="nav-link dropdown-toggle"
-              :class="{ active: route.path === '/users' }"
+              :class="{ active: ['/audit-logs', '/users'].includes(route.path) }"
               href="#navbar-admin"
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
@@ -352,13 +388,17 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
             </a>
             <div
               class="dropdown-menu"
-              :class="{ show: route.path === '/users' }"
+              :class="{ show: ['/audit-logs', '/users'].includes(route.path) }"
             >
               <div class="dropdown-menu-columns">
                 <div class="dropdown-menu-column">
-                  <a class="dropdown-item" href="/audit-logs">
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/audit-logs' }"
+                    to="/audit-logs"
+                  >
                     Log Audit Forensik
-                  </a>
+                  </router-link>
                   <router-link
                     class="dropdown-item"
                     :class="{ active: route.path === '/users' }"

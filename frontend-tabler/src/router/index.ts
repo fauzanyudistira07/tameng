@@ -7,6 +7,12 @@ import MyScanRequestsView from '../views/MyScanRequestsView.vue'
 import ProjectsView from '../views/ProjectsView.vue'
 import RepositoriesView from '../views/RepositoriesView.vue'
 import TargetsView from '../views/TargetsView.vue'
+import ScopesView from '../views/ScopesView.vue'
+import AuthorizationsView from '../views/AuthorizationsView.vue'
+import EnginesView from '../views/EnginesView.vue'
+import FindingsView from '../views/FindingsView.vue'
+import ReportsView from '../views/ReportsView.vue'
+import AuditLogsView from '../views/AuditLogsView.vue'
 import { checkAuth, getIsAuthenticated } from '../services/api'
 
 const routes = [
@@ -49,6 +55,36 @@ const routes = [
     path: '/targets',
     name: 'targets',
     component: TargetsView
+  },
+  {
+    path: '/scopes',
+    name: 'scopes',
+    component: ScopesView
+  },
+  {
+    path: '/authorizations',
+    name: 'authorizations',
+    component: AuthorizationsView
+  },
+  {
+    path: '/engines',
+    name: 'engines',
+    component: EnginesView
+  },
+  {
+    path: '/findings',
+    name: 'findings',
+    component: FindingsView
+  },
+  {
+    path: '/reports',
+    name: 'reports',
+    component: ReportsView
+  },
+  {
+    path: '/audit-logs',
+    name: 'audit-logs',
+    component: AuditLogsView
   },
   {
     path: '/users',
