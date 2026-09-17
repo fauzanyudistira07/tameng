@@ -232,19 +232,21 @@ onMounted(() => {
             <div class="btn-group" role="group">
               <button
                 type="button"
-                class="btn"
+                class="btn d-inline-flex align-items-center gap-1"
                 :class="activeTab === 'engines' ? 'btn-primary' : 'btn-outline-secondary'"
                 @click="activeTab = 'engines'"
               >
-                ⚙️ 20 Mesin Keamanan
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z" /><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></svg>
+                <span>20 Mesin Keamanan</span>
               </button>
               <button
                 type="button"
-                class="btn"
+                class="btn d-inline-flex align-items-center gap-1"
                 :class="activeTab === 'profiles' ? 'btn-primary' : 'btn-outline-secondary'"
                 @click="activeTab = 'profiles'"
               >
-                🛡️ Pemetaan Profil Scan
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /></svg>
+                <span>Pemetaan Profil Scan</span>
               </button>
             </div>
           </div>
@@ -439,7 +441,7 @@ onMounted(() => {
               title="Reset filter"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-              <span>↺ Reset Filter</span>
+              <span>Reset Filter</span>
             </button>
           </div>
         </div>
@@ -544,7 +546,9 @@ onMounted(() => {
           <div class="card h-100">
             <div class="card-header py-2 d-flex align-items-center justify-content-between">
               <h3 class="card-title text-capitalize fs-4 m-0 d-flex align-items-center gap-2">
-                <span class="avatar avatar-xs bg-indigo-lt text-indigo">🛡️</span>
+                <span class="avatar avatar-xs bg-indigo-lt text-indigo">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /></svg>
+                </span>
                 <span>{{ profile.name }}</span>
               </h3>
               <span class="badge bg-indigo-lt font-monospace">{{ profile.engine_count }} Engines</span>

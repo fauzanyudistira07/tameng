@@ -502,7 +502,7 @@ onMounted(() => {
               title="Reset seluruh filter"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-              <span>↺ Reset Filter</span>
+              <span>Reset Filter</span>
             </button>
           </div>
         </div>
@@ -559,11 +559,13 @@ onMounted(() => {
                   <div class="fw-bold">{{ auth.project?.name || '-' }}</div>
                   <div class="small d-flex align-items-center gap-1 text-secondary">
                     <span class="badge bg-blue-lt font-monospace">{{ auth.project?.code || 'PRJ' }}</span>
-                    <span v-if="auth.target" class="text-teal fw-medium">
-                      🎯 {{ auth.target.name }} ({{ auth.target.type }})
+                    <span v-if="auth.target" class="text-teal fw-medium d-inline-flex align-items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-teal" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 12m-5 0a5 5 0 1 0 10 0a5 5 0 1 0 -10 0" /><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
+                      <span>{{ auth.target.name }} ({{ auth.target.type }})</span>
                     </span>
-                    <span v-else-if="auth.repository" class="text-indigo fw-medium">
-                      📦 {{ auth.repository.name }}
+                    <span v-else-if="auth.repository" class="text-indigo fw-medium d-inline-flex align-items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-indigo" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" /><path d="M12 12l8 -4.5" /><path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" /></svg>
+                      <span>{{ auth.repository.name }}</span>
                     </span>
                     <span v-else class="text-muted fst-italic">Semua Aset Proyek</span>
                   </div>
@@ -683,8 +685,9 @@ onMounted(() => {
                     value="target"
                     v-model="authForm.asset_type"
                   />
-                  <label class="btn btn-outline-primary" for="btnTarget">
-                    🎯 Target (Web, API, Mobile APK)
+                  <label class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center gap-1" for="btnTarget">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 12m-5 0a5 5 0 1 0 10 0a5 5 0 1 0 -10 0" /><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
+                    <span>Target (Web, API, Mobile APK)</span>
                   </label>
 
                   <input
@@ -695,8 +698,9 @@ onMounted(() => {
                     value="repository"
                     v-model="authForm.asset_type"
                   />
-                  <label class="btn btn-outline-primary" for="btnRepo">
-                    📦 Repositori Kode Sumber
+                  <label class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center gap-1" for="btnRepo">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" /><path d="M12 12l8 -4.5" /><path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" /></svg>
+                    <span>Repositori Kode Sumber</span>
                   </label>
                 </div>
               </div>
@@ -714,8 +718,9 @@ onMounted(() => {
                     {{ t.name }} ({{ t.type }})
                   </option>
                 </select>
-                <small v-if="availableTargets.length === 0" class="text-danger small mt-1 d-block">
-                  ⚠️ Tidak ada target terverifikasi pada proyek ini. Verifikasi target terlebih dahulu di menu Target.
+                <small v-if="availableTargets.length === 0" class="text-danger small mt-1 d-flex align-items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                  <span>Tidak ada target terverifikasi pada proyek ini. Verifikasi target terlebih dahulu di menu Target.</span>
                 </small>
               </div>
 
@@ -732,8 +737,9 @@ onMounted(() => {
                     {{ r.name }}
                   </option>
                 </select>
-                <small v-if="availableRepos.length === 0" class="text-danger small mt-1 d-block">
-                  ⚠️ Tidak ada repositori terverifikasi pada proyek ini. Verifikasi repo terlebih dahulu di Repositori Kode.
+                <small v-if="availableRepos.length === 0" class="text-danger small mt-1 d-flex align-items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                  <span>Tidak ada repositori terverifikasi pada proyek ini. Verifikasi repo terlebih dahulu di Repositori Kode.</span>
                 </small>
               </div>
 

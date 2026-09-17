@@ -348,7 +348,7 @@ onMounted(() => {
               title="Reset filter"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-              <span>↺ Reset Filter</span>
+              <span>Reset Filter</span>
             </button>
           </div>
         </div>
@@ -489,8 +489,14 @@ onMounted(() => {
                   class="btn btn-xs btn-outline-secondary d-flex align-items-center gap-1"
                   @click="copyMetadata"
                 >
-                  <span v-if="copySuccess" class="text-success">✓ Tersalin</span>
-                  <span v-else>Salin JSON</span>
+                  <span v-if="copySuccess" class="text-success d-inline-flex align-items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                    <span>Tersalin</span>
+                  </span>
+                  <span v-else class="d-inline-flex align-items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 8m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                    <span>Salin JSON</span>
+                  </span>
                 </button>
               </div>
               <pre class="bg-dark text-light p-3 rounded font-monospace small" style="max-height: 320px; overflow-y: auto;">{{ JSON.stringify(selectedLog.metadata, null, 2) }}</pre>

@@ -542,7 +542,7 @@ onMounted(() => {
               title="Reset seluruh filter"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-              <span>↺ Reset Filter</span>
+              <span>Reset Filter</span>
             </button>
           </div>
         </div>
@@ -641,7 +641,8 @@ onMounted(() => {
                       @click="openFindingModal(f, 'ai')"
                       title="Solusi Remediasi AI"
                     >
-                      <span>🤖 AI</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /><path d="M15 9m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
+                      <span>AI</span>
                     </button>
                     <button
                       v-if="canTriage"
@@ -691,31 +692,34 @@ onMounted(() => {
               <li class="nav-item">
                 <button
                   type="button"
-                  class="nav-link py-2"
+                  class="nav-link py-2 d-flex align-items-center gap-1"
                   :class="{ active: modalTab === 'details' }"
                   @click="switchModalTab('details')"
                 >
-                  📋 Rincian & Bukti
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 5h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2h-2" /><path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" /><path d="M9 14l2 2l4 -4" /></svg>
+                  <span>Rincian & Bukti</span>
                 </button>
               </li>
               <li class="nav-item">
                 <button
                   type="button"
-                  class="nav-link py-2"
+                  class="nav-link py-2 d-flex align-items-center gap-1"
                   :class="{ active: modalTab === 'ai' }"
                   @click="switchModalTab('ai')"
                 >
-                  🤖 Solusi Remediasi AI
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-indigo" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /><path d="M15 9m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
+                  <span>Solusi Remediasi AI</span>
                 </button>
               </li>
               <li v-if="canTriage" class="nav-item">
                 <button
                   type="button"
-                  class="nav-link py-2"
+                  class="nav-link py-2 d-flex align-items-center gap-1"
                   :class="{ active: modalTab === 'triage' }"
                   @click="switchModalTab('triage')"
                 >
-                  ⚖️ Triage & Status
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M9 12l2 2l4 -4" /></svg>
+                  <span>Triage & Status</span>
                 </button>
               </li>
             </ul>
@@ -768,7 +772,9 @@ onMounted(() => {
             <div v-else-if="modalTab === 'ai'">
               <div class="card bg-indigo-lt border-0 mb-3">
                 <div class="card-body py-2 px-3 d-flex align-items-center gap-2">
-                  <span class="avatar avatar-xs bg-indigo text-indigo-fg">🤖</span>
+                  <span class="avatar avatar-xs bg-indigo text-indigo-fg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /></svg>
+                  </span>
                   <div class="small">
                     <strong>TAMENG AI Remediation Copilot:</strong> Rekomendasi perbaikan kontekstual berdasarkan tipe kelemahan dan standar secure coding OWASP/NIST.
                   </div>

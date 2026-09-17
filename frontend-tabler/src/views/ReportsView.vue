@@ -362,7 +362,7 @@ onMounted(() => {
               title="Reset seluruh filter"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-              <span>↺ Reset Filter</span>
+              <span>Reset Filter</span>
             </button>
           </div>
         </div>
@@ -508,8 +508,9 @@ onMounted(() => {
                     {{ job.code }} ({{ job.status }}) - {{ job.project?.name || 'Proyek' }}
                   </option>
                 </select>
-                <small v-if="completedScanJobs.length === 0" class="text-danger small mt-1 d-block">
-                  ⚠️ Belum ada pekerjaan scan yang selesai dijalankan. Lakukan scan terlebih dahulu di menu Pekerjaan Scan.
+                <small v-if="completedScanJobs.length === 0" class="text-danger small mt-1 d-flex align-items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                  <span>Belum ada pekerjaan scan yang selesai dijalankan. Lakukan scan terlebih dahulu di menu Pekerjaan Scan.</span>
                 </small>
                 <small v-else class="form-hint">
                   Laporan akan mengompilasi seluruh temuan dari engine yang telah selesai berjalan pada scan ini.
