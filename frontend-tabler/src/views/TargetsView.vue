@@ -60,6 +60,20 @@ function showFeedback(type: 'success' | 'danger' | 'info', text: string, scanJob
   showAlert(type, text, scanJobCode)
 }
 
+// Salin URL ke clipboard
+const copiedUrl = ref<string | null>(null)
+function copyToClipboard(text?: string) {
+  if (!text) return
+  navigator.clipboard.writeText(text).then(() => {
+    copiedUrl.value = text
+    setTimeout(() => {
+      if (copiedUrl.value === text) {
+        copiedUrl.value = null
+      }
+    }, 2500)
+  })
+}
+
 // Modal Konfirmasi & Sukses Scan (mirip Scan Mandiri)
 const scanModalTarget = ref<Target | null>(null)
 const scanSuccessJob = ref<any | null>(null)
@@ -480,7 +494,7 @@ watch(() => route.query.project_id, (newVal) => {
         <div
           v-if="alertMessage"
           class="toast-container position-fixed end-0 p-3"
-          style="top: 72px; z-index: 1070; max-width: 480px;"
+          style="top: 72px; z-index: 1070; max-width: min(480px, calc(100vw - 1.5rem));"
         >
           <div
             class="alert alert-dismissible shadow-lg border-0 d-flex align-items-start gap-2 mb-0 py-3"
@@ -562,7 +576,7 @@ watch(() => route.query.project_id, (newVal) => {
       <!-- Page Header -->
       <div class="page-header d-print-none mb-3">
         <div class="row g-2 align-items-center">
-          <div class="col">
+          <div class="col-12 col-sm">
             <div class="page-pretitle text-secondary">
               Aset Dinamis & Pengujian DAST
             </div>
@@ -571,11 +585,11 @@ watch(() => route.query.project_id, (newVal) => {
               <span>Target Web, API Endpoint, & Aplikasi</span>
             </h2>
           </div>
-          <div class="col-auto ms-auto d-print-none d-flex align-items-center gap-2">
+          <div class="col-12 col-sm-auto ms-sm-auto d-print-none d-flex align-items-center gap-2">
             <button
               v-if="canManage"
               type="button"
-              class="btn btn-primary d-flex align-items-center gap-1"
+              class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto"
               @click="openCreateModal"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
@@ -585,76 +599,76 @@ watch(() => route.query.project_id, (newVal) => {
         </div>
       </div>
 
-      <!-- KPI Metric Cards -->
+      <!-- KPI Metric Cards (Grid 2x2 pada Mobile, 4 Kolom pada Tablet/Desktop) -->
       <div class="row row-cards mb-3">
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-primary-lt text-primary avatar">
+                  <span class="bg-primary-lt text-primary avatar avatar-sm avatar-sm-md">
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M3.6 9h16.8" /><path d="M3.6 15h16.8" /><path d="M11.5 3a17 17 0 0 0 0 18" /><path d="M12.5 3a17 17 0 0 1 0 18" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.total }}</div>
-                  <div class="text-secondary small">Total Target URL</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.total }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">Total Target URL</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-azure-lt text-azure avatar">
+                  <span class="bg-azure-lt text-azure avatar avatar-sm avatar-sm-md">
                     <!-- Flutter / Web App icon -->
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-brand-flutter"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M7 14l-3 -3l8 -8h6l-11 11" /><path d="M14 21l-5 -5l5 -5h5l-5 5l5 5l-5 0" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.webCount }}</div>
-                  <div class="text-secondary small">Web Applications</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.webCount }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">Web Applications</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-purple-lt text-purple avatar">
+                  <span class="bg-purple-lt text-purple avatar avatar-sm avatar-sm-md">
                     <!-- Code/API icon -->
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 8l-4 4l4 4" /><path d="M17 8l4 4l-4 4" /><path d="M14 4l-4 16" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.apiCount }}</div>
-                  <div class="text-secondary small">REST / GraphQL APIs</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.apiCount }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">REST / GraphQL APIs</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-success-lt text-success avatar">
+                  <span class="bg-success-lt text-success avatar avatar-sm avatar-sm-md">
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M9 12l2 2l4 -4" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.verified }}</div>
-                  <div class="text-secondary small">Terverifikasi Hak Milik</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.verified }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">Terverifikasi Milik</div>
                 </div>
               </div>
             </div>
@@ -662,9 +676,9 @@ watch(() => route.query.project_id, (newVal) => {
         </div>
       </div>
 
-      <!-- Main Card with Filter and Table -->
+      <!-- Main Card with Filter, Table, and Mobile Cards -->
       <div class="card">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 py-2">
+        <div class="card-header d-flex flex-column flex-xl-row align-items-stretch align-items-xl-center justify-content-between gap-2 py-2">
           <h3 class="card-title m-0 d-flex align-items-center gap-2">
             <span>Daftar Target Web, API, & Aplikasi</span>
             <span class="badge bg-secondary-lt text-secondary font-monospace">{{ filteredTargets.length }}</span>
@@ -768,8 +782,8 @@ watch(() => route.query.project_id, (newVal) => {
           </div>
         </div>
 
-        <!-- Table -->
-        <div class="table-responsive">
+        <!-- Table (Desktop & Tablet >= 768px) -->
+        <div class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -962,6 +976,190 @@ watch(() => route.query.project_id, (newVal) => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List View (Tampil Otomatis pada Layar Ponsel < 768px) -->
+        <div class="d-md-none p-2 p-sm-3">
+          <!-- Loading state -->
+          <div v-if="isLoading" class="text-center py-4 text-secondary">
+            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+            Memuat data target...
+          </div>
+
+          <!-- Empty state -->
+          <div v-else-if="filteredTargets.length === 0" class="empty py-4">
+            <div class="empty-icon text-muted">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg" width="48" height="48" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M3.6 9h16.8" /><path d="M3.6 15h16.8" /><path d="M11.5 3a17 17 0 0 0 0 18" /><path d="M12.5 3a17 17 0 0 1 0 18" /></svg>
+            </div>
+            <p class="empty-title">Tidak ada target yang ditemukan</p>
+            <p class="empty-subtitle text-secondary">
+              {{ searchQuery || filterProject !== 'all' ? 'Tidak ada target yang cocok dengan filter pencarian.' : 'Belum ada target web atau API yang didaftarkan ke TAMENG.' }}
+            </p>
+            <div v-if="canManage && !searchQuery" class="empty-action">
+              <button type="button" class="btn btn-primary btn-sm" @click="openCreateModal">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                Daftarkan Target Pertama
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards List -->
+          <div v-else class="d-flex flex-column gap-3">
+            <div
+              v-for="target in filteredTargets"
+              :key="target.id"
+              class="card shadow-none border mb-0"
+              style="border-radius: 12px; overflow: hidden;"
+            >
+              <div class="card-body p-3">
+                <!-- Top Header: Name, Type, Project Badge -->
+                <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                  <div class="d-flex align-items-center gap-2 min-width-0">
+                    <span
+                      class="avatar avatar-xs rounded flex-shrink-0"
+                      :class="target.type === 'api' ? 'bg-purple-lt text-purple' : target.type === 'container' ? 'bg-teal-lt text-teal' : (target.type === 'mobile' || target.type === 'app') ? 'bg-green-lt text-green' : 'bg-azure-lt text-azure'"
+                    >
+                      <svg v-if="target.type === 'api'" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 8l-4 4l4 4" /><path d="M17 8l4 4l-4 4" /><path d="M14 4l-4 16" /></svg>
+                      <svg v-else-if="target.type === 'container'" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" /><path d="M12 12l8 -4.5" /><path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" /></svg>
+                      <svg v-else-if="target.type === 'mobile' || target.type === 'app'" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 5a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-14z" /><path d="M11 4h2" /><path d="M12 17v.01" /></svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M7 14l-3 -3l8 -8h6l-11 11" /><path d="M14 21l-5 -5l5 -5h5l-5 5l5 5l-5 0" /></svg>
+                    </span>
+                    <div class="min-width-0">
+                      <div class="fw-bold text-reset fs-4 lh-1 text-truncate">{{ target.name }}</div>
+                      <div class="d-flex align-items-center gap-1 mt-1">
+                        <span class="badge px-1 py-0 font-monospace" :class="getTargetTypeBadge(target.type).class" style="font-size: 0.68rem;">
+                          {{ getTargetTypeBadge(target.type).label }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <span v-if="target.project" class="badge bg-blue-lt text-blue font-monospace flex-shrink-0">
+                    {{ target.project.name }}
+                  </span>
+                </div>
+
+                <!-- Endpoint / Identifier Box with Copy button -->
+                <div v-if="target.base_url || target.hostname" class="bg-body-tertiary rounded p-2 mb-2 border" style="font-size: 0.78rem;">
+                  <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+                    <span class="text-secondary small fw-medium">Endpoint / Aset:</span>
+                    <div class="d-flex align-items-center gap-1">
+                      <span
+                        v-if="target.type === 'mobile' || target.type === 'app'"
+                        class="badge px-1 py-0 font-monospace bg-green-lt text-green"
+                        style="font-size: 0.68rem;"
+                      >
+                        APP
+                      </span>
+                      <span
+                        v-else-if="target.type === 'container'"
+                        class="badge px-1 py-0 font-monospace bg-teal-lt text-teal"
+                        style="font-size: 0.68rem;"
+                      >
+                        IMAGE
+                      </span>
+                      <span
+                        v-else-if="target.base_url"
+                        class="badge px-1 py-0 font-monospace"
+                        :class="target.base_url.startsWith('https://') ? 'bg-success-lt text-success' : 'bg-warning-lt text-warning'"
+                        style="font-size: 0.68rem;"
+                      >
+                        {{ target.base_url.startsWith('https://') ? 'HTTPS' : target.base_url.startsWith('http://') ? 'HTTP' : 'URL' }}
+                      </span>
+                      <button
+                        v-if="target.base_url || target.hostname"
+                        type="button"
+                        class="btn btn-sm btn-ghost-secondary p-0 px-1"
+                        style="height: 20px; font-size: 0.7rem;"
+                        @click="copyToClipboard(target.base_url || target.hostname)"
+                        title="Salin Alamat"
+                      >
+                        <span v-if="copiedUrl === (target.base_url || target.hostname)" class="text-success fw-bold">Tersalin!</span>
+                        <span v-else>Salin</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div v-if="target.base_url" class="text-break font-monospace text-secondary mb-1" style="font-size: 0.73rem;">
+                    {{ target.base_url }}
+                  </div>
+                  <div v-if="target.hostname && target.hostname !== target.base_url" class="text-secondary small font-monospace" style="font-size: 0.7rem;">
+                    Host: {{ target.hostname }}
+                  </div>
+                </div>
+
+                <!-- Verification Status -->
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                  <span class="text-secondary small">Status Verifikasi:</span>
+                  <div v-if="target.verification_status === 'verified'">
+                    <span class="badge bg-success-lt d-inline-flex align-items-center gap-1">
+                      <span class="status-dot status-dot-animated bg-success"></span>
+                      <span>Terverifikasi</span>
+                    </span>
+                  </div>
+                  <div v-else class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning-lt d-inline-flex align-items-center gap-1">
+                      <span class="status-dot bg-warning"></span>
+                      <span>Menunggu</span>
+                    </span>
+                    <button
+                      v-if="canManage"
+                      type="button"
+                      class="btn btn-sm btn-link p-0 text-decoration-none small"
+                      style="font-size: 0.72rem;"
+                      :disabled="verifyingTargetId === target.id"
+                      @click="verifyTargetOwnership(target)"
+                    >
+                      <span v-if="verifyingTargetId === target.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                      <span>Verifikasi</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Action Buttons Row -->
+                <div class="row g-2">
+                  <div class="col-4">
+                    <button
+                      type="button"
+                      class="btn btn-outline-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1 py-2"
+                      @click="openScanModal(target)"
+                      :title="target.type === 'mobile' ? 'Pindai Keamanan Aplikasi' : target.type === 'container' ? 'Pindai Keamanan Container' : 'Pindai DAST'"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7v-1a2 2 0 0 1 2 -2h2" /><path d="M4 17v1a2 2 0 0 0 2 2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v1" /><path d="M16 20h2a2 2 0 0 0 2 -2v-1" /><path d="M5 12l14 0" /></svg>
+                      <span>Pindai</span>
+                    </button>
+                  </div>
+                  <div :class="canManage ? 'col-4' : 'col-8'">
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary btn-sm w-100 d-flex align-items-center justify-content-center gap-1 py-2"
+                      @click="openDetailModal(target)"
+                      title="Detail Target"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 8l.01 0" /><path d="M11 12l1 0l0 4l1 0" /></svg>
+                      <span>Detail</span>
+                    </button>
+                  </div>
+                  <div v-if="canManage" class="col-4 d-flex gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary btn-sm flex-fill d-flex align-items-center justify-content-center p-0 py-2"
+                      @click="openEditModal(target)"
+                      title="Ubah Target"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-outline-danger btn-sm flex-fill d-flex align-items-center justify-content-center p-0 py-2"
+                      @click="openDeleteModal(target)"
+                      title="Hapus Target"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1806,10 +2004,58 @@ watch(() => route.query.project_id, (newVal) => {
   transition: all 0.15s ease;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1199.98px) {
+  .filter-toolbar-group {
+    width: 100%;
+    margin-top: 0.25rem;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .filter-select-wrapper {
+    flex: 1 1 calc(33.333% - 0.5rem);
+    min-width: 140px;
+  }
+  .custom-filter-select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .search-box-wrapper {
+    flex: 1 1 100%;
+  }
   .modern-search-input,
   .modern-search-input:focus {
-    width: 100%;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .filter-select-wrapper {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: 130px;
+  }
+  .custom-filter-select {
+    height: 36px;
+    font-size: 0.78rem;
+    padding-left: 30px;
+    padding-right: 28px;
+    background-position: right 8px center;
+  }
+  .select-prefix-icon {
+    left: 8px;
+  }
+  .search-box-wrapper {
+    flex: 1 1 100%;
+  }
+  .filter-reset-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .filter-select-wrapper {
+    flex: 1 1 100%;
   }
 }
 </style>

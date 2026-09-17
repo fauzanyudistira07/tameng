@@ -257,7 +257,7 @@ onMounted(() => {
       <!-- Page Header -->
       <div class="page-header d-print-none mb-3">
         <div class="row g-2 align-items-center">
-          <div class="col">
+          <div class="col-12 col-sm">
             <div class="page-pretitle text-secondary">
               Inventaris & Tata Kelola Aset
             </div>
@@ -266,11 +266,11 @@ onMounted(() => {
               <span>Manajemen Proyek Aplikasi</span>
             </h2>
           </div>
-          <div class="col-auto ms-auto d-print-none d-flex align-items-center gap-2">
+          <div class="col-12 col-sm-auto ms-sm-auto d-print-none d-flex align-items-center gap-2">
             <button
               v-if="canManage"
               type="button"
-              class="btn btn-primary d-flex align-items-center gap-1"
+              class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto"
               @click="openCreateModal"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
@@ -280,74 +280,74 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- KPI Metric Cards -->
+      <!-- KPI Metric Cards (Responsive 2-col on mobile, 4-col on tablet/desktop) -->
       <div class="row row-cards mb-3">
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-primary-lt text-primary avatar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" /><path d="M12 12l0 .01" /><path d="M3 13a20 20 0 0 0 18 0" /></svg>
+                  <span class="bg-primary-lt text-primary avatar avatar-sm avatar-sm-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" /><path d="M12 12l0 .01" /><path d="M3 13a20 20 0 0 0 18 0" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.total }}</div>
-                  <div class="text-secondary small">Total Proyek Terdaftar</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.total }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">Total Proyek</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-success-lt text-success avatar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                  <span class="bg-success-lt text-success avatar avatar-sm avatar-sm-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.active }}</div>
-                  <div class="text-secondary small">Proyek Status Aktif</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.active }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">Status Aktif</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-danger-lt text-danger avatar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.871l-8.106 -13.534a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+                  <span class="bg-danger-lt text-danger avatar avatar-sm avatar-sm-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.871l-8.106 -13.534a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.critical }}</div>
-                  <div class="text-secondary small">Kritikalitas Kritis</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.critical }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">Kritis (Critical)</div>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-md-3">
           <div class="card card-sm">
-            <div class="card-body">
+            <div class="card-body p-2 p-sm-3">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-warning-lt text-warning avatar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 4v16" /><path d="M18 10l-6 -6l-6 6" /></svg>
+                  <span class="bg-warning-lt text-warning avatar avatar-sm avatar-sm-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 4v16" /><path d="M18 10l-6 -6l-6 6" /></svg>
                   </span>
                 </div>
                 <div class="col">
-                  <div class="font-weight-medium fs-4">{{ stats.high }}</div>
-                  <div class="text-secondary small">Kritikalitas Tinggi</div>
+                  <div class="font-weight-medium fs-3 fs-sm-2">{{ stats.high }}</div>
+                  <div class="text-secondary small text-truncate" style="font-size: 0.72rem;">Tinggi (High)</div>
                 </div>
               </div>
             </div>
@@ -355,9 +355,9 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Main Card with Filter and Table -->
+      <!-- Main Card with Filter, Table, and Mobile Cards -->
       <div class="card">
-        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 py-2">
+        <div class="card-header d-flex flex-column flex-xl-row align-items-stretch align-items-xl-center justify-content-between gap-2 py-2">
           <h3 class="card-title m-0 d-flex align-items-center gap-2">
             <span>Daftar Proyek</span>
             <span class="badge bg-secondary-lt text-secondary font-monospace">{{ filteredProjects.length }}</span>
@@ -442,8 +442,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Table -->
-        <div class="table-responsive">
+        <!-- Table (Tampil pada Desktop & Tablet >= 768px) -->
+        <div class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -569,6 +569,119 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List View (Tampil Otomatis pada Layar Ponsel < 768px) -->
+        <div class="d-md-none p-2 p-sm-3">
+          <!-- Loading state -->
+          <div v-if="isLoading" class="text-center py-4 text-secondary">
+            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+            Memuat data proyek...
+          </div>
+
+          <!-- Empty state -->
+          <div v-else-if="filteredProjects.length === 0" class="empty py-4">
+            <div class="empty-icon text-muted">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg" width="48" height="48" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 4h6v8h-6z" /><path d="M4 16h6v4h-6z" /><path d="M14 12h6v8h-6z" /><path d="M14 4h6v4h-6z" /></svg>
+            </div>
+            <p class="empty-title">Tidak ada proyek yang ditemukan</p>
+            <p class="empty-subtitle text-secondary">
+              {{ searchQuery ? 'Tidak ada proyek yang cocok dengan kata kunci pencarian.' : 'Belum ada proyek yang terdaftar di dalam sistem TAMENG.' }}
+            </p>
+            <div v-if="canManage && !searchQuery" class="empty-action">
+              <button type="button" class="btn btn-primary btn-sm" @click="openCreateModal">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14" /><path d="M5 12l14 0" /></svg>
+                Tambah Proyek
+              </button>
+            </div>
+          </div>
+
+          <!-- Cards List -->
+          <div v-else class="d-flex flex-column gap-3">
+            <div
+              v-for="project in filteredProjects"
+              :key="project.id"
+              class="card shadow-none border mb-0"
+              style="border-radius: 12px; overflow: hidden;"
+            >
+              <div class="card-body p-3">
+                <!-- Header: Project name, avatar, status -->
+                <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                  <div class="d-flex align-items-center gap-2 min-width-0">
+                    <span class="avatar avatar-xs bg-primary-lt text-primary fw-bold rounded flex-shrink-0">
+                      {{ (project.name || 'P').charAt(0).toUpperCase() }}
+                    </span>
+                    <div class="min-width-0">
+                      <div class="fw-bold text-reset fs-4 lh-1 text-truncate">{{ project.name }}</div>
+                      <div class="text-secondary font-monospace small mt-1" style="font-size: 0.72rem;">{{ project.code }}</div>
+                    </div>
+                  </div>
+                  <span v-if="project.status === 'active'" class="badge bg-success-lt d-inline-flex align-items-center gap-1 flex-shrink-0">
+                    <span class="status-dot status-dot-animated bg-success"></span>
+                    <span>Aktif</span>
+                  </span>
+                  <span v-else class="badge bg-secondary-lt d-inline-flex align-items-center gap-1 flex-shrink-0">
+                    <span class="status-dot bg-secondary"></span>
+                    <span>Arsip</span>
+                  </span>
+                </div>
+
+                <!-- Description -->
+                <div v-if="project.description" class="text-secondary small mb-2 text-truncate-2" style="font-size: 0.78rem;">
+                  {{ project.description }}
+                </div>
+
+                <!-- Meta row: Criticality + PIC -->
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-2 bg-body-tertiary rounded border mb-3" style="font-size: 0.75rem;">
+                  <div class="d-flex align-items-center gap-1">
+                    <span class="text-secondary small">Kritikalitas:</span>
+                    <span class="badge py-0 px-1" :class="getCriticalityBadgeClass(project.criticality)">
+                      {{ getCriticalityLabel(project.criticality) }}
+                    </span>
+                  </div>
+                  <div class="d-flex align-items-center gap-1">
+                    <span class="text-secondary small">PIC:</span>
+                    <span class="fw-medium text-reset">{{ project.owner?.name || '-' }}</span>
+                  </div>
+                </div>
+
+                <!-- Actions: Repo, Target, Edit -->
+                <div class="row g-2">
+                  <div class="col-4">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-1"
+                      @click="goToRepositories(project)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M7 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M17 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M7 8l0 8" /><path d="M9 18h6a2 2 0 0 0 2 -2v-5" /><path d="M14 14l3 -3l3 3" /></svg>
+                      <span>Repo</span>
+                    </button>
+                  </div>
+                  <div class="col-4">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-1"
+                      @click="goToTargets(project)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M3.6 9h16.8" /><path d="M3.6 15h16.8" /><path d="M11.5 3a17 17 0 0 0 0 18" /><path d="M12.5 3a17 17 0 0 1 0 18" /></svg>
+                      <span>Target</span>
+                    </button>
+                  </div>
+                  <div class="col-4">
+                    <button
+                      v-if="canManage"
+                      type="button"
+                      class="btn btn-sm btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-1"
+                      @click="openEditModal(project)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
+                      <span>Edit</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -831,10 +944,47 @@ onMounted(() => {
   transition: all 0.15s ease;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1199.98px) {
+  .filter-toolbar-group {
+    width: 100%;
+    margin-top: 0.25rem;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .filter-select-wrapper {
+    flex: 1 1 calc(50% - 0.5rem);
+    min-width: 140px;
+  }
+  .custom-filter-select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .search-box-wrapper {
+    flex: 1 1 100%;
+  }
   .modern-search-input,
   .modern-search-input:focus {
-    width: 100%;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .filter-select-wrapper {
+    flex: 1 1 100%;
+  }
+  .custom-filter-select {
+    height: 36px;
+    font-size: 0.78rem;
+    padding-left: 30px;
+    padding-right: 28px;
+  }
+  .search-box-wrapper {
+    flex: 1 1 100%;
+  }
+  .filter-reset-btn {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 }
 </style>
