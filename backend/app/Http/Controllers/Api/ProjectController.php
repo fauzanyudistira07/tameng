@@ -15,7 +15,7 @@ class ProjectController extends Controller
         return response()->json([
             'projects' => Project::query()
                 ->with('owner:id,name,email')
-                ->orderBy('name')
+                ->orderByDesc('id')
                 ->get(),
         ]);
     }

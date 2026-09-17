@@ -66,6 +66,64 @@ class SystemOverviewController extends Controller
                 'label' => $queueLabel,
             ],
             'scan_profiles' => $scanProfiles,
+            'findings_timeline' => $this->buildFindingsTimeline(),
         ]);
+    }
+
+    private function buildFindingsTimeline(): array
+    {
+        $raw = DB::table('findings')
+            ->selectRaw('DATE(created_at) as date, severity, count(*) as count')
+            ->whereIn('severity', ['critical', 'high', 'medium', 'low'])
+            ->groupBy('date', 'severity')
+            ->orderBy('date')
+            ->get();
+
+        $grouped = [];
+        foreach ($raw as $r) {
+            $grouped[$r->date][$r->severity] = (int) $r->count;
+        }
+
+        $minDateStr = DB::table('findings')->min('created_at');
+        $startDate = $minDateStr
+            ? \Carbon\Carbon::parse($minDateStr)->startOfDay()
+            : now()->subDays(14)->startOfDay();
+        $endDate = now()->endOfDay();
+
+        $dates = [];
+        $critical = [];
+        $high = [];
+        $medium = [];
+        $low = [];
+
+        $cumCrit = 0;
+        $cumHigh = 0;
+        $cumMed = 0;
+        $cumLow = 0;
+
+        for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
+            $dateStr = $d->toDateString();
+            $dates[] = $d->format('d M');
+
+            if (isset($grouped[$dateStr])) {
+                $cumCrit += $grouped[$dateStr]['critical'] ?? 0;
+                $cumHigh += $grouped[$dateStr]['high'] ?? 0;
+                $cumMed += $grouped[$dateStr]['medium'] ?? 0;
+                $cumLow += $grouped[$dateStr]['low'] ?? 0;
+            }
+
+            $critical[] = $cumCrit;
+            $high[] = $cumHigh;
+            $medium[] = $cumMed;
+            $low[] = $cumLow;
+        }
+
+        return [
+            'dates' => $dates,
+            'critical' => $critical,
+            'high' => $high,
+            'medium' => $medium,
+            'low' => $low,
+        ];
     }
 }

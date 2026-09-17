@@ -24,4 +24,23 @@ return [
     'docker_host_workspace_root' => env('SECSYS_DOCKER_HOST_WORKSPACE_ROOT'),
     'docker_host_storage_root' => env('SECSYS_DOCKER_HOST_STORAGE_ROOT'),
     'git_webhook_auto_scan_enabled' => env('SECSYS_GIT_WEBHOOK_AUTO_SCAN', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | TAMENG AI Remediation & Advisory Intelligence
+    |--------------------------------------------------------------------------
+    | Supported providers: 'auto', 'gemini', 'openai', 'deepseek', 'ollama', 'heuristic'
+    */
+    'ai' => [
+        'provider' => env('AI_PROVIDER', 'auto'),
+        'gemini_api_key' => env('GEMINI_API_KEY'),
+        'gemini_model' => env('GEMINI_MODEL', 'gemini-1.5-flash'),
+        'openai_api_key' => env('OPENAI_API_KEY'),
+        'openai_model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'deepseek_api_key' => env('DEEPSEEK_API_KEY'),
+        'deepseek_model' => env('DEEPSEEK_MODEL', 'deepseek-chat'),
+        'ollama_host' => env('OLLAMA_HOST', 'http://localhost:11434'),
+        'ollama_model' => env('OLLAMA_MODEL', 'llama3'),
+        'timeout_seconds' => (int) env('AI_TIMEOUT_SECONDS', 15),
+    ],
 ];

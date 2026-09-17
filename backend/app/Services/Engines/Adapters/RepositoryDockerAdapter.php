@@ -37,7 +37,10 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
         }
 
         $plan->scanJob->loadMissing(['repository', 'target']);
-        $workspacePath = $plan->scanJob->repository?->metadata['local_path'] ?? null;
+        $workspacePath = $plan->scanJob->repository?->metadata['local_path']
+            ?? $plan->scanJob->target?->metadata['local_path']
+            ?? $plan->scanJob->target?->metadata['workspace_path']
+            ?? null;
         $imageTag = $plan->scanJob->target?->type === 'container'
             ? ($plan->scanJob->target->metadata['image_tag'] ?? $plan->scanJob->target->base_url)
             : null;

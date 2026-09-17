@@ -204,7 +204,7 @@ const failedCount = computed(() => scanJobs.value.filter(j => ['failed', 'denied
 // Filtered & Paginated Jobs
 const filteredJobs = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  return scanJobs.value.filter(job => {
+  const list = scanJobs.value.filter(job => {
     // Status Filter
     if (filterStatus.value === 'running' && job.status !== 'running') return false
     if (filterStatus.value === 'queued' && job.status !== 'queued') return false
@@ -215,6 +215,12 @@ const filteredJobs = computed(() => {
     if (!q) return true
     const projName = (job.project?.name || '').toLowerCase()
     return projName.includes(q)
+  })
+
+  return list.sort((a, b) => {
+    const timeA = a.queued_at || a.created_at ? new Date(a.queued_at || a.created_at).getTime() : a.id
+    const timeB = b.queued_at || b.created_at ? new Date(b.queued_at || b.created_at).getTime() : b.id
+    return timeB - timeA
   })
 })
 

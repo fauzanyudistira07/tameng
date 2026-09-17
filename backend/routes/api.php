@@ -90,15 +90,23 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role:super_admin,security_admin');
     Route::delete('/repositories/{repository}/workspace', [RepositoryController::class, 'clearWorkspace'])
         ->middleware('role:super_admin,security_admin');
+    Route::post('/repositories/{repository}/scan', [RepositoryController::class, 'scan'])
+        ->middleware('role:super_admin,security_admin,security_analyst,developer');
 
     Route::get('/targets', [TargetController::class, 'index'])
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+    Route::get('/targets/{target}', [TargetController::class, 'show'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
     Route::post('/targets', [TargetController::class, 'store'])
         ->middleware('role:super_admin,security_admin');
     Route::put('/targets/{target}', [TargetController::class, 'update'])
         ->middleware('role:super_admin,security_admin');
+    Route::delete('/targets/{target}', [TargetController::class, 'destroy'])
+        ->middleware('role:super_admin,security_admin');
     Route::post('/targets/{target}/verify', [TargetController::class, 'verify'])
         ->middleware('role:super_admin,security_admin');
+    Route::post('/targets/{target}/scan', [TargetController::class, 'scan'])
+        ->middleware('role:super_admin,security_admin,security_analyst,developer');
 
     Route::get('/scopes', [ScopeController::class, 'index'])
         ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');

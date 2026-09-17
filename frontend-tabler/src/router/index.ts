@@ -4,6 +4,9 @@ import ScanJobsView from '../views/ScanJobsView.vue'
 import UsersView from '../views/UsersView.vue'
 import LoginView from '../views/LoginView.vue'
 import MyScanRequestsView from '../views/MyScanRequestsView.vue'
+import ProjectsView from '../views/ProjectsView.vue'
+import RepositoriesView from '../views/RepositoriesView.vue'
+import TargetsView from '../views/TargetsView.vue'
 import { checkAuth, getIsAuthenticated } from '../services/api'
 
 const routes = [
@@ -31,6 +34,21 @@ const routes = [
   {
     path: '/scan-saya',
     redirect: '/scan-mandiri'
+  },
+  {
+    path: '/projects',
+    name: 'projects',
+    component: ProjectsView
+  },
+  {
+    path: '/repositories',
+    name: 'repositories',
+    component: RepositoriesView
+  },
+  {
+    path: '/targets',
+    name: 'targets',
+    component: TargetsView
   },
   {
     path: '/users',

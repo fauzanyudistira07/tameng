@@ -23,3 +23,10 @@
           </div>
         </footer>
 </template>
+
+<style scoped>
+.footer {
+  margin-top: auto !important;
+  width: 100%;
+}
+</style>

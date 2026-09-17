@@ -104,14 +104,35 @@ const activeAiFindingKey = ref<string | null>(null)
 interface AiRemediationResult {
   summary?: string
   category?: string
+  cause?: string
   attack_vector?: string
   business_impact?: string
   code_diff?: string
+  vulnerable_code?: string
+  secure_code?: string
   mitigation_checklist?: string[]
+  verification_command?: string
+  ai_model?: string
+  ai_badge?: string
+  is_live_llm?: boolean
+  cwe?: string
+  owasp?: string
+  cvss_score?: number
+  disclaimer?: string
   raw_text?: string
 }
 const aiRemediationData = ref<AiRemediationResult | null>(null)
 const isLoadingAiRemediation = ref(false)
+const copiedPatch = ref(false)
+function copyCodePatch(code?: string) {
+  if (!code) return
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(() => {
+      copiedPatch.value = true
+      setTimeout(() => { copiedPatch.value = false }, 2000)
+    }).catch(() => {})
+  }
+}
 const rerunConfirmRequest = ref<ScanRequest | null>(null)
 const expandedJobId = ref<number | null>(null)
 
@@ -412,7 +433,7 @@ const kpiCounts = computed(() => {
 // Filtered & Paginated Requests (Murni Identik dengan Pekerjaan Scan)
 const filteredRequests = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
-  return scanRequests.value.filter(job => {
+  const list = scanRequests.value.filter(job => {
     // Status Filter
     if (filterStatus.value === 'running' && job.status !== 'running') return false
     if (filterStatus.value === 'queued' && job.status !== 'queued') return false
@@ -423,6 +444,12 @@ const filteredRequests = computed(() => {
     if (!q) return true
     const projName = (job.project?.name || '').toLowerCase()
     return projName.includes(q)
+  })
+
+  return list.sort((a, b) => {
+    const timeA = a.queued_at || a.created_at ? new Date(a.queued_at || a.created_at).getTime() : a.id
+    const timeB = b.queued_at || b.created_at ? new Date(b.queued_at || b.created_at).getTime() : b.id
+    return timeB - timeA
   })
 })
 
@@ -658,17 +685,36 @@ async function confirmAndExecuteRerun() {
 // -------------------------------------------------------------
 // Detail & Findings Modal
 // -------------------------------------------------------------
-function openDetailModal(req: ScanRequest) {
+const isLoadingFindings = ref(false)
+
+async function openDetailModal(req: ScanRequest) {
   selectedRequestForDetail.value = req
   findingsFilter.value = 'all'
   activeAiFindingKey.value = null
   aiRemediationData.value = null
+
+  const reportId = req.reports?.[0]?.id
+  if (reportId && (!req.reports[0].metadata || !req.reports[0].metadata.content)) {
+    isLoadingFindings.value = true
+    try {
+      const res = await apiFetch(`/api/reports/${reportId}`)
+      if (res?.report) {
+        req.reports[0] = res.report
+        selectedRequestForDetail.value = { ...req }
+      }
+    } catch (err) {
+      console.error('Gagal memuat detail temuan:', err)
+    } finally {
+      isLoadingFindings.value = false
+    }
+  }
 }
 
 function closeDetailModal() {
   selectedRequestForDetail.value = null
   activeAiFindingKey.value = null
   aiRemediationData.value = null
+  isLoadingFindings.value = false
 }
 
 const currentReport = computed(() => {
@@ -816,16 +862,28 @@ async function toggleAiRemediation(finding: Finding, index: number) {
       aiRemediationData.value = {
         summary: fetchedData.summary,
         category: fetchedData.category,
+        cause: fetchedData.cause,
         attack_vector: fetchedData.attack_vector,
         business_impact: fetchedData.business_impact,
-        code_diff: fetchedData.code_diff,
+        code_diff: typeof fetchedData.code_diff === 'string' ? fetchedData.code_diff : (fetchedData.code_diff?.secure_code ? `--- KONDISI RENTAN:\n${fetchedData.code_diff.vulnerable_code || ''}\n\n+++ SOLUSI PERBAIKAN:\n${fetchedData.code_diff.secure_code}` : ''),
+        vulnerable_code: fetchedData.vulnerable_code || fetchedData.code_diff?.vulnerable_code,
+        secure_code: fetchedData.secure_code || fetchedData.code_diff?.secure_code,
         mitigation_checklist: Array.isArray(fetchedData.mitigation_checklist) ? fetchedData.mitigation_checklist : [],
+        verification_command: fetchedData.verification_command,
+        ai_model: fetchedData.ai_model || 'TAMENG Cyber AI Copilot',
+        ai_badge: fetchedData.ai_badge || 'tameng-ai',
+        is_live_llm: !!fetchedData.is_live_llm,
+        cwe: fetchedData.compliance?.cwe || finding.cwe,
+        owasp: fetchedData.compliance?.owasp || finding.owasp,
+        cvss_score: fetchedData.compliance?.cvss_score ?? finding.cvss,
+        disclaimer: fetchedData.disclaimer,
         raw_text: typeof fetchedData === 'string' ? fetchedData : undefined
       }
     } else if (typeof fetchedData === 'string') {
       aiRemediationData.value = {
         summary: fetchedData,
-        raw_text: fetchedData
+        raw_text: fetchedData,
+        ai_model: 'TAMENG Cyber Advisory Engine'
       }
     } else {
       aiRemediationData.value = generateSmartAiRemediation(finding)
@@ -1062,7 +1120,8 @@ onUnmounted(() => {
                 </svg>
                 <span>Riwayat Pemindaian Saya</span>
                 <span class="badge ms-1" :class="activeTab === 'my_scans' ? 'bg-primary-lt' : 'bg-secondary-lt'">
-                  {{ scanRequests.length }}
+                  <span v-if="isLoadingRequests && scanRequests.length === 0" class="spinner-border spinner-border-sm" style="width: 0.65rem; height: 0.65rem;" role="status"></span>
+                  <span v-else>{{ scanRequests.length }}</span>
                 </span>
               </button>
             </li>
@@ -1397,7 +1456,10 @@ onUnmounted(() => {
                   </div>
                   <div class="col">
                     <div class="font-weight-medium">Total Pemindaian</div>
-                    <div class="text-secondary fs-3 fw-bold">{{ kpiCounts.total }}</div>
+                    <div class="text-secondary fs-3 fw-bold">
+                      <span v-if="isLoadingRequests && scanRequests.length === 0" class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                      <span v-else>{{ kpiCounts.total }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1417,7 +1479,8 @@ onUnmounted(() => {
                   <div class="col">
                     <div class="font-weight-medium">Berjalan / Antrean</div>
                     <div class="text-secondary fs-3 fw-bold d-flex align-items-center gap-2">
-                      <span>{{ kpiCounts.running + kpiCounts.queued }}</span>
+                      <span v-if="isLoadingRequests && scanRequests.length === 0" class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                      <span v-else>{{ kpiCounts.running + kpiCounts.queued }}</span>
                     </div>
                   </div>
                 </div>
@@ -1437,7 +1500,10 @@ onUnmounted(() => {
                   </div>
                   <div class="col">
                     <div class="font-weight-medium">Selesai Sukses</div>
-                    <div class="text-secondary fs-3 fw-bold">{{ kpiCounts.completed }}</div>
+                    <div class="text-secondary fs-3 fw-bold">
+                      <span v-if="isLoadingRequests && scanRequests.length === 0" class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                      <span v-else>{{ kpiCounts.completed }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1456,7 +1522,10 @@ onUnmounted(() => {
                   </div>
                   <div class="col">
                     <div class="font-weight-medium">Gagal / Ditolak</div>
-                    <div class="text-secondary fs-3 fw-bold">{{ kpiCounts.failed }}</div>
+                    <div class="text-secondary fs-3 fw-bold">
+                      <span v-if="isLoadingRequests && scanRequests.length === 0" class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                      <span v-else>{{ kpiCounts.failed }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1520,8 +1589,8 @@ onUnmounted(() => {
               </li>
             </ul>
 
-            <!-- Restyled Modern Search Input -->
-            <div class="card-actions my-1">
+            <!-- Restyled Modern Search Input & Actions -->
+            <div class="card-actions my-1 d-flex align-items-center gap-2">
               <div class="search-box-wrapper position-relative">
                 <div class="input-icon">
                   <span class="input-icon-addon text-primary">
@@ -1565,8 +1634,16 @@ onUnmounted(() => {
                 </tr>
               </thead>
               <tbody>
+                <!-- Loading State -->
+                <tr v-if="isLoadingRequests && scanRequests.length === 0">
+                  <td colspan="7" class="text-center py-5">
+                    <div class="spinner-border text-primary mb-2" role="status"></div>
+                    <div class="text-secondary small">Memuat riwayat pemindaian mandiri...</div>
+                  </td>
+                </tr>
+
                 <!-- Empty State (Identik dengan ScanJobsView) -->
-                <tr v-if="filteredRequests.length === 0">
+                <tr v-else-if="filteredRequests.length === 0">
                   <td colspan="7" class="text-center py-5">
                     <div class="empty">
                       <div class="empty-icon">
@@ -1937,6 +2014,14 @@ onUnmounted(() => {
           </div>
 
           <div class="modal-body p-3">
+            <!-- Loading Indicator for Findings -->
+            <div v-if="isLoadingFindings" class="text-center py-5 my-4">
+              <div class="spinner-border text-primary mb-2" role="status"></div>
+              <div class="text-secondary small">Memuat rincian temuan celah keamanan...</div>
+            </div>
+
+            <!-- Findings Content -->
+            <template v-else>
             <!-- Risk Metrics & Export Toolbar -->
             <div class="card card-sm bg-body-tertiary border mb-3">
               <div class="card-body p-2 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
@@ -2131,48 +2216,116 @@ onUnmounted(() => {
                     v-if="activeAiFindingKey === getFindingKey(finding, fIndex)"
                     class="mt-3 card border-primary shadow-sm"
                   >
-                    <div class="card-header bg-primary-lt py-2 d-flex align-items-center justify-content-between">
-                      <div class="fw-bold text-primary small d-flex align-items-center gap-2">
+                    <div class="card-header bg-primary-lt py-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                      <div class="fw-bold text-primary small d-flex align-items-center gap-2 flex-wrap">
                         <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-primary" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l1.5 5.5l5.5 1.5l-5.5 1.5l-1.5 5.5l-1.5 -5.5l-5.5 -1.5l5.5 -1.5z" /></svg>
-                        <span>Panduan Mitigasi Cepat (AI Cyber Assistant)</span>
-                        <span v-if="aiRemediationData?.category" class="badge bg-primary text-primary-fg font-monospace ms-1">{{ aiRemediationData.category }}</span>
+                        <span>Panduan Remediasi AI Siber</span>
+                        <span v-if="aiRemediationData?.ai_model" class="badge bg-purple-lt text-purple font-monospace">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c1.918 0 3.52 1.35 3.91 3.151a4 4 0 0 1 2.09 7.723l0 7.126h-12v-7.126a4 4 0 0 1 2.09 -7.723a4.01 4.01 0 0 1 3.91 -3.151z" /><path d="M6.16 13.84a4 4 0 0 0 5.84 0" /></svg>
+                          {{ aiRemediationData.ai_model }}
+                        </span>
+                        <span v-if="aiRemediationData?.category" class="badge bg-primary text-primary-fg font-monospace">{{ aiRemediationData.category }}</span>
                       </div>
                       <button type="button" class="btn-close" aria-label="Close" @click="activeAiFindingKey = null"></button>
                     </div>
 
                     <div class="card-body p-3">
                       <!-- Loading State -->
-                      <div v-if="isLoadingAiRemediation" class="text-secondary small py-3 d-flex align-items-center justify-content-center gap-2">
+                      <div v-if="isLoadingAiRemediation" class="text-secondary small py-4 d-flex flex-column align-items-center justify-content-center gap-2">
                         <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
-                        <span>Menganalisis kode dan menyusun panduan mitigasi AI...</span>
+                        <span class="fw-medium">Menganalisis kode sumber dan menyusun panduan mitigasi AI...</span>
+                        <span class="text-muted" style="font-size: 0.75rem;">TAMENG Cyber Advisory Intelligence Engine</span>
                       </div>
 
                       <!-- Content State -->
                       <div v-else-if="aiRemediationData" class="d-flex flex-column gap-3">
-                        <!-- Summary & Business Impact -->
+                        <!-- Summary & Cause -->
                         <div v-if="aiRemediationData.summary" class="text-body small lh-base">
-                          <strong class="text-dark d-block mb-1">Analisis Celah Keamanan:</strong>
-                          <p class="mb-0 text-secondary" style="line-height: 1.5;">{{ aiRemediationData.summary }}</p>
+                          <div class="fw-bold text-reset mb-1 d-flex align-items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-primary" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0" /><path d="M12 9h.01" /><path d="M11 12h1v4h1" /></svg>
+                            <span>Analisis & Diagnosa Celah Keamanan:</span>
+                          </div>
+                          <p class="mb-2 text-secondary" style="line-height: 1.6;">{{ aiRemediationData.summary }}</p>
+                          <div v-if="aiRemediationData.cause" class="text-muted fst-italic ps-2 border-start border-2 border-primary-subtle">
+                            <strong>Akar Masalah:</strong> {{ aiRemediationData.cause }}
+                          </div>
+                        </div>
+
+                        <!-- Attack Vector / Skenario Eksploitasi -->
+                        <div v-if="aiRemediationData.attack_vector" class="alert alert-warning py-2 px-3 mb-0 small">
+                          <div class="fw-bold text-warning-emphasis d-flex align-items-center gap-1 mb-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.871l-8.106 -13.534a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+                            <span>Vektor Serangan & Skenario Eksploitasi:</span>
+                          </div>
+                          <div class="text-secondary" style="white-space: pre-line; line-height: 1.5;">{{ aiRemediationData.attack_vector }}</div>
+                        </div>
+
+                        <!-- Business Impact -->
+                        <div v-if="aiRemediationData.business_impact" class="text-secondary small">
+                          <strong class="text-danger-emphasis">Dampak Bisnis & Kepatuhan:</strong> {{ aiRemediationData.business_impact }}
+                        </div>
+
+                        <!-- Code Patch with Copy Button -->
+                        <div v-if="aiRemediationData.code_diff || aiRemediationData.secure_code">
+                          <div class="d-flex align-items-center justify-content-between mb-1">
+                            <div class="text-secondary fw-bold small d-flex align-items-center gap-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 8l-4 4l4 4" /><path d="M17 8l4 4l-4 4" /><path d="M14 4l-4 16" /></svg>
+                              <span>Rekomendasi Perbaikan Kode (Remediation Patch):</span>
+                            </div>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-outline-secondary py-0 px-2"
+                              style="font-size: 0.75rem;"
+                              @click="copyCodePatch(aiRemediationData.secure_code || aiRemediationData.code_diff)"
+                            >
+                              <svg v-if="!copiedPatch" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 8m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                              <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success me-1" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                              <span>{{ copiedPatch ? 'Tersalin!' : 'Salin Patch' }}</span>
+                            </button>
+                          </div>
+                          <pre class="bg-dark text-light p-3 rounded font-monospace small mb-0 overflow-auto border border-secondary" style="max-height: 280px; line-height: 1.45;"><code>{{ aiRemediationData.code_diff || aiRemediationData.secure_code }}</code></pre>
                         </div>
 
                         <!-- Mitigation Checklist -->
                         <div v-if="aiRemediationData.mitigation_checklist?.length" class="border rounded p-3 bg-body-tertiary">
                           <div class="text-primary fw-bold small mb-2 d-flex align-items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
-                            <span>Langkah Mitigasi yang Disarankan:</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
+                            <span>Checklist Langkah Mitigasi Terstruktur:</span>
                           </div>
-                          <ul class="list-unstyled mb-0 small text-secondary d-flex flex-column gap-1">
+                          <ul class="list-unstyled mb-0 small text-secondary d-flex flex-column gap-2">
                             <li v-for="(step, sIdx) in aiRemediationData.mitigation_checklist" :key="sIdx" class="d-flex align-items-start gap-2">
-                              <span class="badge bg-success-lt text-success px-1 py-0 flex-shrink-0 mt-1">&check;</span>
-                              <span>{{ step }}</span>
+                              <span class="badge bg-success text-success-fg px-1 py-0 flex-shrink-0 mt-1" style="font-size: 0.65rem;">{{ sIdx + 1 }}</span>
+                              <span style="line-height: 1.4;">{{ step }}</span>
                             </li>
                           </ul>
                         </div>
 
-                        <!-- Code Diff / Patch Example -->
-                        <div v-if="aiRemediationData.code_diff">
-                          <div class="text-secondary fw-bold small mb-1">Rekomendasi Perbaikan Kode (Patch / Kode Aman):</div>
-                          <pre class="bg-dark text-light p-3 rounded font-monospace small mb-0 overflow-auto" style="max-height: 250px;"><code>{{ aiRemediationData.code_diff }}</code></pre>
+                        <!-- Verification Command -->
+                        <div v-if="aiRemediationData.verification_command" class="border rounded p-2 bg-dark text-light small font-monospace d-flex align-items-center justify-content-between gap-2">
+                          <div class="d-flex align-items-center gap-2 overflow-auto">
+                            <span class="text-success fw-bold">$</span>
+                            <span class="text-warning-emphasis text-nowrap">{{ aiRemediationData.verification_command }}</span>
+                          </div>
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-dark py-0 px-2 flex-shrink-0 text-white-50"
+                            style="font-size: 0.7rem;"
+                            @click="copyCodePatch(aiRemediationData.verification_command)"
+                          >
+                            Salin Perintah
+                          </button>
+                        </div>
+
+                        <!-- Compliance & Standards -->
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pt-1 border-top border-secondary-subtle">
+                          <div class="d-flex align-items-center gap-2 flex-wrap small">
+                            <span v-if="aiRemediationData.cwe" class="badge bg-secondary-lt font-monospace">{{ aiRemediationData.cwe }}</span>
+                            <span v-if="aiRemediationData.owasp" class="badge bg-secondary-lt font-monospace">{{ aiRemediationData.owasp }}</span>
+                            <span v-if="aiRemediationData.cvss_score" class="badge bg-danger-lt font-monospace">CVSS {{ aiRemediationData.cvss_score }}</span>
+                          </div>
+                          <div v-if="aiRemediationData.disclaimer" class="text-muted" style="font-size: 0.7rem;">
+                            {{ aiRemediationData.disclaimer }}
+                          </div>
                         </div>
                       </div>
 
@@ -2185,6 +2338,7 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
+            </template>
           </div>
 
           <div class="modal-footer d-flex justify-content-between align-items-center py-2">

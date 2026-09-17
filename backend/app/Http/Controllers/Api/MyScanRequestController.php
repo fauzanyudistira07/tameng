@@ -32,8 +32,8 @@ class MyScanRequestController extends Controller
                 'target:id,name,type,base_url,hostname',
                 'scanProfile:id,key,name',
                 'authorization:id,code,status',
-                'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
-                'reports:id,scan_job_id,status,format,generated_at,metadata',
+                'scanRuns:id,scan_job_id,engine_key,status,exit_code,started_at,finished_at,failure_reason',
+                'reports:id,scan_job_id,status,format,generated_at',
             ])
             ->where('created_by', $request->user()->id)
             ->orderByDesc('id')

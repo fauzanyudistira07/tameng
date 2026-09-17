@@ -154,9 +154,10 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
           </li>
 
           <!-- 2. Inventaris & Aset -->
-          <li class="nav-item dropdown">
+          <li class="nav-item dropdown" :class="{ active: ['/projects', '/repositories', '/targets'].includes(route.path) }">
             <a
               class="nav-link dropdown-toggle"
+              :class="{ active: ['/projects', '/repositories', '/targets'].includes(route.path) }"
               href="#navbar-assets"
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
@@ -185,16 +186,30 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
               </span>
               <span class="nav-link-title"> Inventaris & Aset </span>
             </a>
-            <div class="dropdown-menu">
+            <div class="dropdown-menu" :class="{ show: ['/projects', '/repositories', '/targets'].includes(route.path) }">
               <div class="dropdown-menu-columns">
                 <div class="dropdown-menu-column">
-                  <a class="dropdown-item" href="/projects"> Proyek </a>
-                  <a class="dropdown-item" href="/repositories">
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/projects' }"
+                    to="/projects"
+                  >
+                    Proyek
+                  </router-link>
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/repositories' }"
+                    to="/repositories"
+                  >
                     Repositori Kode
-                  </a>
-                  <a class="dropdown-item" href="/targets">
-                    Target Web & API
-                  </a>
+                  </router-link>
+                  <router-link
+                    class="dropdown-item"
+                    :class="{ active: route.path === '/targets' }"
+                    to="/targets"
+                  >
+                    Target Web, API & APK
+                  </router-link>
                 </div>
               </div>
             </div>

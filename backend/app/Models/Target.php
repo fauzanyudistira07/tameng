@@ -36,4 +36,15 @@ class Target extends Model
     {
         return $this->belongsTo(User::class, 'verified_by');
     }
+
+    public function scanJobs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ScanJob::class);
+    }
+
+    public function scopes(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Scope::class);
+    }
 }
+

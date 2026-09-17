@@ -38,9 +38,47 @@ onMounted(() => {
 </template>
 
 <style>
-/* Hilangkan margin-top pada page-body agar menempel pas dengan header/navbar */
+/* Pastikan seluruh container mengambil tinggi penuh viewport agar footer selalu berada di bawah */
+html,
+body {
+  height: 100%;
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  min-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto;
+}
+
+.page-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 0 auto !important;
+  min-height: calc(100vh - 3.5rem) !important;
+}
+
+/* Konten utama mengisi sisa ruang vertikal agar footer terdorong ke paling bawah */
+.page-wrapper > :first-child:not(.footer),
 .page-body {
+  flex: 1 0 auto;
   margin-top: 0 !important;
+}
+
+/* Footer selalu menempel di bagian paling bawah */
+.page-wrapper > footer,
+footer.footer,
+.footer {
+  margin-top: auto !important;
+  width: 100%;
 }
 
 /* Sembunyikan icon reveal bawaan browser (Edge/IE) agar konsisten menggunakan icon kustom di paling belakang */
