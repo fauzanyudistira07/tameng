@@ -76,7 +76,11 @@ class SecurityEngineController extends Controller
         AuditLog::create([
             'user_id' => $request->user()?->id,
             'action' => 'security_engine.toggle',
-            'details' => [
+            'result' => 'success',
+            'actor_ip' => $request->ip(),
+            'target_type' => 'security_engine',
+            'target_id' => $engine->id,
+            'metadata' => [
                 'engine_code' => $engine->code,
                 'enabled' => $engine->enabled,
                 'status' => $engine->status,
