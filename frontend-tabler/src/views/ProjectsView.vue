@@ -447,7 +447,7 @@ onMounted(() => {
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
-                <th style="width: 40px;">#</th>
+                <th class="col-index text-white" style="width: 40px;">#</th>
                 <th>Proyek & Kode</th>
                 <th>Deskripsi</th>
                 <th style="width: 140px;">Kritikalitas</th>
@@ -488,7 +488,7 @@ onMounted(() => {
 
               <!-- Rows -->
               <tr v-else v-for="(project, idx) in filteredProjects" :key="project.id">
-                <td class="text-secondary small">{{ idx + 1 }}</td>
+                <td class="col-index text-white small fw-bold">{{ idx + 1 }}</td>
                 <td>
                   <div class="d-flex align-items-center gap-2">
                     <span class="avatar avatar-sm bg-primary-lt text-primary fw-bold rounded">

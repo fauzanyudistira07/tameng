@@ -787,7 +787,7 @@ watch(() => route.query.project_id, (newVal) => {
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
-                <th style="width: 40px;">#</th>
+                <th class="col-index text-white" style="width: 40px;">#</th>
                 <th>Target & Tipe</th>
                 <th>Proyek Induk</th>
                 <th>Endpoint / Identifier / Aset</th>
@@ -828,7 +828,7 @@ watch(() => route.query.project_id, (newVal) => {
 
               <!-- Rows -->
               <tr v-else v-for="(target, idx) in filteredTargets" :key="target.id">
-                <td class="text-secondary small">{{ idx + 1 }}</td>
+                <td class="col-index text-white small fw-bold">{{ idx + 1 }}</td>
                 <td>
                   <div class="d-flex align-items-center gap-2">
                     <span

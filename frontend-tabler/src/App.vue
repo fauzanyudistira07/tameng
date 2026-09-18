@@ -120,4 +120,26 @@ input::-ms-reveal,
 input::-ms-clear {
   display: none !important;
 }
+
+/* Kolom nomor urut tabel (# dan angka baris 1, 2, 3...) berwarna putih terang */
+.col-index,
+th.col-index,
+td.col-index,
+.table th.col-index,
+.table td.col-index {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+[data-bs-theme="dark"] .col-index,
+[data-bs-theme="dark"] th.col-index,
+[data-bs-theme="dark"] td.col-index,
+[data-bs-theme="dark"] .table th[style*="width: 40px"],
+[data-bs-theme="dark"] .table td.col-index {
+  color: #ffffff !important;
+}
+
+:root:not([data-bs-theme="dark"]) body:not([data-bs-theme="dark"]) .col-index:not(.text-white) {
+  color: #182433 !important;
+}
 </style>
