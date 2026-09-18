@@ -8,7 +8,7 @@ import { useSidebar } from "../../composables/useSidebar"
 
 const { toggleMobileSidebar } = useSidebar()
 const isMobileSearchOpen = ref(false)
-const { toggleTheme } = useTheme()
+const { toggleTheme, isDark } = useTheme()
 const {
   currentUser,
   userInitials,
@@ -66,19 +66,16 @@ function handleSelect(url?: string) {
             </svg>
           </button>
 
-          <!-- Brand Logo & Nama TAMENG di Mobile (< 992px) -->
+          <!-- Brand Logo TAMENG di Mobile (< 992px) -->
           <router-link
             to="/"
-            class="d-lg-none d-flex align-items-center gap-2 text-decoration-none me-auto me-sm-2 flex-shrink-0"
+            class="d-lg-none d-flex align-items-center text-decoration-none me-auto me-sm-2 flex-shrink-0"
           >
-            <span class="avatar avatar-xs bg-primary text-primary-fg rounded">
-              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
-                <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-              </svg>
-            </span>
-            <span class="fw-bold fs-3 text-reset lh-1">TAMENG</span>
+            <img
+              :src="isDark ? '/static/Icon_Dark.png' : '/static/Icon_Light.png'"
+              alt="TAMENG"
+              style="height: 36px; max-height: 38px; width: auto; object-fit: contain;"
+            />
           </router-link>
 
           <div class="navbar-nav flex-row order-md-last ms-auto align-items-center gap-1">

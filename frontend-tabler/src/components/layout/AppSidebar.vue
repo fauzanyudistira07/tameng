@@ -31,18 +31,18 @@ watch(() => route.path, () => {
   >
     <div class="container-fluid px-2">
       <!-- Mobile Drawer Header dengan Tombol Tutup (X) -->
-      <div class="d-flex align-items-center justify-content-between w-100 d-lg-none px-2 py-3 border-bottom border-dark">
-        <div class="d-flex align-items-center gap-2">
-          <span class="avatar avatar-xs bg-primary text-primary-fg rounded">
-            <!-- Shield SVG -->
-            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
-              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-              <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
-              <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-            </svg>
-          </span>
-          <span class="fs-3 fw-bold text-white lh-1">TAMENG</span>
-        </div>
+      <div class="d-flex align-items-center justify-content-between w-100 d-lg-none px-2 py-2 border-bottom border-dark">
+        <router-link
+          to="/"
+          class="d-flex align-items-center text-decoration-none"
+          @click="closeMobileSidebar"
+        >
+          <img
+            src="/static/Icon_Dark.png"
+            alt="TAMENG"
+            style="height: 38px; max-height: 40px; width: auto; object-fit: contain;"
+          />
+        </router-link>
         <button
           type="button"
           class="btn-close btn-close-white"
@@ -52,37 +52,16 @@ watch(() => route.path, () => {
       </div>
 
       <!-- Desktop Brand Logo TAMENG -->
-      <h1 class="navbar-brand navbar-brand-autodark px-2 py-3 d-none d-lg-flex">
+      <h1 class="navbar-brand navbar-brand-autodark px-2 py-3 d-none d-lg-flex mb-0">
         <router-link
           to="/"
-          class="d-flex align-items-center gap-2 text-decoration-none"
+          class="d-flex align-items-center text-decoration-none"
         >
-          <span class="avatar avatar-sm bg-primary text-primary-fg rounded">
-            <!-- Shield SVG -->
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="icon"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              stroke-width="2"
-              stroke="currentColor"
-              fill="none"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-              <path
-                d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3"
-              />
-              <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
-              <path d="M12 12l0 2.5" />
-            </svg>
-          </span>
-          <span class="d-flex flex-column text-start">
-            <span class="fs-2 fw-bold text-reset lh-1">TAMENG</span>
-            <span class="fs-6 text-muted mt-1">Sistem Keamanan Siber</span>
-          </span>
+          <img
+            src="/static/Icon_Dark.png"
+            alt="TAMENG"
+            style="height: 48px; max-height: 52px; width: auto; object-fit: contain;"
+          />
         </router-link>
       </h1>
 
