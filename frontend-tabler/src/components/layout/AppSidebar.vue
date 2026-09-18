@@ -31,7 +31,7 @@ watch(() => route.path, () => {
   >
     <div class="container-fluid px-2">
       <!-- Mobile Drawer Header dengan Tombol Tutup (X) -->
-      <div class="d-flex align-items-center justify-content-between w-100 d-lg-none px-2 py-2 border-bottom border-dark">
+      <div class="d-flex align-items-center justify-content-between w-100 d-lg-none px-3 py-2 border-bottom border-dark">
         <router-link
           to="/"
           class="d-flex align-items-center text-decoration-none"
@@ -40,7 +40,7 @@ watch(() => route.path, () => {
           <img
             src="/static/Icon_Dark.png"
             alt="TAMENG"
-            style="height: 38px; max-height: 40px; width: auto; object-fit: contain;"
+            style="height: 60px; max-height: 65px; width: auto; object-fit: contain;"
           />
         </router-link>
         <button
@@ -52,15 +52,15 @@ watch(() => route.path, () => {
       </div>
 
       <!-- Desktop Brand Logo TAMENG -->
-      <h1 class="navbar-brand navbar-brand-autodark px-2 py-3 d-none d-lg-flex mb-0">
+      <h1 class="navbar-brand navbar-brand-autodark px-2 py-2 d-none d-lg-flex mb-0 justify-content-center w-100">
         <router-link
           to="/"
-          class="d-flex align-items-center text-decoration-none"
+          class="d-inline-flex justify-content-center align-items-center text-decoration-none py-2"
         >
           <img
             src="/static/Icon_Dark.png"
             alt="TAMENG"
-            style="height: 48px; max-height: 52px; width: auto; object-fit: contain;"
+            style="height: 96px; max-height: 105px; width: auto; object-fit: contain; transition: transform 0.2s ease;"
           />
         </router-link>
       </h1>

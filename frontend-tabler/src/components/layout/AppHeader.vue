@@ -74,7 +74,7 @@ function handleSelect(url?: string) {
             <img
               :src="isDark ? '/static/Icon_Dark.png' : '/static/Icon_Light.png'"
               alt="TAMENG"
-              style="height: 36px; max-height: 38px; width: auto; object-fit: contain;"
+              style="height: 48px; max-height: 52px; width: auto; object-fit: contain;"
             />
           </router-link>
 
