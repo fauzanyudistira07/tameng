@@ -70,6 +70,13 @@ body {
   min-height: calc(100vh - 3.5rem) !important;
 }
 
+@media (min-width: 992px) {
+  .navbar-vertical.navbar-expand-lg ~ .navbar,
+  .navbar-vertical.navbar-expand-lg ~ .page-wrapper {
+    margin-left: 16.5rem !important;
+  }
+}
+
 @media (max-width: 991.98px) {
   .navbar-expand-lg.navbar-vertical ~ .navbar,
   .navbar-expand-lg.navbar-vertical ~ .page-wrapper,

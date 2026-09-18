@@ -29,7 +29,7 @@ watch(() => route.path, () => {
     :class="{ show: isMobileSidebarOpen }"
     data-bs-theme="dark"
   >
-    <div class="container-fluid px-2 px-lg-3">
+    <div class="container-fluid px-2">
       <!-- Mobile Drawer Header dengan Tombol Tutup (X) -->
       <div class="d-flex align-items-center justify-content-between w-100 d-lg-none px-2 py-3 border-bottom border-dark">
         <div class="d-flex align-items-center gap-2">
@@ -191,7 +191,7 @@ watch(() => route.path, () => {
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
               role="button"
-              aria-expanded="false"
+              :aria-expanded="['/projects', '/repositories', '/targets'].includes(route.path) ? 'true' : 'false'"
             >
               <span class="nav-link-icon d-md-none d-lg-inline-block">
                 <!-- icon: folder -->
@@ -256,7 +256,7 @@ watch(() => route.path, () => {
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
               role="button"
-              aria-expanded="false"
+              :aria-expanded="['/scopes', '/authorizations', '/engines'].includes(route.path) ? 'true' : 'false'"
             >
               <span class="nav-link-icon d-md-none d-lg-inline-block">
                 <!-- icon: shield-check -->
@@ -325,7 +325,7 @@ watch(() => route.path, () => {
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
               role="button"
-              aria-expanded="false"
+              :aria-expanded="['/findings', '/reports'].includes(route.path) ? 'true' : 'false'"
             >
               <span class="nav-link-icon d-md-none d-lg-inline-block">
                 <!-- icon: file-analytics -->
@@ -390,7 +390,7 @@ watch(() => route.path, () => {
               data-bs-toggle="dropdown"
               data-bs-auto-close="false"
               role="button"
-              aria-expanded="false"
+              :aria-expanded="['/audit-logs', '/users'].includes(route.path) ? 'true' : 'false'"
             >
               <span class="nav-link-icon d-md-none d-lg-inline-block">
                 <!-- icon: users -->
@@ -446,13 +446,21 @@ watch(() => route.path, () => {
 </template>
 
 <style scoped>
+/* Sidebar desktop width optimal agar label menu panjang tidak berhimpitan */
+@media (min-width: 992px) {
+  .navbar-vertical.navbar-expand-lg {
+    width: 16.5rem !important;
+  }
+}
+
+/* Sidebar mobile drawer */
 @media (max-width: 991.98px) {
   .navbar-vertical.navbar-expand-lg {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     bottom: 0 !important;
-    width: min(290px, 85vw) !important;
+    width: min(300px, 85vw) !important;
     max-width: 85vw !important;
     height: 100vh !important;
     z-index: 1060 !important;
@@ -482,5 +490,71 @@ watch(() => route.path, () => {
   backdrop-filter: blur(4px);
   z-index: 1055;
   transition: opacity 0.2s ease;
+}
+
+/* Penataan Nav Link agar fleksibel dan rapi */
+:deep(.navbar-nav .nav-link) {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0.55rem 0.75rem !important;
+  border-radius: var(--tblr-border-radius, 6px);
+  width: 100% !important;
+}
+
+/* Judul teks menu: fleksibel, rapi, dan tidak menabrak chevron */
+:deep(.navbar-nav .nav-link .nav-link-title) {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  margin-right: 0.5rem !important;
+}
+
+/* Icon menu tidak menciut saat teks panjang */
+:deep(.navbar-nav .nav-link .nav-link-icon) {
+  flex-shrink: 0 !important;
+  margin-right: 0.65rem !important;
+}
+
+/* Dropdown toggle container */
+:deep(.navbar-nav .nav-link.dropdown-toggle) {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+/* Tanda panah dropdown (chevron) rapi di sisi kanan dengan jarak yang proporsional */
+:deep(.navbar-nav .nav-link.dropdown-toggle::after) {
+  content: "" !important;
+  display: inline-block !important;
+  margin-left: auto !important;
+  margin-right: 0.2rem !important;
+  flex-shrink: 0 !important;
+  width: 0.42rem !important;
+  height: 0.42rem !important;
+  border-bottom: 2px solid currentColor !important;
+  border-left: 2px solid currentColor !important;
+  border-top: 0 !important;
+  border-right: 0 !important;
+  transform: rotate(-45deg) !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease !important;
+  vertical-align: middle !important;
+  opacity: 0.75 !important;
+}
+
+/* Hover state pada toggle dropdown */
+:deep(.navbar-nav .nav-link.dropdown-toggle:hover::after) {
+  opacity: 1 !important;
+}
+
+/* Rotasi chevron saat dropdown terbuka / aktif (berputar ke atas) */
+:deep(.navbar-nav .nav-item.dropdown.show > .nav-link.dropdown-toggle::after),
+:deep(.navbar-nav .nav-link.dropdown-toggle[aria-expanded="true"]::after),
+:deep(.navbar-nav .nav-link.dropdown-toggle.show::after),
+:deep(.navbar-nav .nav-item.dropdown:has(.dropdown-menu.show) > .nav-link.dropdown-toggle::after) {
+  transform: rotate(135deg) !important;
+  opacity: 1 !important;
 }
 </style>
