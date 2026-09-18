@@ -59,6 +59,10 @@ body {
   flex: 1 1 auto;
 }
 
+.navbar {
+  min-height: auto !important;
+}
+
 .page-wrapper {
   display: flex !important;
   flex-direction: column !important;
