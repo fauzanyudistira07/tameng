@@ -68,10 +68,24 @@ body {
 
 @media (max-width: 991.98px) {
   .navbar-expand-lg.navbar-vertical ~ .navbar,
-  .navbar-expand-lg.navbar-vertical ~ .page-wrapper {
+  .navbar-expand-lg.navbar-vertical ~ .page-wrapper,
+  .navbar-vertical ~ .page,
+  .navbar-vertical ~ .page-wrapper,
+  .page {
     margin-inline-start: 0 !important;
+    margin-left: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
+  }
+
+  .page-wrapper {
+    margin-left: 0 !important;
+    margin-inline-start: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden;
   }
 }
 

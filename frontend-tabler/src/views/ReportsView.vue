@@ -391,8 +391,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Data Table -->
-        <div v-else class="table-responsive">
+        <!-- Data Table (Desktop & Tablet >= 768px) -->
+        <div v-else class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -461,6 +461,53 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List (< 768px) -->
+        <div class="d-md-none list-group list-group-flush">
+          <div
+            v-for="r in filteredReports"
+            :key="r.id"
+            class="list-group-item px-3 py-2 cursor-pointer"
+            style="cursor: pointer;"
+            @click="openPreviewModal(r)"
+          >
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="badge bg-primary-lt font-monospace fw-bold">
+                #REP-{{ String(r.id).padStart(4, '0') }}
+              </span>
+              <span class="badge bg-warning-lt text-warning font-monospace">
+                {{ r.metadata?.finding_count || 0 }} Temuan
+              </span>
+            </div>
+            <div class="fw-bold font-monospace text-primary mb-1">
+              {{ r.scanJob?.code || r.scan_job?.code || '-' }}
+            </div>
+            <div class="d-flex align-items-center gap-1 text-secondary small mb-1">
+              <span class="badge bg-blue-lt font-monospace">{{ r.scanJob?.project?.code || r.scan_job?.project?.code || 'PRJ' }}</span>
+              <span class="text-truncate">{{ r.scanJob?.project?.name || r.scan_job?.project?.name || '-' }}</span>
+            </div>
+            <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
+              <span>{{ formatDate(r.created_at) }}</span>
+              <div class="btn-group">
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary py-1 px-2 d-inline-flex align-items-center gap-1"
+                  @click.stop="downloadPdf(r)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
+                  <span>PDF</span>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary py-1 px-2"
+                  @click.stop="openPreviewModal(r)"
+                >
+                  Pratinjau
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

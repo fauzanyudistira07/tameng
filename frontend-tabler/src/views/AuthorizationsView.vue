@@ -531,8 +531,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Data Table -->
-        <div v-else class="table-responsive">
+        <!-- Data Table (Desktop & Tablet >= 768px) -->
+        <div v-else class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -612,6 +612,57 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List (< 768px) -->
+        <div class="d-md-none list-group list-group-flush">
+          <div
+            v-for="auth in filteredAuthorizations"
+            :key="auth.id"
+            class="list-group-item px-3 py-2 cursor-pointer"
+            style="cursor: pointer;"
+            @click="openInspectModal(auth)"
+          >
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="badge bg-indigo-lt text-indigo font-monospace fw-bold">
+                {{ auth.code }}
+              </span>
+              <span
+                class="badge"
+                :class="auth.status === 'active' ? 'bg-success text-success-fg' : 'bg-secondary text-secondary-fg'"
+              >
+                {{ auth.status === 'active' ? 'Aktif' : 'Nonaktif' }}
+              </span>
+            </div>
+            <div class="fw-bold mb-1">
+              {{ auth.project?.name || '-' }}
+            </div>
+            <div class="d-flex align-items-center gap-1 text-secondary small mb-1">
+              <span class="badge bg-blue-lt font-monospace">{{ auth.project?.code || 'PRJ' }}</span>
+              <span v-if="auth.target" class="text-teal text-truncate">{{ auth.target.name }} ({{ auth.target.type }})</span>
+              <span v-else-if="auth.repository" class="text-indigo text-truncate">{{ auth.repository.name }}</span>
+              <span v-else class="text-muted fst-italic">Semua Aset Proyek</span>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-1 my-1">
+              <span class="badge bg-purple-lt text-purple font-monospace" style="font-size: 0.72rem;">
+                {{ auth.scanProfile?.name || auth.scan_profile?.name || 'Standard Audit' }}
+              </span>
+              <span class="badge bg-secondary-lt font-monospace" style="font-size: 0.72rem;">
+                {{ auth.max_concurrency }} worker &middot; {{ auth.rate_limit_per_minute }} req/m
+              </span>
+            </div>
+            <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
+              <span style="font-size: 0.75rem;">Sampai: {{ formatDate(auth.valid_until) }}</span>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-primary py-1 px-2 d-inline-flex align-items-center gap-1"
+                @click.stop="openInspectModal(auth)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+                <span>Snapshot</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

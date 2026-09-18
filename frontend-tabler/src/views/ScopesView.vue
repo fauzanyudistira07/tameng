@@ -465,8 +465,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Data Table -->
-        <div v-else class="table-responsive">
+        <!-- Data Table (Desktop & Tablet >= 768px) -->
+        <div v-else class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -532,6 +532,56 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List (< 768px) -->
+        <div class="d-md-none list-group list-group-flush">
+          <div
+            v-for="scope in filteredScopes"
+            :key="scope.id"
+            class="list-group-item px-3 py-2 cursor-pointer"
+            style="cursor: pointer;"
+            @click="canManage ? openEditModal(scope) : null"
+          >
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span
+                class="badge"
+                :class="scope.effect === 'allow' ? 'bg-teal text-teal-fg' : 'bg-danger text-danger-fg'"
+              >
+                {{ scope.effect.toUpperCase() }}
+              </span>
+              <span
+                class="badge"
+                :class="scope.status === 'active' ? 'bg-success-lt text-success' : 'bg-secondary-lt text-secondary'"
+              >
+                {{ scope.status === 'active' ? 'Aktif' : 'Nonaktif' }}
+              </span>
+            </div>
+            <div class="my-1">
+              <span class="badge bg-secondary-lt font-monospace text-uppercase me-1" style="font-size: 0.72rem;">
+                {{ scope.type }}
+              </span>
+              <code class="text-primary font-monospace fw-bold">{{ scope.pattern }}</code>
+            </div>
+            <div class="text-secondary small mb-1">
+              {{ scope.project?.name || '-' }}
+              <span v-if="scope.target" class="text-muted"> &middot; {{ scope.target.name }}</span>
+            </div>
+            <div v-if="scope.reason" class="text-secondary small fst-italic mb-1">
+              "{{ scope.reason }}"
+            </div>
+            <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
+              <span>Oleh: {{ scope.creator?.name || 'Sistem' }}</span>
+              <button
+                v-if="canManage"
+                type="button"
+                class="btn btn-sm btn-outline-primary py-1 px-2"
+                @click.stop="openEditModal(scope)"
+              >
+                Edit
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -49,7 +49,7 @@ function handleSelect(url?: string) {
 </script>
 
 <template>
-      <header class="navbar navbar-expand d-flex flex-wrap p-0 d-print-none border-bottom">
+      <header class="navbar navbar-expand d-flex flex-wrap p-0 d-print-none border-bottom sticky-top bg-body">
         <div class="container-fluid px-2 px-md-3 py-2">
           <!-- Tombol Hamburger Navigasi Mobile (< 992px) -->
           <button

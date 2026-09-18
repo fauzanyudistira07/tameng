@@ -566,8 +566,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Data Table -->
-        <div v-else class="table-responsive">
+        <!-- Data Table (Desktop & Tablet >= 768px) -->
+        <div v-else class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -657,6 +657,73 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List (< 768px) -->
+        <div class="d-md-none list-group list-group-flush">
+          <div
+            v-for="f in filteredFindings"
+            :key="f.id"
+            class="list-group-item px-3 py-2 cursor-pointer"
+            style="cursor: pointer;"
+            @click="openFindingModal(f, 'details')"
+          >
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="badge" :class="getSeverityBadge(f.severity)">
+                {{ f.severity.toUpperCase() }}
+              </span>
+              <span class="badge" :class="getStatusBadge(f.status)">
+                {{ getStatusLabel(f.status) }}
+              </span>
+            </div>
+            <div class="fw-bold mb-1">
+              {{ f.title }}
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-1 mb-1">
+              <span class="badge bg-secondary-lt font-monospace text-muted" style="font-size: 0.7rem;">
+                {{ f.code }}
+              </span>
+              <span v-if="f.cve" class="badge bg-danger-lt font-monospace" style="font-size: 0.7rem;">
+                {{ f.cve }}
+              </span>
+              <span v-if="f.cwe" class="badge bg-blue-lt font-monospace" style="font-size: 0.7rem;">
+                {{ f.cwe }}
+              </span>
+              <span class="badge bg-indigo-lt text-uppercase font-monospace ms-auto" style="font-size: 0.7rem;">
+                {{ f.scanRun?.engine_key || f.scan_run?.engine_key || 'ENGINE' }}
+              </span>
+            </div>
+            <div class="d-flex align-items-center justify-content-between text-secondary small mt-1">
+              <span class="text-truncate" style="max-width: 180px;">
+                {{ f.project?.name || '-' }}
+              </span>
+              <span style="font-size: 0.75rem;">{{ formatDate(f.discovered_at) }}</span>
+            </div>
+            <div class="d-flex align-items-center justify-content-end gap-1 mt-2 pt-1 border-top">
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-primary py-1 px-2"
+                @click.stop="openFindingModal(f, 'details')"
+              >
+                Detail
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-indigo py-1 px-2 d-inline-flex align-items-center gap-1"
+                @click.stop="openFindingModal(f, 'ai')"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /><path d="M15 9m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
+                <span>AI</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-outline-secondary py-1 px-2"
+                @click.stop="openFindingModal(f, 'triage')"
+              >
+                Triage
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

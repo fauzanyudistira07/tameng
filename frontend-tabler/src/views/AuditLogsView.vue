@@ -372,8 +372,8 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- Data Table -->
-        <div v-else class="table-responsive">
+        <!-- Data Table (Desktop & Tablet >= 768px) -->
+        <div v-else class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -449,6 +449,47 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List (< 768px) -->
+        <div class="d-md-none list-group list-group-flush">
+          <div
+            v-for="log in filteredLogs"
+            :key="log.id"
+            class="list-group-item px-3 py-2 cursor-pointer"
+            style="cursor: pointer;"
+            @click="openDetailModal(log)"
+          >
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <span class="badge font-monospace" :class="getActionBadgeClass(log.action)">
+                {{ log.action }}
+              </span>
+              <span
+                class="badge"
+                :class="log.result?.toLowerCase() === 'success' ? 'bg-success text-success-fg' : 'bg-danger text-danger-fg'"
+              >
+                {{ log.result?.toUpperCase() || 'SUCCESS' }}
+              </span>
+            </div>
+            <div class="d-flex align-items-center justify-content-between my-1">
+              <div class="d-flex align-items-center gap-2">
+                <span class="avatar avatar-xs bg-primary-lt text-primary font-monospace fw-bold">
+                  {{ (log.user?.name || 'S').slice(0, 1).toUpperCase() }}
+                </span>
+                <span class="fw-semibold small">{{ log.user?.name || 'Sistem Otomatis' }}</span>
+              </div>
+              <span class="small font-monospace text-secondary" style="font-size: 0.72rem;">
+                {{ formatDate(log.created_at) }}
+              </span>
+            </div>
+            <div class="d-flex align-items-center justify-content-between text-secondary small mt-1">
+              <div class="text-truncate" style="max-width: 220px;">
+                <span v-if="log.project" class="badge bg-blue-lt font-monospace me-1">{{ log.project.code }}</span>
+                <span>{{ log.project?.name || log.scanJob?.code || log.target_type || 'Sistem Core' }}</span>
+              </div>
+              <code class="text-muted small font-monospace">{{ log.actor_ip || '127.0.0.1' }}</code>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -452,8 +452,8 @@ onMounted(() => {
           <div class="text-secondary mt-2">Memuat daftar 20 security engines...</div>
         </div>
 
-        <!-- Data Table -->
-        <div v-else class="table-responsive">
+        <!-- Data Table (Desktop & Tablet >= 768px) -->
+        <div v-else class="table-responsive d-none d-md-block">
           <table class="table table-vcenter card-table table-hover">
             <thead>
               <tr>
@@ -537,6 +537,73 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile Card List (< 768px) -->
+        <div class="d-md-none list-group list-group-flush">
+          <div
+            v-for="engine in filteredEngines"
+            :key="engine.id"
+            class="list-group-item px-3 py-2"
+          >
+            <div class="d-flex align-items-center justify-content-between mb-1">
+              <div class="d-flex align-items-center gap-2">
+                <span class="avatar avatar-xs bg-primary-lt text-primary font-monospace fw-bold">
+                  {{ engine.name.slice(0, 2).toUpperCase() }}
+                </span>
+                <span class="fw-bold">{{ engine.name }}</span>
+              </div>
+              <div class="d-flex align-items-center gap-2">
+                <span
+                  class="badge"
+                  :class="{
+                    'bg-success-lt text-success': engine.status === 'AVAILABLE',
+                    'bg-warning-lt text-warning': engine.status === 'DEGRADED',
+                    'bg-secondary-lt text-secondary': engine.status === 'DISABLED'
+                  }"
+                >
+                  {{ engine.status }}
+                </span>
+                <label v-if="canManage" class="form-check form-switch m-0">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    :checked="engine.enabled"
+                    :disabled="actionLoadingId === engine.id"
+                    @change="toggleEngine(engine)"
+                  />
+                </label>
+              </div>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-1 mb-1">
+              <span class="badge" :class="getDomainBadgeClass(engine.domain)">
+                {{ engine.domain }}
+              </span>
+              <span class="badge" :class="getResourceBadgeClass(engine.resource_class)">
+                {{ engine.resource_class }}
+              </span>
+              <span class="text-secondary small font-monospace ms-auto" style="font-size: 0.72rem;">
+                {{ engine.code }}
+              </span>
+            </div>
+            <code class="text-muted font-monospace small d-block text-truncate mt-1" :title="engine.container_image || engine.binary_command">
+              {{ engine.container_image || engine.binary_command || '-' }}
+            </code>
+            <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
+              <span style="font-size: 0.75rem;">Cek: {{ formatDate(engine.last_health_check) }}</span>
+              <button
+                v-if="canManage"
+                type="button"
+                class="btn btn-sm btn-outline-secondary py-1 px-2 d-inline-flex align-items-center gap-1"
+                :disabled="actionLoadingId === engine.id"
+                @click="runHealthCheck(engine)"
+              >
+                <span v-if="actionLoadingId === engine.id" class="spinner-border spinner-border-sm" role="status"></span>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h4l3 8l4 -16l3 8h4" /></svg>
+                <span>Cek Image</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

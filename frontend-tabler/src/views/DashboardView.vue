@@ -654,20 +654,20 @@ onUnmounted(() => {
               </div>
               <div class="card-body">
                 <div id="chart-severity-line" class="chart-lg"></div>
-                <div class="row text-center mt-3 pt-3 border-top">
-                  <div class="col">
+                <div class="row text-center mt-3 pt-3 border-top g-2">
+                  <div class="col-6 col-sm-3">
                     <div class="text-secondary small">Kritis</div>
                     <div class="h3 mb-0 text-danger">{{ counts.critical_findings }}</div>
                   </div>
-                  <div class="col">
+                  <div class="col-6 col-sm-3">
                     <div class="text-secondary small">Tinggi</div>
                     <div class="h3 mb-0 text-warning">{{ counts.high_findings }}</div>
                   </div>
-                  <div class="col">
+                  <div class="col-6 col-sm-3">
                     <div class="text-secondary small">Sedang</div>
                     <div class="h3 mb-0 text-yellow">{{ counts.medium_findings }}</div>
                   </div>
-                  <div class="col">
+                  <div class="col-6 col-sm-3">
                     <div class="text-secondary small">Rendah</div>
                     <div class="h3 mb-0 text-azure">{{ counts.low_findings }}</div>
                   </div>
@@ -688,7 +688,7 @@ onUnmounted(() => {
                   <span class="badge bg-primary text-primary-fg">{{ scanProfiles.length }} Profil Siap</span>
                 </div>
               </div>
-              <div class="table-responsive">
+              <div class="table-responsive d-none d-md-block">
                 <table class="table table-vcenter table-hover card-table">
                   <thead>
                     <tr>
@@ -734,6 +734,28 @@ onUnmounted(() => {
                   </tbody>
                 </table>
               </div>
+
+              <!-- Mobile Cards (< 768px) -->
+              <div class="d-md-none list-group list-group-flush">
+                <div v-for="profile in scanProfiles" :key="profile.key" class="list-group-item px-3 py-2">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="fw-semibold text-truncate">{{ profile.name }}</span>
+                    <span v-if="profile.active_testing" class="badge bg-warning-lt flex-shrink-0">Active DAST</span>
+                    <span v-else class="badge bg-success-lt flex-shrink-0">Passive SAST</span>
+                  </div>
+                  <div class="text-secondary small mb-2">{{ profile.description }}</div>
+                  <div class="badges-list">
+                    <span
+                      v-for="eng in profile.engine_keys"
+                      :key="eng"
+                      class="badge badge-outline text-secondary me-1 mb-1"
+                      style="font-size: 0.7rem;"
+                    >
+                      {{ eng }}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -746,7 +768,7 @@ onUnmounted(() => {
                   <span class="text-secondary small">5 Terakhir</span>
                 </div>
               </div>
-              <div class="table-responsive">
+              <div class="table-responsive d-none d-md-block">
                 <table class="table table-vcenter table-hover card-table">
                   <thead>
                     <tr>
@@ -784,6 +806,30 @@ onUnmounted(() => {
                   </tbody>
                 </table>
               </div>
+
+              <!-- Mobile Cards (< 768px) -->
+              <div class="d-md-none list-group list-group-flush">
+                <div v-if="recentScanJobs.length === 0" class="p-3 text-center text-secondary small">
+                  Belum ada riwayat pemindaian.
+                </div>
+                <div v-for="job in recentScanJobs" :key="job.id" class="list-group-item px-3 py-2">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="fw-semibold text-truncate" style="max-width: 220px;">
+                      {{ job.repository?.name || job.target?.name || job.project?.name || 'Aset Target' }}
+                    </span>
+                    <span class="badge" :class="getJobStatusBadgeClass(job.status)">
+                      {{ job.status.toUpperCase() }}
+                    </span>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between text-secondary small">
+                    <span class="font-monospace" style="font-size: 0.75rem;">{{ job.code }}</span>
+                    <span>{{ formatTime(job.finished_at || job.queued_at) }}</span>
+                  </div>
+                  <div class="text-secondary small mt-1">
+                    Profil: <span class="fw-medium text-reset">{{ job.scanProfile?.name || 'Standard Scan' }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -807,7 +853,7 @@ onUnmounted(() => {
                   </span>
                 </div>
               </div>
-              <div class="table-responsive">
+              <div class="table-responsive d-none d-md-block">
                 <table class="table table-vcenter table-striped card-table">
                   <thead>
                     <tr>
@@ -856,6 +902,31 @@ onUnmounted(() => {
                   </tbody>
                 </table>
               </div>
+
+              <!-- Mobile Cards (< 768px) -->
+              <div class="d-md-none list-group list-group-flush">
+                <div v-for="eng in engines" :key="eng.id" class="list-group-item px-3 py-2">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="fw-semibold">{{ eng.name }}</span>
+                      <span class="badge bg-azure-lt badge-sm">{{ eng.domain }}</span>
+                    </div>
+                    <span v-if="eng.enabled && eng.status === 'AVAILABLE'" class="badge bg-success-lt">
+                      <span class="status-dot status-green me-1"></span>Online
+                    </span>
+                    <span v-else-if="eng.enabled" class="badge bg-warning-lt" title="Image container belum terverifikasi">
+                      <span class="status-dot status-warning me-1"></span>Standby
+                    </span>
+                    <span v-else class="badge bg-secondary-lt">
+                      Nonaktif
+                    </span>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between text-secondary small mt-1">
+                    <span class="font-monospace text-truncate" style="font-size: 0.75rem;">{{ eng.code }} &middot; {{ eng.version }}</span>
+                    <span class="font-monospace text-secondary" style="font-size: 0.75rem;">{{ eng.cpu_limit }} CPU / {{ eng.memory_limit_mb }} MB</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -870,7 +941,7 @@ onUnmounted(() => {
                   <span class="badge bg-danger text-danger-fg">High Alert</span>
                 </div>
               </div>
-              <div class="table-responsive">
+              <div class="table-responsive d-none d-md-block">
                 <table class="table table-vcenter table-hover card-table">
                   <thead>
                     <tr>
@@ -912,9 +983,45 @@ onUnmounted(() => {
                   </tbody>
                 </table>
               </div>
+
+              <!-- Mobile Cards (< 768px) -->
+              <div class="d-md-none list-group list-group-flush">
+                <div v-if="criticalFindings.length === 0" class="p-3 text-center text-secondary small">
+                  Tidak ada kerentanan kritis aktif.
+                </div>
+                <div v-for="finding in criticalFindings" :key="finding.id" class="list-group-item px-3 py-2">
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <span class="badge" :class="getSeverityBadgeClass(finding.severity)">
+                      {{ finding.severity.toUpperCase() }}
+                    </span>
+                    <span class="badge bg-secondary-lt text-truncate" style="max-width: 140px;">
+                      {{ finding.project?.name || 'TAMENG Core' }}
+                    </span>
+                  </div>
+                  <div class="fw-semibold text-truncate mb-1" :title="finding.title">
+                    {{ finding.title }}
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between text-secondary small">
+                    <span class="text-truncate font-monospace" style="font-size: 0.75rem; max-width: 200px;" :title="finding.file_path">
+                      {{ finding.file_path || 'Repository codebase' }}
+                    </span>
+                    <span class="badge badge-outline text-secondary font-monospace" style="font-size: 0.7rem;">
+                      {{ finding.engine_key }}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 576px) {
+  :deep(.chart-lg) {
+    height: 12rem !important;
+  }
+}
+</style>
