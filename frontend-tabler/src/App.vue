@@ -142,4 +142,14 @@ td.col-index,
 :root:not([data-bs-theme="dark"]) body:not([data-bs-theme="dark"]) .col-index:not(.text-white) {
   color: #182433 !important;
 }
+
+/* Tombol expand chevron panah (>) pada tabel berwarna putih terang */
+.table .scan-job-row td:first-child .btn,
+.table .scan-job-row td:first-child .btn svg,
+[data-bs-theme="dark"] .table .scan-job-row td:first-child .btn,
+[data-bs-theme="dark"] .table .scan-job-row td:first-child .btn svg,
+[data-bs-theme="dark"] .table td:first-child .btn-ghost-secondary svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
 </style>

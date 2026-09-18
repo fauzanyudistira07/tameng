@@ -1672,14 +1672,15 @@ onUnmounted(() => {
                     <!-- Expand Trigger -->
                     <td>
                       <button
-                        class="btn btn-icon btn-ghost-secondary btn-sm"
+                        class="btn btn-icon btn-ghost-secondary btn-sm text-white"
                         @click.stop="toggleExpandRow(job.id)"
                         :title="expandedJobId === job.id ? 'Tutup rincian' : 'Buka log rincian mesin'"
+                        style="color: #ffffff !important;"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          class="icon icon-tabler"
-                          :style="{ transform: expandedJobId === job.id ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }"
+                          class="icon icon-tabler text-white"
+                          :style="{ transform: expandedJobId === job.id ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', stroke: '#ffffff', color: '#ffffff' }"
                           width="24"
                           height="24"
                           viewBox="0 0 24 24"
@@ -2543,5 +2544,11 @@ onUnmounted(() => {
 
 .scan-job-row.table-active > td {
   background-color: rgba(var(--tblr-primary-rgb), 0.08);
+}
+
+.scan-job-row td:first-child .btn,
+.scan-job-row td:first-child .btn svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
 }
 </style>
