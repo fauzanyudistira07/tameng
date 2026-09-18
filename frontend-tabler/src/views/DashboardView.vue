@@ -527,7 +527,7 @@ onUnmounted(() => {
       <!-- ROW 1: 4 Key Telemetry Cards -->
       <div class="row row-deck row-cards mb-4">
           <!-- Card 1: Skor Postur Keamanan -->
-          <div class="col-sm-6 col-lg-3">
+          <div class="col-12 col-sm-6 col-lg-3">
             <div class="card">
               <div class="card-status-top" :class="securityGrade.statusClass"></div>
               <div class="card-body">
@@ -557,7 +557,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Card 2: Status Antrean & Worker -->
-          <div class="col-sm-6 col-lg-3">
+          <div class="col-12 col-sm-6 col-lg-3">
             <div class="card">
               <div class="card-status-top" :class="queue.status === 'warning' ? 'bg-warning' : 'bg-success'"></div>
               <div class="card-body">
@@ -584,7 +584,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Card 3: Temuan Kritis & Tinggi -->
-          <div class="col-sm-6 col-lg-3">
+          <div class="col-12 col-sm-6 col-lg-3">
             <div class="card">
               <div class="card-status-top bg-danger"></div>
               <div class="card-body">
@@ -619,7 +619,7 @@ onUnmounted(() => {
           </div>
 
           <!-- Card 4: Cakupan Aset Terpantau -->
-          <div class="col-sm-6 col-lg-3">
+          <div class="col-12 col-sm-6 col-lg-3">
             <div class="card">
               <div class="card-status-top bg-primary"></div>
               <div class="card-body">

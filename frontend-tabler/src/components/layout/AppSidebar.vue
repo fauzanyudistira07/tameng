@@ -1,29 +1,58 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { watch } from "vue";
 import { useRoute } from "vue-router";
 import { useTheme } from "../../composables/useTheme";
 import { useAuth } from "../../composables/useAuth";
+import { useSidebar } from "../../composables/useSidebar";
 
 const route = useRoute();
-const isMobileSidebarOpen = ref(false);
+const { isMobileSidebarOpen, closeMobileSidebar } = useSidebar();
 const { toggleTheme } = useTheme();
 const { currentUser, userInitials, roleDisplayName } = useAuth();
+
+// Tutup drawer secara otomatis jika rute berpindah
+watch(() => route.path, () => {
+  closeMobileSidebar();
+});
 </script>
 
 <template>
-  <aside class="navbar navbar-vertical navbar-expand" data-bs-theme="dark">
-    <div class="container-fluid">
-      <button
-        class="navbar-toggler"
-        type="button"
-        @click="isMobileSidebarOpen = !isMobileSidebarOpen"
-        aria-label="Toggle navigation"
-      >
-        <span class="navbar-toggler-icon"></span>
-      </button>
+  <!-- Backdrop saat drawer terbuka di layar mobile -->
+  <div
+    v-if="isMobileSidebarOpen"
+    class="sidebar-backdrop d-lg-none"
+    @click="closeMobileSidebar"
+  ></div>
 
-      <!-- Brand Logo TAMENG -->
-      <h1 class="navbar-brand navbar-brand-autodark px-2 py-3">
+  <aside
+    class="navbar navbar-vertical navbar-expand-lg"
+    :class="{ show: isMobileSidebarOpen }"
+    data-bs-theme="dark"
+  >
+    <div class="container-fluid px-2 px-lg-3">
+      <!-- Mobile Drawer Header dengan Tombol Tutup (X) -->
+      <div class="d-flex align-items-center justify-content-between w-100 d-lg-none px-2 py-3 border-bottom border-dark">
+        <div class="d-flex align-items-center gap-2">
+          <span class="avatar avatar-xs bg-primary text-primary-fg rounded">
+            <!-- Shield SVG -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+              <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+              <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+            </svg>
+          </span>
+          <span class="fs-3 fw-bold text-white lh-1">TAMENG</span>
+        </div>
+        <button
+          type="button"
+          class="btn-close btn-close-white"
+          aria-label="Tutup Menu"
+          @click="closeMobileSidebar"
+        ></button>
+      </div>
+
+      <!-- Desktop Brand Logo TAMENG -->
+      <h1 class="navbar-brand navbar-brand-autodark px-2 py-3 d-none d-lg-flex">
         <router-link
           to="/"
           class="d-flex align-items-center gap-2 text-decoration-none"
@@ -415,3 +444,43 @@ const { currentUser, userInitials, roleDisplayName } = useAuth();
     </div>
   </aside>
 </template>
+
+<style scoped>
+@media (max-width: 991.98px) {
+  .navbar-vertical.navbar-expand-lg {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: min(290px, 85vw) !important;
+    max-width: 85vw !important;
+    height: 100vh !important;
+    z-index: 1060 !important;
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: none;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+  }
+
+  .navbar-vertical.navbar-expand-lg.show {
+    transform: translateX(0) !important;
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.75) !important;
+  }
+
+  .navbar-vertical.navbar-expand-lg .navbar-collapse {
+    display: block !important;
+    visibility: visible !important;
+  }
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 1055;
+  transition: opacity 0.2s ease;
+}
+</style>

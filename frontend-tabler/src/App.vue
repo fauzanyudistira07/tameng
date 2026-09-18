@@ -66,6 +66,15 @@ body {
   min-height: calc(100vh - 3.5rem) !important;
 }
 
+@media (max-width: 991.98px) {
+  .navbar-expand-lg.navbar-vertical ~ .navbar,
+  .navbar-expand-lg.navbar-vertical ~ .page-wrapper {
+    margin-inline-start: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
 /* Konten utama mengisi sisa ruang vertikal agar footer terdorong ke paling bawah */
 .page-wrapper > :first-child:not(.footer),
 .page-body {

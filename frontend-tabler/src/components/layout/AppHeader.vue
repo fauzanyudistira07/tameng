@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import { ref } from "vue"
 import { useTheme } from "../../composables/useTheme"
 import { useSearch } from "../../composables/useSearch"
 import { useNotifications } from "../../composables/useNotifications"
 import { useAuth } from "../../composables/useAuth"
+import { useSidebar } from "../../composables/useSidebar"
 
+const { toggleMobileSidebar } = useSidebar()
+const isMobileSearchOpen = ref(false)
 const { toggleTheme } = useTheme()
 const {
   currentUser,
@@ -45,40 +49,78 @@ function handleSelect(url?: string) {
 </script>
 
 <template>
-      <header class="navbar navbar-expand d-flex d-print-none" >
-        <div class="container-fluid">
-          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar-menu" aria-controls="navbar-menu" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
+      <header class="navbar navbar-expand d-flex flex-wrap p-0 d-print-none border-bottom">
+        <div class="container-fluid px-2 px-md-3 py-2">
+          <!-- Tombol Hamburger Navigasi Mobile (< 992px) -->
+          <button
+            class="btn btn-icon btn-ghost-secondary d-lg-none me-2 p-1"
+            type="button"
+            aria-label="Buka Menu Navigasi"
+            @click="toggleMobileSidebar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+              <path d="M4 6l16 0"/>
+              <path d="M4 12l16 0"/>
+              <path d="M4 18l16 0"/>
+            </svg>
           </button>
-          <div class="navbar-nav flex-row order-md-last">
+
+          <!-- Brand Logo & Nama TAMENG di Mobile (< 992px) -->
+          <router-link
+            to="/"
+            class="d-lg-none d-flex align-items-center gap-2 text-decoration-none me-auto me-sm-2 flex-shrink-0"
+          >
+            <span class="avatar avatar-xs bg-primary text-primary-fg rounded">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" />
+                <path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+              </svg>
+            </span>
+            <span class="fw-bold fs-3 text-reset lh-1">TAMENG</span>
+          </router-link>
+
+          <div class="navbar-nav flex-row order-md-last ms-auto align-items-center gap-1">
+            <!-- Tombol Search Toggle Mobile (< 768px) -->
+            <button
+              type="button"
+              class="nav-link px-2 d-md-none border-0 bg-transparent text-secondary"
+              aria-label="Cari di TAMENG"
+              @click="isMobileSearchOpen = !isMobileSearchOpen"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+            </button>
+
             <div class="d-flex">
-              <a href="?theme=dark" @click="toggleTheme" class="nav-link px-0 hide-theme-dark" title="Enable dark mode" data-bs-toggle="tooltip"
+              <a href="?theme=dark" @click="toggleTheme" class="nav-link px-1 px-sm-2 hide-theme-dark" title="Enable dark mode" data-bs-toggle="tooltip"
 		   data-bs-placement="bottom">
                 <!-- Download SVG icon from http://tabler-icons.io/i/moon -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
               </a>
-              <a href="?theme=light" @click="toggleTheme" class="nav-link px-0 hide-theme-light" title="Enable light mode" data-bs-toggle="tooltip"
+              <a href="?theme=light" @click="toggleTheme" class="nav-link px-1 px-sm-2 hide-theme-light" title="Enable light mode" data-bs-toggle="tooltip"
 		   data-bs-placement="bottom">
                 <!-- Download SVG icon from http://tabler-icons.io/i/sun -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>
               </a>
-              <div class="nav-item dropdown d-flex me-3">
-                <a
-                  href="#"
-                  class="nav-link px-0 position-relative"
-                  data-bs-toggle="dropdown"
-                  data-bs-auto-close="outside"
-                  tabindex="-1"
-                  aria-label="Notifikasi Keamanan"
-                >
-                  <!-- Download SVG icon from http://tabler-icons.io/i/bell -->
-                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" /><path d="M9 17v1a3 3 0 0 0 6 0v-1" /></svg>
-                  <span v-if="unreadCount > 0" class="badge bg-red"></span>
-                </a>
+            </div>
+            <div class="nav-item dropdown d-flex me-1 me-sm-3">
+              <a
+                href="#"
+                class="nav-link px-1 px-sm-2 position-relative"
+                data-bs-toggle="dropdown"
+                data-bs-auto-close="outside"
+                tabindex="-1"
+                aria-label="Notifikasi Keamanan"
+              >
+                <!-- Download SVG icon from http://tabler-icons.io/i/bell -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" /><path d="M9 17v1a3 3 0 0 0 6 0v-1" /></svg>
+                <span v-if="unreadCount > 0" class="badge bg-red"></span>
+              </a>
 
-                <div class="dropdown-menu dropdown-menu-arrow dropdown-menu-end dropdown-menu-card" style="min-width: 380px; max-width: 440px;">
-                  <div class="card">
-                    <div class="card-header d-flex align-items-center justify-content-between py-2 px-3">
+              <div class="dropdown-menu dropdown-menu-arrow dropdown-menu-end dropdown-menu-card" style="min-width: min(380px, calc(100vw - 1rem)); max-width: min(440px, calc(100vw - 1rem));">
+                <div class="card">
+                  <div class="card-header d-flex align-items-center justify-content-between py-2 px-3">
                       <div class="d-flex align-items-center gap-2">
                         <h3 class="card-title mb-0">Notifikasi</h3>
                         <span v-if="unreadCount > 0" class="badge bg-red-lt">{{ unreadCount }} Baru</span>
@@ -199,7 +241,6 @@ function handleSelect(url?: string) {
                   </div>
                 </div>
               </div>
-            </div>
             <div class="nav-item dropdown">
               <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-label="Buka menu profil">
                 <span class="avatar avatar-sm bg-primary-lt text-primary fw-bold">
@@ -225,8 +266,9 @@ function handleSelect(url?: string) {
               </div>
             </div>
           </div>
-          <div class="collapse navbar-collapse" id="navbar-menu">
-            <div class="search-container position-relative my-2 my-md-0 flex-grow-1 flex-md-grow-0 order-first order-md-last me-auto" style="min-width: 320px; max-width: 480px;">
+          <!-- Search Box Desktop & Tablet (>= 768px) -->
+          <div class="collapse navbar-collapse d-none d-md-flex" id="navbar-menu">
+            <div class="search-container position-relative my-2 my-md-0 flex-grow-1 flex-md-grow-0 order-first order-md-last me-auto" style="width: 100%; max-width: 480px;">
               <div class="input-icon">
                 <span class="input-icon-addon">
                   <!-- Download SVG icon from http://tabler-icons.io/i/search -->
@@ -316,6 +358,79 @@ function handleSelect(url?: string) {
                       </span>
                     </a>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bar Pencarian Mobile (< 768px) yang muncul saat tombol cari ditekan -->
+        <div v-if="isMobileSearchOpen" class="d-md-none w-100 px-3 py-2 border-top bg-body">
+          <div class="search-container position-relative w-100">
+            <div class="input-icon">
+              <span class="input-icon-addon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+              </span>
+              <input
+                v-model="searchQuery"
+                type="text"
+                class="form-control form-control-sm"
+                placeholder="Cari modul, celah, target..."
+                @focus="isSearchOpen = true"
+              />
+              <button
+                v-if="searchQuery"
+                type="button"
+                class="input-icon-addon btn-link border-0 bg-transparent p-0"
+                style="pointer-events: auto !important; cursor: pointer; z-index: 5;"
+                @click.stop.prevent="clearSearch"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <!-- Dropdown Hasil Pencarian Mobile -->
+            <div
+              v-if="isSearchOpen && searchQuery.trim()"
+              class="card shadow-lg mt-1 p-2"
+              style="position: absolute; top: 100%; left: 0; right: 0; z-index: 1060; background-color: var(--tblr-bg-surface); border: 1px solid var(--tblr-border-color); max-height: 360px; overflow-y: auto;"
+            >
+              <div v-if="isLoadingTameng && searchResults.length === 0" class="p-3 text-center text-muted">
+                <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                <div class="small">Memuat data langsung dari backend TAMENG...</div>
+              </div>
+
+              <div v-else-if="searchResults.length === 0" class="p-3 text-center text-muted">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg mb-2 text-secondary" width="32" height="32" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
+                <div>Tidak ada hasil untuk "<strong>{{ searchQuery }}</strong>"</div>
+              </div>
+
+              <div v-else>
+                <div class="px-2 py-1 border-bottom mb-2 text-muted small fw-medium">
+                  Hasil Pencarian ({{ searchResults.length }})
+                </div>
+
+                <div v-for="(items, category) in resultsByCategory" :key="category" class="mb-2">
+                  <div class="text-uppercase text-secondary fw-bold px-2 py-1" style="font-size: 0.65rem; letter-spacing: 0.08em;">
+                    {{ category }}
+                  </div>
+                  <a
+                    v-for="item in items"
+                    :key="item.id"
+                    :href="item.url"
+                    class="dropdown-item d-flex align-items-center gap-2 rounded px-2 py-2 mb-1"
+                    :class="{ 'active': searchResults[selectedIndex]?.id === item.id }"
+                    style="cursor: pointer; text-decoration: none;"
+                    @click="handleSelect(item.url)"
+                  >
+                    <div class="d-flex flex-column flex-grow-1 text-truncate">
+                      <span class="fw-semibold text-reset">{{ item.title }}</span>
+                      <span class="text-secondary small text-truncate" style="font-size: 0.75rem;">{{ item.subtitle }}</span>
+                    </div>
+                    <span v-if="item.badge" class="badge badge-sm flex-shrink-0" :class="item.badgeClass">
+                      {{ item.badge }}
+                    </span>
+                  </a>
                 </div>
               </div>
             </div>
