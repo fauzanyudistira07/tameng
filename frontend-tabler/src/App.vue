@@ -160,4 +160,32 @@ td.col-index,
     display: none !important;
   }
 }
+
+/* Proteksi Responsif Global Mobile */
+@media (max-width: 575.98px) {
+  .modal-dialog {
+    margin: 0.5rem auto !important;
+    max-width: calc(100vw - 1rem) !important;
+  }
+}
+
+.table-responsive {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hilangkan outline dan box-shadow pada seluruh tombol */
+.btn,
+button {
+  outline: none !important;
+}
+
+.btn:focus,
+.btn:focus-visible,
+.btn:active,
+button:focus,
+button:focus-visible,
+button:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
 </style>

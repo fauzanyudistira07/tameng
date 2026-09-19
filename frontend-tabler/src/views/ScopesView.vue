@@ -429,11 +429,11 @@ onMounted(() => {
 
             <!-- Reset Button -->
             <button
-              v-if="searchQuery || filterEffect !== 'all' || filterStatus !== 'all' || filterType !== 'all' || filterProjectId !== 'all'"
+              v-if="searchQuery || filterStatus !== 'all' || filterEffect !== 'all' || filterType !== 'all'"
               type="button"
-              class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
-              title="Reset seluruh filter pencarian"
+              title="Reset seluruh filter"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
               <span>Reset Filter</span>
@@ -572,13 +572,14 @@ onMounted(() => {
             </div>
             <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
               <span>Oleh: {{ scope.creator?.name || 'Sistem' }}</span>
+            </div>
+            <div v-if="canManage" class="pt-2">
               <button
-                v-if="canManage"
                 type="button"
-                class="btn btn-sm btn-outline-primary py-1 px-2"
+                class="btn btn-sm btn-primary flex-fill w-100"
                 @click.stop="openEditModal(scope)"
               >
-                Edit
+                Edit Aturan
               </button>
             </div>
           </div>

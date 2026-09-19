@@ -180,7 +180,7 @@ onMounted(() => {
           <div class="col-auto ms-auto d-print-none d-flex align-items-center gap-2">
             <button
               type="button"
-              class="btn btn-outline-secondary d-flex align-items-center gap-1"
+              class="btn btn-secondary d-flex align-items-center gap-1"
               :disabled="isLoading"
               @click="loadData"
             >
@@ -343,7 +343,7 @@ onMounted(() => {
             <button
               v-if="searchQuery || filterResult !== 'all' || filterActionCategory !== 'all'"
               type="button"
-              class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset filter"
             >
@@ -527,7 +527,7 @@ onMounted(() => {
                 <label class="form-label fw-bold text-secondary m-0">JSON Payload & Snapshot</label>
                 <button
                   type="button"
-                  class="btn btn-xs btn-outline-secondary d-flex align-items-center gap-1"
+                  class="btn btn-xs btn-secondary d-flex align-items-center gap-1"
                   @click="copyMetadata"
                 >
                   <span v-if="copySuccess" class="text-success d-inline-flex align-items-center gap-1">

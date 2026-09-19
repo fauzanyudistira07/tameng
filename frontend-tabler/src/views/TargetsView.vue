@@ -561,7 +561,7 @@ watch(() => route.query.project_id, (newVal) => {
               <div v-if="alertMessage.scanJobCode" class="mt-2">
                 <router-link
                   to="/pekerjaan-scan"
-                  class="btn btn-sm btn-outline-success py-0 px-2 fw-bold text-decoration-none"
+                  class="btn btn-sm btn-success py-0 px-2 fw-bold text-decoration-none"
                   style="font-size: 0.75rem;"
                 >
                   Lihat di Pekerjaan Scan &rarr;
@@ -940,7 +940,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <!-- Trigger Scan -->
                     <button
                       type="button"
-                      class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-primary d-flex align-items-center gap-1"
                       @click="openScanModal(target)"
                       :title="target.type === 'mobile' ? 'Pindai Keamanan Aplikasi (MobSF & SAST)' : target.type === 'container' ? 'Pindai Keamanan Container (Trivy & Grype)' : 'Pindai DAST (OWASP ZAP & Nuclei)'"
                     >
@@ -952,7 +952,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="canManage"
                       type="button"
-                      class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-secondary d-flex align-items-center gap-1"
                       @click="openEditModal(target)"
                       title="Ubah Target"
                     >
@@ -964,7 +964,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="canManage"
                       type="button"
-                      class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-danger d-flex align-items-center gap-1"
                       @click="openDeleteModal(target)"
                       title="Hapus Target"
                     >
@@ -1119,7 +1119,7 @@ watch(() => route.query.project_id, (newVal) => {
                   <div class="col-4">
                     <button
                       type="button"
-                      class="btn btn-outline-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1 py-2"
+                      class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center gap-1 py-2"
                       @click="openScanModal(target)"
                       :title="target.type === 'mobile' ? 'Pindai Keamanan Aplikasi' : target.type === 'container' ? 'Pindai Keamanan Container' : 'Pindai DAST'"
                     >
@@ -1130,7 +1130,7 @@ watch(() => route.query.project_id, (newVal) => {
                   <div :class="canManage ? 'col-4' : 'col-8'">
                     <button
                       type="button"
-                      class="btn btn-outline-secondary btn-sm w-100 d-flex align-items-center justify-content-center gap-1 py-2"
+                      class="btn btn-secondary btn-sm w-100 d-flex align-items-center justify-content-center gap-1 py-2"
                       @click="openDetailModal(target)"
                       title="Detail Target"
                     >
@@ -1141,7 +1141,7 @@ watch(() => route.query.project_id, (newVal) => {
                   <div v-if="canManage" class="col-4 d-flex gap-1">
                     <button
                       type="button"
-                      class="btn btn-outline-secondary btn-sm flex-fill d-flex align-items-center justify-content-center p-0 py-2"
+                      class="btn btn-secondary btn-sm flex-fill d-flex align-items-center justify-content-center p-0 py-2"
                       @click="openEditModal(target)"
                       title="Ubah Target"
                     >
@@ -1149,7 +1149,7 @@ watch(() => route.query.project_id, (newVal) => {
                     </button>
                     <button
                       type="button"
-                      class="btn btn-outline-danger btn-sm flex-fill d-flex align-items-center justify-content-center p-0 py-2"
+                      class="btn btn-danger btn-sm flex-fill d-flex align-items-center justify-content-center p-0 py-2"
                       @click="openDeleteModal(target)"
                       title="Hapus Target"
                     >
@@ -1286,7 +1286,7 @@ watch(() => route.query.project_id, (newVal) => {
                     </div>
                     <button
                       type="button"
-                      class="btn btn-sm btn-outline-danger"
+                      class="btn btn-sm btn-danger"
                       @click="removeMobileFile"
                     >
                       Ganti Berkas
@@ -1338,11 +1338,11 @@ watch(() => route.query.project_id, (newVal) => {
               </div>
             </div>
 
-            <div class="modal-footer bg-body-tertiary py-2 d-flex justify-content-between">
-              <button type="button" class="btn btn-outline-secondary" @click="closeModal" :disabled="isSaving">
+            <div class="modal-footer bg-body-tertiary py-2 d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
+              <button type="button" class="btn btn-secondary w-100 w-sm-auto justify-content-center" @click="closeModal" :disabled="isSaving">
                 Batal
               </button>
-              <button type="submit" class="btn btn-primary d-flex align-items-center gap-1" :disabled="isSaving">
+              <button type="submit" class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto py-2" :disabled="isSaving">
                 <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" role="status"></span>
                 <span>{{ editingTargetId ? 'Simpan Perubahan' : 'Daftarkan Target' }}</span>
               </button>
@@ -1476,7 +1476,7 @@ watch(() => route.query.project_id, (newVal) => {
                 <div class="col-6">
                   <button
                     type="button"
-                    class="btn btn-outline-secondary w-100"
+                    class="btn btn-secondary w-100"
                     @click="closeScanModal"
                   >
                     Tutup
@@ -1779,15 +1779,15 @@ watch(() => route.query.project_id, (newVal) => {
             </div>
           </div>
 
-          <div class="modal-footer bg-body-tertiary py-2 d-flex justify-content-between">
-            <button type="button" class="btn btn-outline-secondary" @click="closeDetailModal">
+          <div class="modal-footer bg-body-tertiary py-2 d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
+            <button type="button" class="btn btn-secondary w-100 w-sm-auto justify-content-center" @click="closeDetailModal">
               Tutup
             </button>
-            <div class="d-flex gap-2">
+            <div class="d-flex w-100 w-sm-auto">
               <button
                 v-if="targetDetail?.target"
                 type="button"
-                class="btn btn-primary d-flex align-items-center gap-1"
+                class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto py-2"
                 @click="closeDetailModal(); openScanModal(targetDetail.target)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7v-1a2 2 0 0 1 2 -2h2" /><path d="M4 17v1a2 2 0 0 0 2 2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v1" /><path d="M16 20h2a2 2 0 0 0 2 -2v-1" /><path d="M5 12l14 0" /></svg>
@@ -1821,7 +1821,7 @@ watch(() => route.query.project_id, (newVal) => {
           <div class="modal-footer bg-body-tertiary py-2">
             <div class="w-100 row g-2">
               <div class="col-6">
-                <button type="button" class="btn btn-outline-secondary w-100" @click="closeDeleteModal" :disabled="isDeleting">
+                <button type="button" class="btn btn-secondary w-100" @click="closeDeleteModal" :disabled="isDeleting">
                   Batal
                 </button>
               </div>

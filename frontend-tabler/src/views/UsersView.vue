@@ -552,8 +552,8 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Table -->
-      <div class="table-responsive">
+      <!-- Table (Desktop >= 768px) -->
+      <div class="table-responsive d-none d-md-block">
         <table class="table table-vcenter card-table table-striped">
           <thead>
             <tr>
@@ -692,7 +692,7 @@ onMounted(() => {
                   <button
                     v-if="isUserLocked(u)"
                     type="button"
-                    class="btn btn-sm btn-outline-warning"
+                    class="btn btn-sm btn-warning"
                     title="Buka Kunci Akun"
                     @click="confirmUnlock(u)"
                   >
@@ -700,7 +700,7 @@ onMounted(() => {
                   </button>
                   <button
                     type="button"
-                    class="btn btn-sm btn-outline-primary"
+                    class="btn btn-sm btn-primary"
                     title="Edit Profil & Akses Proyek"
                     @click="openEditModal(u)"
                   >
@@ -709,7 +709,7 @@ onMounted(() => {
                   <button
                     v-if="u.id !== 1 && u.status === 'active'"
                     type="button"
-                    class="btn btn-sm btn-outline-danger"
+                    class="btn btn-sm btn-danger"
                     title="Nonaktifkan Pengguna"
                     @click="handleDeactivate(u)"
                   >
@@ -720,6 +720,88 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Mobile Card List (< 768px) -->
+      <div class="d-md-none list-group list-group-flush">
+        <div v-if="isLoading" class="p-4 text-center text-secondary">
+          <div class="spinner-border text-primary me-2" role="status"></div>
+          Memuat data personel SOC...
+        </div>
+        <div v-else-if="filteredUsers.length === 0" class="p-4 text-center text-secondary">
+          Tidak ada personel yang sesuai dengan kriteria pencarian.
+        </div>
+        <div
+          v-for="u in filteredUsers"
+          :key="u.id"
+          class="list-group-item p-3"
+        >
+          <!-- Header: Avatar, Name & Status -->
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center gap-2 text-truncate me-2">
+              <span class="avatar avatar-sm bg-primary-lt text-primary fw-bold rounded flex-shrink-0">
+                {{ getInitials(u.name) }}
+              </span>
+              <div class="d-flex flex-column text-truncate">
+                <span class="fw-bold text-body text-truncate">{{ u.name }}</span>
+                <span class="text-secondary small text-truncate">{{ u.email }}</span>
+              </div>
+            </div>
+            <span v-if="isUserLocked(u)" class="badge bg-danger-lt flex-shrink-0">TERKUNCI</span>
+            <span v-else-if="u.status === 'active'" class="badge bg-success-lt flex-shrink-0">AKTIF</span>
+            <span v-else class="badge bg-secondary-lt flex-shrink-0">NONAKTIF</span>
+          </div>
+
+          <!-- Metadata Badges: Role, Department & Auth -->
+          <div class="d-flex flex-wrap align-items-center gap-1 mb-2">
+            <span class="badge" :class="getRoleBadgeClass(u.role?.name)">
+              {{ u.role?.display_name || 'User' }}
+            </span>
+            <span v-if="u.department" class="badge bg-secondary-lt">
+              {{ u.department }}
+            </span>
+            <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.65rem;">
+              {{ (u.auth_provider || 'local').toUpperCase() }}
+            </span>
+            <span v-if="u.two_factor_enabled" class="badge bg-info-lt">2FA</span>
+          </div>
+
+          <!-- Scope Proyek -->
+          <div class="small mb-2">
+            <span class="text-secondary">Scope: </span>
+            <span v-if="u.role?.name === 'super_admin'" class="badge bg-purple-lt">Global (Semua Proyek)</span>
+            <span v-else-if="u.projects && u.projects.length > 0" class="badge bg-azure-lt">{{ u.projects.length }} Proyek Ditugaskan</span>
+            <span v-else class="text-secondary fst-italic">Belum Ditugaskan</span>
+          </div>
+
+          <!-- Actions -->
+          <div class="d-flex align-items-center gap-2 pt-2 border-top">
+            <button
+              v-if="isUserLocked(u)"
+              type="button"
+              class="btn btn-sm btn-warning flex-fill"
+              @click="confirmUnlock(u)"
+            >
+              Buka Kunci
+            </button>
+            <button
+              type="button"
+              class="btn btn-sm btn-primary flex-fill"
+              @click="openEditModal(u)"
+            >
+              Edit Personel
+            </button>
+            <button
+              v-if="u.id !== 1 && u.status === 'active'"
+              type="button"
+              class="btn btn-sm btn-danger flex-fill"
+              @click="handleDeactivate(u)"
+              title="Nonaktifkan Pengguna"
+            >
+              Nonaktifkan
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1004,13 +1086,13 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="modal-footer border-top py-3 px-4">
-              <button type="button" class="btn btn-link link-secondary" @click="closeModal">
+            <div class="modal-footer border-top py-3 px-4 d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
+              <button type="button" class="btn btn-secondary w-100 w-sm-auto justify-content-center" @click="closeModal">
                 Batal
               </button>
-              <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
+              <button type="submit" class="btn btn-primary d-flex align-items-center justify-content-center gap-2 w-100 w-sm-auto py-2" :disabled="isSubmitting">
                 <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                {{ modalMode === 'create' ? 'Simpan Personel & Akses' : 'Perbarui Data & Scope' }}
+                <span>{{ modalMode === 'create' ? 'Simpan Personel & Akses' : 'Perbarui Data & Scope' }}</span>
               </button>
             </div>
           </form>

@@ -357,7 +357,7 @@ onMounted(() => {
             <button
               v-if="searchQuery || filterFormat !== 'all'"
               type="button"
-              class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset seluruh filter"
             >
@@ -450,7 +450,7 @@ onMounted(() => {
                       <span>PDF</span>
                     </button>
                     <button
-                      class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1"
+                      class="btn btn-sm btn-secondary d-inline-flex align-items-center gap-1"
                       @click="openPreviewModal(r)"
                       title="Lihat Pratinjau Ringkasan JSON"
                     >
@@ -489,23 +489,23 @@ onMounted(() => {
             </div>
             <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
               <span>{{ formatDate(r.created_at) }}</span>
-              <div class="btn-group">
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary py-1 px-2 d-inline-flex align-items-center gap-1"
-                  @click.stop="downloadPdf(r)"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
-                  <span>PDF</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-secondary py-1 px-2"
-                  @click.stop="openPreviewModal(r)"
-                >
-                  Pratinjau
-                </button>
-              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 pt-2">
+              <button
+                type="button"
+                class="btn btn-sm btn-primary flex-fill d-inline-flex align-items-center justify-content-center gap-1"
+                @click.stop="downloadPdf(r)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
+                <span>Unduh PDF</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-sm btn-secondary flex-fill"
+                @click.stop="openPreviewModal(r)"
+              >
+                Pratinjau
+              </button>
             </div>
           </div>
         </div>
@@ -575,10 +575,10 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
               <button
                 type="button"
-                class="btn btn-link link-secondary"
+                class="btn btn-secondary w-100 w-sm-auto justify-content-center"
                 :disabled="isGenerating"
                 @click="closeGenerateModal"
               >
@@ -586,7 +586,7 @@ onMounted(() => {
               </button>
               <button
                 type="submit"
-                class="btn btn-primary ms-auto"
+                class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto py-2"
                 :disabled="isGenerating || completedScanJobs.length === 0"
               >
                 <span v-if="isGenerating" class="spinner-border spinner-border-sm me-1" role="status"></span>

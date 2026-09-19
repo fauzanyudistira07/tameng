@@ -497,7 +497,7 @@ onMounted(() => {
             <button
               v-if="searchQuery || filterStatus !== 'all' || filterProfile !== 'all'"
               type="button"
-              class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset seluruh filter"
             >
@@ -653,9 +653,11 @@ onMounted(() => {
             </div>
             <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
               <span style="font-size: 0.75rem;">Sampai: {{ formatDate(auth.valid_until) }}</span>
+            </div>
+            <div class="pt-2">
               <button
                 type="button"
-                class="btn btn-sm btn-outline-primary py-1 px-2 d-inline-flex align-items-center gap-1"
+                class="btn btn-sm btn-primary flex-fill w-100 d-inline-flex align-items-center justify-content-center gap-1"
                 @click.stop="openInspectModal(auth)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
@@ -736,7 +738,11 @@ onMounted(() => {
                     value="target"
                     v-model="authForm.asset_type"
                   />
-                  <label class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center gap-1" for="btnTarget">
+                  <label
+                    class="btn d-inline-flex align-items-center justify-content-center gap-1"
+                    :class="authForm.asset_type === 'target' ? 'btn-primary' : 'btn-secondary'"
+                    for="btnTarget"
+                  >
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 12m-5 0a5 5 0 1 0 10 0a5 5 0 1 0 -10 0" /><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
                     <span>Target (Web, API, Mobile APK)</span>
                   </label>
@@ -749,7 +755,11 @@ onMounted(() => {
                     value="repository"
                     v-model="authForm.asset_type"
                   />
-                  <label class="btn btn-outline-primary d-inline-flex align-items-center justify-content-center gap-1" for="btnRepo">
+                  <label
+                    class="btn d-inline-flex align-items-center justify-content-center gap-1"
+                    :class="authForm.asset_type === 'repository' ? 'btn-primary' : 'btn-secondary'"
+                    for="btnRepo"
+                  >
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5" /><path d="M12 12l8 -4.5" /><path d="M12 12l0 9" /><path d="M12 12l-8 -4.5" /></svg>
                     <span>Repositori Kode Sumber</span>
                   </label>
@@ -859,10 +869,10 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
               <button
                 type="button"
-                class="btn btn-link link-secondary"
+                class="btn btn-secondary w-100 w-sm-auto justify-content-center"
                 :disabled="isSaving"
                 @click="closeCreateModal"
               >
@@ -870,7 +880,7 @@ onMounted(() => {
               </button>
               <button
                 type="submit"
-                class="btn btn-primary ms-auto"
+                class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto py-2"
                 :disabled="isSaving"
               >
                 <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" role="status"></span>

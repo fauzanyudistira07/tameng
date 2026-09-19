@@ -310,7 +310,7 @@ onMounted(() => {
           <div class="col-auto ms-auto d-print-none d-flex align-items-center gap-2">
             <button
               type="button"
-              class="btn btn-outline-secondary d-flex align-items-center gap-1"
+              class="btn btn-secondary d-flex align-items-center gap-1"
               :disabled="isLoading"
               @click="loadData"
             >
@@ -537,7 +537,7 @@ onMounted(() => {
             <button
               v-if="searchQuery || filterSeverity !== 'all' || filterStatus !== 'all' || filterProject !== 'all'"
               type="button"
-              class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset seluruh filter"
             >
@@ -699,17 +699,17 @@ onMounted(() => {
               </span>
               <span style="font-size: 0.75rem;">{{ formatDate(f.discovered_at) }}</span>
             </div>
-            <div class="d-flex align-items-center justify-content-end gap-1 mt-2 pt-1 border-top">
+            <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
               <button
                 type="button"
-                class="btn btn-sm btn-outline-primary py-1 px-2"
+                class="btn btn-sm btn-primary flex-fill"
                 @click.stop="openFindingModal(f, 'details')"
               >
                 Detail
               </button>
               <button
                 type="button"
-                class="btn btn-sm btn-outline-indigo py-1 px-2 d-inline-flex align-items-center gap-1"
+                class="btn btn-sm btn-indigo flex-fill d-inline-flex align-items-center justify-content-center gap-1"
                 @click.stop="openFindingModal(f, 'ai')"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /><path d="M15 9m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
@@ -717,7 +717,7 @@ onMounted(() => {
               </button>
               <button
                 type="button"
-                class="btn btn-sm btn-outline-secondary py-1 px-2"
+                class="btn btn-sm btn-secondary flex-fill"
                 @click.stop="openFindingModal(f, 'triage')"
               >
                 Triage

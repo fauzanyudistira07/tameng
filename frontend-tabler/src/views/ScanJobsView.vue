@@ -871,9 +871,9 @@ onUnmounted(() => {
 
       <!-- ROW 2: Master Card Pekerjaan Scan -->
       <div class="card">
-        <div class="card-header border-bottom py-2">
+        <div class="card-header border-bottom py-2 d-flex flex-column flex-md-row align-items-stretch align-items-md-center justify-content-between gap-2">
           <!-- Status Filter Tabs -->
-          <ul class="nav nav-pills card-header-pills me-auto">
+          <ul class="nav nav-pills card-header-pills flex-wrap gap-1 me-auto">
             <li class="nav-item">
               <button
                 class="nav-link"
@@ -955,8 +955,8 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Master Table -->
-        <div class="table-responsive">
+        <!-- Master Table (Desktop >= 768px) -->
+        <div class="table-responsive d-none d-md-block">
           <table class="table table-vcenter table-hover card-table">
             <thead>
               <tr>
@@ -1138,7 +1138,7 @@ onUnmounted(() => {
                     <div class="btn-list flex-nowrap justify-content-end">
                       <!-- Rerun Button -->
                       <button
-                        class="btn btn-sm btn-outline-secondary"
+                        class="btn btn-sm btn-secondary"
                         :disabled="isRerunningId === job.id || job.status === 'running'"
                         @click.stop="promptRerun(job)"
                         title="Jalankan ulang pemindaian ini"
@@ -1265,9 +1265,111 @@ onUnmounted(() => {
           </table>
         </div>
 
+        <!-- Mobile Card List (< 768px) -->
+        <div class="d-md-none list-group list-group-flush">
+          <div v-if="filteredJobs.length === 0" class="p-4 text-center text-secondary">
+            Tidak ada pekerjaan scan ditemukan.
+          </div>
+          <div
+            v-for="job in paginatedJobs"
+            :key="job.id"
+            class="list-group-item p-3"
+            :class="{ 'bg-primary-subtle bg-opacity-10': expandedJobId === job.id }"
+          >
+            <!-- Header: Code & Status -->
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <span class="fw-bold font-monospace text-primary">
+                #{{ job.code }}
+              </span>
+              <span class="badge" :class="getJobStatusBadgeClass(job.status)">
+                {{ job.status.toUpperCase() }}
+              </span>
+            </div>
+
+            <!-- Target & Project -->
+            <div class="fw-semibold text-body mb-1">
+              {{ job.repository?.name || job.target?.name || '-' }}
+            </div>
+            <div class="d-flex align-items-center gap-1 text-secondary small mb-2">
+              <span class="badge bg-blue-lt font-monospace">{{ job.project?.code || 'PRJ' }}</span>
+              <span class="text-truncate">{{ job.project?.name || '-' }}</span>
+            </div>
+
+            <!-- Profile, Engine, and Execution Time -->
+            <div class="d-flex align-items-center justify-content-between text-secondary small mb-2">
+              <span class="badge bg-secondary-lt font-monospace">
+                {{ job.scanProfile?.name || 'Standard Scan' }}
+              </span>
+              <span class="font-monospace" style="font-size: 0.75rem;">
+                {{ formatTime(job.started_at || job.queued_at) }}
+              </span>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="mb-3">
+              <div class="d-flex justify-content-between text-secondary small font-monospace mb-1" style="font-size: 0.72rem;">
+                <span>{{ job.progress_stage || 'Menunggu mesin...' }}</span>
+                <span class="fw-bold">{{ job.progress || 0 }}%</span>
+              </div>
+              <div class="progress progress-sm">
+                <div
+                  class="progress-bar"
+                  :class="{
+                    'bg-primary progress-bar-striped progress-bar-animated': job.status === 'running',
+                    'bg-success': job.status === 'completed',
+                    'bg-danger': job.status === 'failed',
+                    'bg-secondary': job.status === 'queued'
+                  }"
+                  :style="{ width: `${job.progress || 0}%` }"
+                  role="progressbar"
+                ></div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex align-items-center gap-2 pt-2 border-top">
+              <button
+                type="button"
+                class="btn btn-sm flex-fill"
+                :class="expandedJobId === job.id ? 'btn-secondary' : 'btn-primary'"
+                @click.stop="toggleExpandRow(job.id)"
+              >
+                {{ expandedJobId === job.id ? 'Tutup Rincian' : 'Log Mesin' }}
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-sm btn-secondary flex-fill d-flex align-items-center justify-content-center gap-1"
+                @click.stop="openRerunModal(job)"
+                title="Jalankan ulang scan"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                <span>Rerun</span>
+              </button>
+            </div>
+
+            <!-- Mobile Expanded Log Section -->
+            <div v-if="expandedJobId === job.id" class="mt-3 pt-2 border-top">
+              <div class="card card-sm bg-dark-subtle border-0">
+                <div class="card-header bg-transparent py-2">
+                  <h5 class="card-title mb-0 small text-azure">Log Eksekusi Mesin</h5>
+                </div>
+                <div class="card-body p-2">
+                  <div class="small font-monospace text-secondary mb-1">
+                    Mesin: <span class="text-body fw-semibold">{{ job.engine?.name || 'Engine Default' }}</span>
+                  </div>
+                  <div class="bg-black text-green font-monospace p-2 rounded small" style="font-size: 0.72rem; max-height: 160px; overflow-y: auto;">
+                    {{ job.execution_log || 'Belum ada log eksekusi mesin yang tersedia.' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Card Footer: Pagination -->
-        <div class="card-footer d-flex align-items-center justify-content-between py-2">
-          <div class="text-secondary small">
+        <div class="card-footer d-flex flex-column flex-sm-row align-items-center justify-content-between gap-2 py-2">
+          <div class="text-secondary small text-center text-sm-start">
             Menampilkan
             <span class="fw-bold">{{ (currentPage - 1) * pageSize + 1 }}</span>
             -
@@ -1275,7 +1377,7 @@ onUnmounted(() => {
             dari <span class="fw-bold">{{ filteredJobs.length }}</span> pekerjaan scan
           </div>
 
-          <ul class="pagination pagination-sm m-0">
+          <ul class="pagination pagination-sm m-0 flex-wrap justify-content-center">
             <li class="page-item" :class="{ disabled: currentPage === 1 }">
               <button class="page-link" @click="currentPage--" :disabled="currentPage === 1">
                 Sebelumnya
@@ -1412,13 +1514,13 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-link link-secondary" @click="closeCreateModal">
+          <div class="modal-footer d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
+            <button type="button" class="btn btn-secondary w-100 w-sm-auto justify-content-center" @click="closeCreateModal">
               Batal
             </button>
             <button
               type="button"
-              class="btn btn-primary"
+              class="btn btn-primary d-flex align-items-center justify-content-center gap-2 w-100 w-sm-auto py-2"
               :disabled="isSubmitting || !resolvedAuthorization"
               @click="handleCreateScan"
             >

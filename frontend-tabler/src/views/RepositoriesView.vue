@@ -447,7 +447,7 @@ watch(() => route.query.project_id, (newVal) => {
               <div v-if="alertMessage.scanJobCode" class="mt-2">
                 <router-link
                   to="/pekerjaan-scan"
-                  class="btn btn-sm btn-outline-success py-0 px-2 fw-bold text-decoration-none"
+                  class="btn btn-sm btn-success py-0 px-2 fw-bold text-decoration-none"
                   style="font-size: 0.75rem;"
                 >
                   Lihat di Pekerjaan Scan &rarr;
@@ -775,7 +775,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       type="button"
                       class="btn btn-sm d-flex align-items-center gap-1"
-                      :class="repo.metadata?.local_path ? 'btn-outline-secondary' : 'btn-success'"
+                      :class="repo.metadata?.local_path ? 'btn-secondary' : 'btn-success'"
                       :disabled="syncingRepoId === repo.id"
                       @click="syncWorkspace(repo)"
                       :title="repo.metadata?.local_path ? 'Tarik Kode Terbaru (Git Pull)' : 'Clone Repositori ke Worker'"
@@ -788,7 +788,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <!-- Trigger SAST Scan -->
                     <button
                       type="button"
-                      class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-primary d-flex align-items-center gap-1"
                       @click="openScanModal(repo)"
                       title="Pindai SAST (Semgrep, Gitleaks, Trivy)"
                     >
@@ -800,7 +800,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="repo.metadata?.local_path && canManage"
                       type="button"
-                      class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-danger d-flex align-items-center gap-1"
                       :disabled="clearingRepoId === repo.id"
                       @click="clearWorkspace(repo)"
                       title="Bersihkan File Workspace Lokal Server"
@@ -814,7 +814,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="canManage"
                       type="button"
-                      class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-secondary d-flex align-items-center gap-1"
                       @click="openEditModal(repo)"
                       title="Ubah Konfigurasi Repositori"
                     >
@@ -934,7 +934,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       type="button"
                       class="btn btn-sm w-100 d-flex align-items-center justify-content-center gap-1"
-                      :class="repo.metadata?.local_path ? 'btn-outline-secondary' : 'btn-success'"
+                      :class="repo.metadata?.local_path ? 'btn-secondary' : 'btn-success'"
                       :disabled="syncingRepoId === repo.id"
                       @click="syncWorkspace(repo)"
                     >
@@ -946,7 +946,7 @@ watch(() => route.query.project_id, (newVal) => {
                   <div class="col-6">
                     <button
                       type="button"
-                      class="btn btn-sm btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-1"
+                      class="btn btn-sm btn-primary w-100 d-flex align-items-center justify-content-center gap-1"
                       @click="openScanModal(repo)"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7v-1a2 2 0 0 1 2 -2h2" /><path d="M4 17v1a2 2 0 0 0 2 2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v1" /><path d="M16 20h2a2 2 0 0 0 2 -2v-1" /><path d="M5 12l14 0" /></svg>
@@ -957,7 +957,7 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="canManage"
                       type="button"
-                      class="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-1"
+                      class="btn btn-sm btn-secondary w-100 d-flex align-items-center justify-content-center gap-1"
                       @click="openEditModal(repo)"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
@@ -967,7 +967,7 @@ watch(() => route.query.project_id, (newVal) => {
                   <div v-if="repo.metadata?.local_path && canManage" class="col-6">
                     <button
                       type="button"
-                      class="btn btn-sm btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-1"
+                      class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center gap-1"
                       :disabled="clearingRepoId === repo.id"
                       @click="clearWorkspace(repo)"
                     >
@@ -1099,11 +1099,11 @@ watch(() => route.query.project_id, (newVal) => {
               </div>
             </div>
 
-            <div class="modal-footer bg-body-tertiary py-2 d-flex justify-content-between">
-              <button type="button" class="btn btn-outline-secondary" @click="closeModal" :disabled="isSaving">
+            <div class="modal-footer bg-body-tertiary py-2 d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
+              <button type="button" class="btn btn-secondary w-100 w-sm-auto justify-content-center" @click="closeModal" :disabled="isSaving">
                 Batal
               </button>
-              <button type="submit" class="btn btn-primary d-flex align-items-center gap-1" :disabled="isSaving">
+              <button type="submit" class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto py-2" :disabled="isSaving">
                 <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" role="status"></span>
                 <span>{{ editingRepoId ? 'Simpan Perubahan' : 'Hubungkan' }}</span>
               </button>

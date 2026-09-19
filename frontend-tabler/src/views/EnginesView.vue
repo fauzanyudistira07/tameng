@@ -233,7 +233,7 @@ onMounted(() => {
               <button
                 type="button"
                 class="btn d-inline-flex align-items-center gap-1"
-                :class="activeTab === 'engines' ? 'btn-primary' : 'btn-outline-secondary'"
+                :class="activeTab === 'engines' ? 'btn-primary' : 'btn-secondary'"
                 @click="activeTab = 'engines'"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z" /><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></svg>
@@ -242,7 +242,7 @@ onMounted(() => {
               <button
                 type="button"
                 class="btn d-inline-flex align-items-center gap-1"
-                :class="activeTab === 'profiles' ? 'btn-primary' : 'btn-outline-secondary'"
+                :class="activeTab === 'profiles' ? 'btn-primary' : 'btn-secondary'"
                 @click="activeTab = 'profiles'"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /></svg>
@@ -436,7 +436,7 @@ onMounted(() => {
             <button
               v-if="searchQuery || selectedDomain !== 'all' || selectedStatus !== 'all' || selectedResource !== 'all'"
               type="button"
-              class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset filter"
             >
@@ -591,16 +591,17 @@ onMounted(() => {
             </code>
             <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
               <span style="font-size: 0.75rem;">Cek: {{ formatDate(engine.last_health_check) }}</span>
+            </div>
+            <div v-if="canManage" class="pt-2">
               <button
-                v-if="canManage"
                 type="button"
-                class="btn btn-sm btn-outline-secondary py-1 px-2 d-inline-flex align-items-center gap-1"
+                class="btn btn-sm btn-secondary flex-fill w-100 d-inline-flex align-items-center justify-content-center gap-1"
                 :disabled="actionLoadingId === engine.id"
                 @click="runHealthCheck(engine)"
               >
                 <span v-if="actionLoadingId === engine.id" class="spinner-border spinner-border-sm" role="status"></span>
                 <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h4l3 8l4 -16l3 8h4" /></svg>
-                <span>Cek Image</span>
+                <span>Cek Image Engine</span>
               </button>
             </div>
           </div>

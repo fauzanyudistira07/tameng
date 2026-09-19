@@ -538,7 +538,7 @@ onMounted(() => {
                   <div class="d-flex align-items-center justify-content-center gap-2">
                     <button
                       type="button"
-                      class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-secondary d-flex align-items-center gap-1"
                       @click="goToRepositories(project)"
                       title="Lihat Repositori Proyek Ini"
                     >
@@ -547,7 +547,7 @@ onMounted(() => {
                     </button>
                     <button
                       type="button"
-                      class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-secondary d-flex align-items-center gap-1"
                       @click="goToTargets(project)"
                       title="Lihat Target Endpoint Proyek Ini"
                     >
@@ -557,7 +557,7 @@ onMounted(() => {
                     <button
                       v-if="canManage"
                       type="button"
-                      class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-primary d-flex align-items-center gap-1"
                       @click="openEditModal(project)"
                       title="Ubah Rincian Proyek"
                     >
@@ -646,38 +646,32 @@ onMounted(() => {
                 </div>
 
                 <!-- Actions: Repo, Target, Edit -->
-                <div class="row g-2">
-                  <div class="col-4">
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-1"
-                      @click="goToRepositories(project)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M7 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M17 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M7 8l0 8" /><path d="M9 18h6a2 2 0 0 0 2 -2v-5" /><path d="M14 14l3 -3l3 3" /></svg>
-                      <span>Repo</span>
-                    </button>
-                  </div>
-                  <div class="col-4">
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-1"
-                      @click="goToTargets(project)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M3.6 9h16.8" /><path d="M3.6 15h16.8" /><path d="M11.5 3a17 17 0 0 0 0 18" /><path d="M12.5 3a17 17 0 0 1 0 18" /></svg>
-                      <span>Target</span>
-                    </button>
-                  </div>
-                  <div class="col-4">
-                    <button
-                      v-if="canManage"
-                      type="button"
-                      class="btn btn-sm btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-1"
-                      @click="openEditModal(project)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
-                      <span>Edit</span>
-                    </button>
-                  </div>
+                <div class="d-flex align-items-center gap-2">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-secondary flex-fill d-flex align-items-center justify-content-center gap-1"
+                    @click="goToRepositories(project)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M7 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M17 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M7 8l0 8" /><path d="M9 18h6a2 2 0 0 0 2 -2v-5" /><path d="M14 14l3 -3l3 3" /></svg>
+                    <span>Repo</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-secondary flex-fill d-flex align-items-center justify-content-center gap-1"
+                    @click="goToTargets(project)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M3.6 9h16.8" /><path d="M3.6 15h16.8" /><path d="M11.5 3a17 17 0 0 0 0 18" /><path d="M12.5 3a17 17 0 0 1 0 18" /></svg>
+                    <span>Target</span>
+                  </button>
+                  <button
+                    v-if="canManage"
+                    type="button"
+                    class="btn btn-sm btn-primary flex-fill d-flex align-items-center justify-content-center gap-1"
+                    @click="openEditModal(project)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
+                    <span>Edit</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -779,11 +773,11 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="modal-footer bg-body-tertiary py-2 d-flex justify-content-between">
-              <button type="button" class="btn btn-outline-secondary" @click="closeModal" :disabled="isSaving">
+            <div class="modal-footer bg-body-tertiary py-2 d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
+              <button type="button" class="btn btn-secondary w-100 w-sm-auto justify-content-center" @click="closeModal" :disabled="isSaving">
                 Batal
               </button>
-              <button type="submit" class="btn btn-primary d-flex align-items-center gap-1" :disabled="isSaving">
+              <button type="submit" class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto py-2" :disabled="isSaving">
                 <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" role="status"></span>
                 <span>{{ editingProjectId ? 'Simpan Perubahan' : 'Buat Proyek' }}</span>
               </button>
