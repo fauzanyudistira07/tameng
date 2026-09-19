@@ -188,4 +188,63 @@ button:active {
   outline: none !important;
   box-shadow: none !important;
 }
+
+/* Normalisasi Margin & Ukuran Icon di Seluruh Tombol */
+.btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.375rem !important;
+}
+
+.btn .icon,
+.btn svg.icon {
+  margin: 0 !important;
+  vertical-align: middle !important;
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  gap: 0.35rem !important;
+}
+
+.btn-sm .icon,
+.btn-sm svg.icon {
+  width: 0.95rem !important;
+  height: 0.95rem !important;
+  min-width: 0.95rem !important;
+  margin: 0 !important;
+}
+
+.btn-xs {
+  gap: 0.25rem !important;
+}
+
+.btn-xs .icon,
+.btn-xs svg.icon {
+  width: 0.85rem !important;
+  height: 0.85rem !important;
+  min-width: 0.85rem !important;
+  margin: 0 !important;
+}
+
+/* Tombol icon saja tanpa teks */
+.btn-icon .icon,
+.btn-icon svg.icon,
+.btn:has(> svg:only-child) svg,
+.btn > svg:only-child {
+  margin: 0 !important;
+}
+
+/* Pemisahan antar tombol di dalam aksi tabel */
+.table td .btn-group {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.375rem !important;
+}
+
+.table td .btn-group > .btn {
+  border-radius: var(--tblr-border-radius, 4px) !important;
+  margin: 0 !important;
+}
 </style>

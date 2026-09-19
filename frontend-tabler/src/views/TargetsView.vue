@@ -937,7 +937,7 @@ watch(() => route.query.project_id, (newVal) => {
                   </div>
                 </td>
                 <td class="text-center">
-                  <div class="d-flex align-items-center justify-content-center gap-1">
+                  <div class="d-flex align-items-center justify-content-center gap-2">
                     <!-- Trigger Scan -->
                     <button
                       type="button"
