@@ -49,7 +49,7 @@ function handleSelect(url?: string) {
 </script>
 
 <template>
-      <header class="navbar navbar-expand d-flex flex-wrap p-0 d-print-none border-bottom sticky-top bg-body">
+      <header class="navbar navbar-expand-md d-flex flex-wrap p-0 d-print-none border-bottom sticky-top bg-body">
         <div class="container-fluid px-2 px-md-3 py-2">
           <!-- Tombol Hamburger Navigasi Mobile (< 992px) -->
           <button
@@ -264,8 +264,8 @@ function handleSelect(url?: string) {
             </div>
           </div>
           <!-- Search Box Desktop & Tablet (>= 768px) -->
-          <div class="collapse navbar-collapse d-none d-md-flex" id="navbar-menu">
-            <div class="search-container position-relative my-2 my-md-0 flex-grow-1 flex-md-grow-0 order-first order-md-last me-auto" style="width: 100%; max-width: 480px;">
+          <div class="d-none d-md-flex align-items-center my-2 my-md-0 flex-grow-1 flex-md-grow-0 me-auto" id="navbar-menu" style="width: 100%; max-width: 480px;">
+            <div class="search-container position-relative w-100">
               <div class="input-icon">
                 <span class="input-icon-addon">
                   <!-- Download SVG icon from http://tabler-icons.io/i/search -->
@@ -435,3 +435,11 @@ function handleSelect(url?: string) {
         </div>
       </header>
 </template>
+
+<style scoped>
+@media (max-width: 767.98px) {
+  #navbar-menu {
+    display: none !important;
+  }
+}
+</style>

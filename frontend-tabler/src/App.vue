@@ -152,4 +152,12 @@ td.col-index,
   color: #ffffff !important;
   stroke: #ffffff !important;
 }
+
+/* Sembunyikan search box desktop pada mobile (< 768px) */
+@media (max-width: 767.98px) {
+  .navbar #navbar-menu,
+  #navbar-menu {
+    display: none !important;
+  }
+}
 </style>
