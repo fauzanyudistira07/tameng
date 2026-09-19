@@ -329,7 +329,7 @@ onMounted(() => {
             <div class="card-body">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-primary-lt text-primary avatar avatar-sm">
+                  <span class="bg-primary-lt text-primary avatar avatar-sm rounded">
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /></svg>
                   </span>
                 </div>
@@ -348,8 +348,8 @@ onMounted(() => {
             <div class="card-body">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-danger-lt text-danger avatar avatar-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                  <span class="bg-danger-lt text-danger avatar avatar-sm rounded">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12c2 -2.96 0 -7 -1 -8c0 3.038 -1.773 4.741 -3 6c-1.226 1.26 -2 3.24 -2 5a6 6 0 1 0 12 0c0 -1.532 -1.056 -3.94 -2 -5c-1.786 3 -2.791 3 -4 2z" /></svg>
                   </span>
                 </div>
                 <div class="col">
@@ -367,8 +367,8 @@ onMounted(() => {
             <div class="card-body">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-warning-lt text-warning avatar avatar-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                  <span class="bg-warning-lt text-warning avatar avatar-sm rounded">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" /><path d="M12 16h.01" /></svg>
                   </span>
                 </div>
                 <div class="col">
@@ -386,8 +386,8 @@ onMounted(() => {
             <div class="card-body">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-yellow-lt text-yellow avatar avatar-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h18" /></svg>
+                  <span class="bg-yellow-lt text-yellow avatar avatar-sm rounded">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
                   </span>
                 </div>
                 <div class="col">
@@ -405,8 +405,8 @@ onMounted(() => {
             <div class="card-body">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-info-lt text-info avatar avatar-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 8l.01 0" /><path d="M12 12l0 4" /></svg>
+                  <span class="bg-info-lt text-info avatar avatar-sm rounded">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M8 12l4 4l4 -4" /><path d="M12 8v8" /></svg>
                   </span>
                 </div>
                 <div class="col">
@@ -424,7 +424,7 @@ onMounted(() => {
             <div class="card-body">
               <div class="row align-items-center">
                 <div class="col-auto">
-                  <span class="bg-secondary-lt text-secondary avatar avatar-sm">
+                  <span class="bg-secondary-lt text-secondary avatar avatar-sm rounded">
                     <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 9h.01" /><path d="M11 12h1v4h1" /></svg>
                   </span>
                 </div>

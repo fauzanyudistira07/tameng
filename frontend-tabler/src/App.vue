@@ -247,4 +247,84 @@ button:active {
   border-radius: var(--tblr-border-radius, 4px) !important;
   margin: 0 !important;
 }
+
+/* Peningkatan kontras avatar icon pada kartu statistik (Light & Dark Mode) */
+.card .avatar.bg-primary-lt {
+  background-color: rgba(32, 107, 196, 0.15) !important;
+  border: 1px solid rgba(32, 107, 196, 0.35) !important;
+  color: #206bc4 !important;
+}
+
+.card .avatar.bg-danger-lt {
+  background-color: rgba(214, 57, 57, 0.15) !important;
+  border: 1px solid rgba(214, 57, 57, 0.35) !important;
+  color: #d63939 !important;
+}
+
+.card .avatar.bg-warning-lt {
+  background-color: rgba(247, 103, 7, 0.15) !important;
+  border: 1px solid rgba(247, 103, 7, 0.35) !important;
+  color: #f76707 !important;
+}
+
+.card .avatar.bg-yellow-lt {
+  background-color: rgba(245, 159, 0, 0.15) !important;
+  border: 1px solid rgba(245, 159, 0, 0.35) !important;
+  color: #f59f00 !important;
+}
+
+.card .avatar.bg-info-lt {
+  background-color: rgba(66, 153, 225, 0.15) !important;
+  border: 1px solid rgba(66, 153, 225, 0.35) !important;
+  color: #4299e1 !important;
+}
+
+.card .avatar.bg-secondary-lt {
+  background-color: rgba(108, 117, 125, 0.15) !important;
+  border: 1px solid rgba(108, 117, 125, 0.35) !important;
+  color: #6c757d !important;
+}
+
+[data-bs-theme="dark"] .card .avatar.bg-primary-lt {
+  background-color: rgba(32, 107, 196, 0.25) !important;
+  border: 1px solid rgba(66, 153, 225, 0.45) !important;
+  color: #60a5fa !important;
+}
+
+[data-bs-theme="dark"] .card .avatar.bg-danger-lt {
+  background-color: rgba(214, 57, 57, 0.25) !important;
+  border: 1px solid rgba(248, 113, 113, 0.45) !important;
+  color: #f87171 !important;
+}
+
+[data-bs-theme="dark"] .card .avatar.bg-warning-lt {
+  background-color: rgba(247, 103, 7, 0.25) !important;
+  border: 1px solid rgba(251, 146, 60, 0.45) !important;
+  color: #fb923c !important;
+}
+
+[data-bs-theme="dark"] .card .avatar.bg-yellow-lt {
+  background-color: rgba(245, 159, 0, 0.25) !important;
+  border: 1px solid rgba(252, 211, 77, 0.45) !important;
+  color: #fcd34d !important;
+}
+
+[data-bs-theme="dark"] .card .avatar.bg-info-lt {
+  background-color: rgba(66, 153, 225, 0.25) !important;
+  border: 1px solid rgba(96, 165, 250, 0.45) !important;
+  color: #93c5fd !important;
+}
+
+[data-bs-theme="dark"] .card .avatar.bg-secondary-lt {
+  background-color: rgba(108, 117, 125, 0.25) !important;
+  border: 1px solid rgba(156, 163, 175, 0.45) !important;
+  color: #d1d5db !important;
+}
+
+/* Pastikan icon di dalam avatar selalu tajam dan berukuran pas */
+.card .avatar .icon {
+  width: 1.15rem !important;
+  height: 1.15rem !important;
+  stroke-width: 2.2 !important;
+}
 </style>
