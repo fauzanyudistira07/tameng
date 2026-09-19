@@ -1383,10 +1383,10 @@ onUnmounted(() => {
               </div>
 
               <!-- Submit Buttons -->
-              <div class="d-flex align-items-center justify-content-between pt-2 border-top">
+              <div class="d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2 pt-3 border-top">
                 <button
                   type="button"
-                  class="btn btn-outline-secondary"
+                  class="btn btn-outline-secondary w-100 w-sm-auto justify-content-center"
                   @click="resetForm"
                   :disabled="isSubmitting"
                 >
@@ -1394,7 +1394,7 @@ onUnmounted(() => {
                 </button>
                 <button
                   type="submit"
-                  class="btn btn-primary d-flex align-items-center gap-2"
+                  class="btn btn-primary d-flex align-items-center justify-content-center gap-2 w-100 w-sm-auto py-2"
                   :disabled="isSubmitting"
                 >
                   <svg
