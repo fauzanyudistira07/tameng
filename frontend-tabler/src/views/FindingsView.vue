@@ -630,14 +630,15 @@ onMounted(() => {
                 <td class="text-end">
                   <div class="btn-group">
                     <button
-                      class="btn btn-sm btn-ghost-primary d-inline-flex align-items-center gap-1"
+                      class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
                       @click="openFindingModal(f, 'details')"
                       title="Lihat Detail Temuan"
                     >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" /><path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" /></svg>
                       <span>Detail</span>
                     </button>
                     <button
-                      class="btn btn-sm btn-ghost-indigo d-inline-flex align-items-center gap-1"
+                      class="btn btn-sm btn-indigo d-inline-flex align-items-center gap-1"
                       @click="openFindingModal(f, 'ai')"
                       title="Solusi Remediasi AI"
                     >
@@ -646,10 +647,11 @@ onMounted(() => {
                     </button>
                     <button
                       v-if="canTriage"
-                      class="btn btn-sm btn-ghost-success d-inline-flex align-items-center gap-1"
+                      class="btn btn-sm btn-success d-inline-flex align-items-center gap-1"
                       @click="openFindingModal(f, 'triage')"
                       title="Triage & Update Status"
                     >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                       <span>Triage</span>
                     </button>
                   </div>

@@ -1847,7 +1847,7 @@ onUnmounted(() => {
                         <!-- Detail Inspector Toggle -->
                         <button
                           class="btn btn-sm"
-                          :class="expandedJobId === job.id ? 'btn-primary' : 'btn-ghost-primary'"
+                          :class="expandedJobId === job.id ? 'btn-secondary' : 'btn-azure'"
                           @click="toggleExpandRow(job.id)"
                           title="Buka log rincian mesin"
                         >

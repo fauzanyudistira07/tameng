@@ -522,11 +522,13 @@ onMounted(() => {
                 </td>
                 <td v-if="canManage" class="text-end">
                   <button
-                    class="btn btn-sm btn-ghost-primary"
+                    type="button"
+                    class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
                     @click="openEditModal(scope)"
                     title="Edit aturan scope"
                   >
-                    Edit
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
+                    <span>Edit</span>
                   </button>
                 </td>
               </tr>
@@ -720,10 +722,10 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="modal-footer">
+            <div class="modal-footer d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
               <button
                 type="button"
-                class="btn btn-link link-secondary"
+                class="btn btn-secondary w-100 w-sm-auto justify-content-center"
                 :disabled="isSaving"
                 @click="closeModal"
               >
@@ -731,7 +733,7 @@ onMounted(() => {
               </button>
               <button
                 type="submit"
-                class="btn btn-primary ms-auto"
+                class="btn btn-primary d-flex align-items-center justify-content-center gap-1 w-100 w-sm-auto py-2"
                 :disabled="isSaving"
               >
                 <span v-if="isSaving" class="spinner-border spinner-border-sm me-1" role="status"></span>

@@ -1166,7 +1166,7 @@ onUnmounted(() => {
                       <!-- Detail Inspector Toggle -->
                       <button
                         class="btn btn-sm"
-                        :class="expandedJobId === job.id ? 'btn-primary' : 'btn-ghost-primary'"
+                        :class="expandedJobId === job.id ? 'btn-secondary' : 'btn-primary'"
                         @click.stop="toggleExpandRow(job.id)"
                       >
                         Log Mesin

@@ -772,7 +772,7 @@ watch(() => route.query.project_id, (newVal) => {
             <button
               v-if="filterProject !== 'all' || filterType !== 'all' || filterVerification !== 'all'"
               type="button"
-              class="btn btn-sm btn-ghost-danger d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-danger d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset semua filter ke kondisi awal"
             >
@@ -925,12 +925,13 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="canManage"
                       type="button"
-                      class="btn btn-sm btn-link p-0 text-decoration-none d-block small"
-                      style="font-size: 0.72rem;"
+                      class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1 py-0 px-2 mt-1"
+                      style="font-size: 0.72rem; min-height: 24px;"
                       :disabled="verifyingTargetId === target.id"
                       @click="verifyTargetOwnership(target)"
                     >
                       <span v-if="verifyingTargetId === target.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                       <span>Verifikasi Sekarang</span>
                     </button>
                   </div>
@@ -1068,8 +1069,8 @@ watch(() => route.query.project_id, (newVal) => {
                       <button
                         v-if="target.base_url || target.hostname"
                         type="button"
-                        class="btn btn-sm btn-ghost-secondary p-0 px-1"
-                        style="height: 20px; font-size: 0.7rem;"
+                        class="btn btn-sm btn-secondary p-0 px-2"
+                        style="height: 22px; font-size: 0.7rem;"
                         @click="copyToClipboard(target.base_url || target.hostname)"
                         title="Salin Alamat"
                       >
@@ -1103,12 +1104,13 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="canManage"
                       type="button"
-                      class="btn btn-sm btn-link p-0 text-decoration-none small"
-                      style="font-size: 0.72rem;"
+                      class="btn btn-sm btn-warning d-inline-flex align-items-center gap-1 py-0 px-2"
+                      style="font-size: 0.72rem; min-height: 24px;"
                       :disabled="verifyingTargetId === target.id"
                       @click="verifyTargetOwnership(target)"
                     >
                       <span v-if="verifyingTargetId === target.id" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
                       <span>Verifikasi</span>
                     </button>
                   </div>
@@ -1297,7 +1299,8 @@ watch(() => route.query.project_id, (newVal) => {
                 <div class="mt-2 text-end">
                   <button
                     type="button"
-                    class="btn btn-link btn-sm p-0 text-decoration-none text-muted"
+                    class="btn btn-sm btn-secondary py-1 px-2"
+                    style="font-size: 0.75rem;"
                     @click="useManualIdentifier = !useManualIdentifier"
                   >
                     <span v-if="!useManualIdentifier">+ Opsi Package ID / Store URL manual</span>

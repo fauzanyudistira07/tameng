@@ -126,8 +126,8 @@ function handleSelect(url?: string) {
                         <button
                           v-if="unreadCount > 0"
                           type="button"
-                          class="btn btn-sm btn-link text-decoration-none p-0 text-muted"
-                          style="font-size: 0.75rem;"
+                          class="btn btn-xs btn-secondary py-0 px-2"
+                          style="font-size: 0.72rem;"
                           @click.stop="markAllAsRead"
                         >
                           Tandai semua dibaca

@@ -439,10 +439,15 @@ onMounted(() => {
                 </td>
                 <td class="text-end">
                   <button
-                    class="btn btn-sm btn-ghost-primary d-inline-flex align-items-center gap-1"
+                    class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
                     @click="openDetailModal(log)"
                     title="Lihat Metadata Snapshot JSON"
                   >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                      <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                    </svg>
                     <span>Payload</span>
                   </button>
                 </td>
@@ -488,6 +493,20 @@ onMounted(() => {
                 <span>{{ log.project?.name || log.scanJob?.code || log.target_type || 'Sistem Core' }}</span>
               </div>
               <code class="text-muted small font-monospace">{{ log.actor_ip || '127.0.0.1' }}</code>
+            </div>
+            <div class="pt-2 mt-1 border-top">
+              <button
+                type="button"
+                class="btn btn-sm btn-primary w-100 d-inline-flex align-items-center justify-content-center gap-1"
+                @click.stop="openDetailModal(log)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                  <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                </svg>
+                <span>Lihat Payload JSON</span>
+              </button>
             </div>
           </div>
         </div>

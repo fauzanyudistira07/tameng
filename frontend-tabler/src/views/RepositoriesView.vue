@@ -657,7 +657,7 @@ watch(() => route.query.project_id, (newVal) => {
             <button
               v-if="filterProject !== 'all' || filterProvider !== 'all' || filterWorkspace !== 'all'"
               type="button"
-              class="btn btn-sm btn-ghost-danger d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-danger d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset semua filter ke kondisi awal"
             >
@@ -896,8 +896,8 @@ watch(() => route.query.project_id, (newVal) => {
                       </span>
                       <button
                         type="button"
-                        class="btn btn-sm btn-ghost-secondary p-0 px-1"
-                        style="height: 20px; font-size: 0.7rem;"
+                        class="btn btn-sm btn-secondary p-0 px-2"
+                        style="height: 22px; font-size: 0.7rem;"
                         @click="copyToClipboard(repo.url)"
                         title="Salin URL"
                       >
@@ -1083,7 +1083,7 @@ watch(() => route.query.project_id, (newVal) => {
               <div v-if="repoForm.is_private" class="mb-2 p-3 bg-body-tertiary border rounded">
                 <label class="form-label small fw-bold d-flex align-items-center justify-content-between">
                   <span>Personal Access Token (PAT)</span>
-                  <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" @click="showPassword = !showPassword">
+                  <button type="button" class="btn btn-xs btn-secondary py-0 px-2" @click="showPassword = !showPassword">
                     {{ showPassword ? 'Sembunyikan' : 'Tampilkan' }}
                   </button>
                 </label>

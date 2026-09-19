@@ -524,7 +524,7 @@ onMounted(() => {
                 </td>
                 <td v-if="canManage" class="text-end">
                   <button
-                    class="btn btn-sm btn-ghost-secondary d-inline-flex align-items-center gap-1"
+                    class="btn btn-sm btn-secondary d-inline-flex align-items-center gap-1"
                     :disabled="actionLoadingId === engine.id"
                     @click="runHealthCheck(engine)"
                     title="Jalankan Preflight Docker Health Check"

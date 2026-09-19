@@ -601,7 +601,7 @@ onMounted(() => {
                 </td>
                 <td class="text-end">
                   <button
-                    class="btn btn-sm btn-ghost-primary d-inline-flex align-items-center gap-1"
+                    class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1"
                     @click="openInspectModal(auth)"
                     title="Inspeksi Snapshot Kebijakan & Scope"
                   >

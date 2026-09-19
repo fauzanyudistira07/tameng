@@ -432,7 +432,7 @@ onMounted(() => {
             <button
               v-if="filterCriticality !== 'all' || filterStatus !== 'all'"
               type="button"
-              class="btn btn-sm btn-ghost-danger d-flex align-items-center gap-1 filter-reset-btn"
+              class="btn btn-sm btn-danger d-flex align-items-center gap-1 filter-reset-btn"
               @click="resetFilters"
               title="Reset semua filter ke kondisi awal"
             >
