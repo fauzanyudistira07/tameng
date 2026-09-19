@@ -307,17 +307,6 @@ onMounted(() => {
               <span>Temuan Kerentanan (Vulnerability Center & AI Remediation)</span>
             </h2>
           </div>
-          <div class="col-auto ms-auto d-print-none d-flex align-items-center gap-2">
-            <button
-              type="button"
-              class="btn btn-secondary d-flex align-items-center gap-1"
-              :disabled="isLoading"
-              @click="loadData"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-              <span>Sinkronisasi Data</span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -451,11 +440,11 @@ onMounted(() => {
             <!-- Filter Severity -->
             <div class="filter-select-wrapper position-relative">
               <span class="select-prefix-icon text-danger">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
               </span>
               <select
                 v-model="filterSeverity"
-                class="form-select form-select-sm custom-filter-select"
+                class="form-select form-select-sm custom-filter-select filter-severity-select"
                 :class="{ 'filter-active': filterSeverity !== 'all' }"
                 title="Filter berdasarkan Severity"
               >
@@ -471,11 +460,11 @@ onMounted(() => {
             <!-- Filter Status -->
             <div class="filter-select-wrapper position-relative">
               <span class="select-prefix-icon text-teal">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h4l3 8l4 -16l3 8h4" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /></svg>
               </span>
               <select
                 v-model="filterStatus"
-                class="form-select form-select-sm custom-filter-select"
+                class="form-select form-select-sm custom-filter-select filter-status-select"
                 :class="{ 'filter-active': filterStatus !== 'all' }"
                 title="Filter Status Penanganan"
               >
@@ -493,11 +482,11 @@ onMounted(() => {
             <!-- Filter Project -->
             <div class="filter-select-wrapper position-relative">
               <span class="select-prefix-icon text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 4h6v8h-6z" /></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" /></svg>
               </span>
               <select
                 v-model="filterProject"
-                class="form-select form-select-sm custom-filter-select"
+                class="form-select form-select-sm custom-filter-select filter-project-select"
                 :class="{ 'filter-active': filterProject !== 'all' }"
                 title="Filter Proyek"
               >
@@ -927,34 +916,152 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.custom-filter-select {
-  padding-left: 2rem !important;
-  border-radius: 9999px !important;
-  font-size: 0.8125rem !important;
-  font-weight: 500 !important;
+.filter-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
+
+.filter-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .select-prefix-icon {
   position: absolute;
-  left: 0.65rem;
+  left: 0.85rem;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
   z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
-.modern-search-input {
+
+.custom-filter-select {
+  height: 38px !important;
+  padding-left: 2.45rem !important;
+  padding-right: 2.25rem !important;
   border-radius: 9999px !important;
-  padding-left: 2rem !important;
-  padding-right: 2rem !important;
-  min-width: 240px;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  background-color: var(--tblr-bg-surface);
+  border: 1px solid var(--tblr-border-color);
+  color: var(--tblr-body-color);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
 }
+
+.custom-filter-select:hover {
+  border-color: rgba(var(--tblr-primary-rgb), 0.5);
+}
+
+.custom-filter-select:focus {
+  border-color: var(--tblr-primary);
+  box-shadow: 0 0 0 3px rgba(var(--tblr-primary-rgb), 0.15);
+  outline: none;
+}
+
+.custom-filter-select.filter-active {
+  border-color: rgba(var(--tblr-primary-rgb), 0.8) !important;
+  background-color: rgba(var(--tblr-primary-rgb), 0.08) !important;
+  color: var(--tblr-primary) !important;
+  font-weight: 600 !important;
+}
+
+/* Specific comfortable widths for filters */
+.filter-severity-select {
+  width: 175px;
+  min-width: 175px;
+}
+
+.filter-status-select {
+  width: 175px;
+  min-width: 175px;
+  max-width: 220px;
+}
+
+.filter-project-select {
+  width: 185px;
+  min-width: 185px;
+  max-width: 240px;
+}
+
+.search-box-wrapper {
+  position: relative;
+}
+
+.modern-search-input {
+  height: 38px !important;
+  border-radius: 9999px !important;
+  padding-left: 2.45rem !important;
+  padding-right: 2.25rem !important;
+  font-size: 0.8125rem !important;
+  width: 280px;
+  min-width: 240px;
+  background-color: var(--tblr-bg-surface);
+  border: 1px solid var(--tblr-border-color);
+  color: var(--tblr-body-color);
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.modern-search-input:hover {
+  border-color: rgba(var(--tblr-primary-rgb), 0.5);
+}
+
+.modern-search-input:focus {
+  width: 330px;
+  border-color: var(--tblr-primary);
+  box-shadow: 0 0 0 3px rgba(var(--tblr-primary-rgb), 0.15);
+  outline: none;
+}
+
 .search-clear-btn {
   position: absolute;
-  right: 0.65rem;
+  right: 0.75rem;
   top: 50%;
   transform: translateY(-50%);
   z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
 .filter-reset-btn {
+  height: 38px !important;
   border-radius: 9999px !important;
+  font-size: 0.8125rem !important;
+  padding: 0 1rem !important;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+@media (max-width: 767.98px) {
+  .filter-toolbar-group {
+    width: 100%;
+  }
+  .filter-select-wrapper,
+  .search-box-wrapper,
+  .filter-reset-btn {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .filter-severity-select,
+  .filter-status-select,
+  .filter-project-select,
+  .modern-search-input,
+  .modern-search-input:focus {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+  }
 }
 </style>
