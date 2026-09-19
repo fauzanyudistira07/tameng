@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from "vue";
+import { watch, computed } from "vue";
 import { useRoute } from "vue-router";
 import { useTheme } from "../../composables/useTheme";
 import { useAuth } from "../../composables/useAuth";
@@ -9,6 +9,16 @@ const route = useRoute();
 const { isMobileSidebarOpen, closeMobileSidebar } = useSidebar();
 const { toggleTheme } = useTheme();
 const { currentUser, userInitials, roleDisplayName } = useAuth();
+
+const isAdmin = computed(() => {
+  const r = currentUser.value?.role?.name || "";
+  return ["super_admin", "security_admin"].includes(r);
+});
+
+const isAnalystOrAdmin = computed(() => {
+  const r = currentUser.value?.role?.name || "";
+  return ["super_admin", "security_admin", "security_analyst"].includes(r);
+});
 
 // Tutup drawer secara otomatis jika rute berpindah
 watch(() => route.path, () => {
@@ -102,7 +112,8 @@ watch(() => route.path, () => {
               <span class="nav-link-title"> Dasbor Keamanan </span>
             </router-link>
           </li>
-          <li class="nav-item">
+          <!-- Pekerjaan Scan (khusus SOC Admin & Analyst) -->
+          <li v-if="isAnalystOrAdmin" class="nav-item">
             <router-link
               class="nav-link"
               :class="{ active: route.path === '/scan-jobs' }"
@@ -223,8 +234,9 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 3. Tata Kelola & Mesin -->
+          <!-- 3. Tata Kelola & Mesin (khusus SOC Admin & Analyst) -->
           <li
+            v-if="isAnalystOrAdmin"
             class="nav-item dropdown"
             :class="{ active: ['/scopes', '/authorizations', '/engines'].includes(route.path) }"
           >
@@ -343,7 +355,7 @@ watch(() => route.path, () => {
                     :class="{ active: route.path === '/findings' }"
                     to="/findings"
                   >
-                    Temuan Kerentanan
+                    {{ isAnalystOrAdmin ? 'Temuan Kerentanan' : 'Tiket Perbaikan Celah' }}
                   </router-link>
                   <router-link
                     class="dropdown-item"
@@ -357,8 +369,9 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 5. Administrasi & Audit -->
+          <!-- 5. Administrasi & Audit (khusus Super Admin & Security Admin) -->
           <li
+            v-if="isAdmin"
             class="nav-item dropdown"
             :class="{ active: ['/audit-logs', '/users'].includes(route.path) }"
           >
