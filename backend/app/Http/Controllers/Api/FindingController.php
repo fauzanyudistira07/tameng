@@ -12,13 +12,23 @@ use Illuminate\Validation\Rule;
 
 class FindingController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $findings = Finding::query()
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = Finding::query()
             ->with(['project:id,name,code', 'scanJob:id,code,status', 'scanRun:id,engine_key,status'])
             ->orderByRaw("FIELD(severity, 'critical', 'high', 'medium', 'low', 'informational')")
-            ->orderByDesc('id')
-            ->get();
+            ->orderByDesc('id');
+
+        // Scoping untuk developer dan viewer: hanya tampilkan temuan dari proyek yang ditugaskan
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $assignedProjectIds = $user->projects()->pluck('projects.id');
+            $query->whereIn('project_id', $assignedProjectIds);
+        }
+
+        $findings = $query->get();
 
         return response()->json([
             'summary' => [
@@ -33,8 +43,20 @@ class FindingController extends Controller
         ]);
     }
 
-    public function show(Finding $finding): JsonResponse
+    public function show(Request $request, Finding $finding): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $isAssigned = $user->projects()->where('projects.id', $finding->project_id)->exists();
+            if (! $isAssigned) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki akses ke proyek temuan ini.',
+                ], 403);
+            }
+        }
+
         return response()->json([
             'finding' => $finding->load([
                 'project:id,name,code',
@@ -45,8 +67,20 @@ class FindingController extends Controller
         ]);
     }
 
-    public function aiRemediation(Finding $finding, AiRemediationService $aiService): JsonResponse
+    public function aiRemediation(Request $request, Finding $finding, AiRemediationService $aiService): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $isAssigned = $user->projects()->where('projects.id', $finding->project_id)->exists();
+            if (! $isAssigned) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki akses ke proyek temuan ini.',
+                ], 403);
+            }
+        }
+
         $guidance = $aiService->generateGuidance($finding);
 
         return response()->json([
@@ -56,16 +90,43 @@ class FindingController extends Controller
 
     public function update(Request $request, Finding $finding, AuditLogger $auditLogger): JsonResponse
     {
-        $data = $request->validate([
-            'status' => ['required', Rule::in(['open', 'reviewing', 'in_progress', 'resolved', 'false_positive', 'accepted', 'fixed'])],
-            'resolution_notes' => ['nullable', 'string', 'max:1500'],
-        ]);
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        // Auditor dan Viewer hanya memiliki hak baca
+        if (in_array($userRole, ['auditor', 'viewer'], true)) {
+            return response()->json([
+                'message' => 'Peran Anda tidak memiliki izin untuk mengubah status temuan.',
+            ], 403);
+        }
+
+        // Jika developer, pastikan proyek temuan ditugaskan kepadanya dan batasi status tiket
+        if ($userRole === 'developer') {
+            $isAssigned = $user->projects()->where('projects.id', $finding->project_id)->exists();
+            if (! $isAssigned) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Temuan ini bukan bagian dari proyek yang ditugaskan kepada Anda.',
+                ], 403);
+            }
+
+            // Developer hanya boleh mengubah status pengerjaan, bukan menyetujui false positive / risk accepted
+            $data = $request->validate([
+                'status' => ['required', Rule::in(['open', 'in_progress', 'fixed'])],
+                'resolution_notes' => ['nullable', 'string', 'max:1500'],
+            ]);
+        } else {
+            // Super Admin, Security Admin, dan Security Analyst memiliki hak triage lengkap
+            $data = $request->validate([
+                'status' => ['required', Rule::in(['open', 'reviewing', 'in_progress', 'resolved', 'false_positive', 'accepted', 'fixed'])],
+                'resolution_notes' => ['nullable', 'string', 'max:1500'],
+            ]);
+        }
 
         $previousStatus = $finding->status;
         $meta = $finding->normalization_metadata ?? [];
         if (! empty($data['resolution_notes'])) {
             $meta['triage_notes'] = $data['resolution_notes'];
-            $meta['triaged_by'] = $request->user()->name;
+            $meta['triaged_by'] = $user->name;
             $meta['triaged_at'] = now()->toISOString();
         }
 

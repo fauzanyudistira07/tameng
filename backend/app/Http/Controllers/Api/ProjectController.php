@@ -10,13 +10,22 @@ use Illuminate\Validation\Rule;
 
 class ProjectController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = Project::query()
+            ->with('owner:id,name,email')
+            ->orderByDesc('id');
+
+        // Scoping untuk developer dan viewer: hanya tampilkan proyek yang ditugaskan
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $query->whereIn('id', $user->projects()->pluck('projects.id'));
+        }
+
         return response()->json([
-            'projects' => Project::query()
-                ->with('owner:id,name,email')
-                ->orderByDesc('id')
-                ->get(),
+            'projects' => $query->get(),
         ]);
     }
 
@@ -29,8 +38,19 @@ class ProjectController extends Controller
         ], 201);
     }
 
-    public function show(Project $project): JsonResponse
+    public function show(Request $request, Project $project): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            if (! $user->projects()->where('projects.id', $project->id)->exists()) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki izin untuk melihat proyek ini.',
+                ], 403);
+            }
+        }
+
         return response()->json([
             'project' => $project->load('owner:id,name,email'),
         ]);

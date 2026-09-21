@@ -20,18 +20,38 @@ use Illuminate\Validation\ValidationException;
 
 class TargetController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = Target::query()
+            ->with(['project:id,name,code', 'verifier:id,name'])
+            ->orderByDesc('id');
+
+        // Scoping untuk developer dan viewer: hanya tampilkan target dari proyek yang ditugaskan
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $query->whereIn('project_id', $user->projects()->pluck('projects.id'));
+        }
+
         return response()->json([
-            'targets' => Target::query()
-                ->with(['project:id,name,code', 'verifier:id,name'])
-                ->orderByDesc('id')
-                ->get(),
+            'targets' => $query->get(),
         ]);
     }
 
-    public function show(Target $target): JsonResponse
+    public function show(Request $request, Target $target): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            if (! $user->projects()->where('projects.id', $target->project_id)->exists()) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki akses ke target proyek ini.',
+                ], 403);
+            }
+        }
+
         $target->load(['project:id,name,code,status,criticality', 'verifier:id,name']);
 
         $scanJobs = ScanJob::query()

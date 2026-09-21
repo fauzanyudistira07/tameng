@@ -23,12 +23,21 @@ use Illuminate\Validation\ValidationException;
 
 class RepositoryController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $repositories = Repository::query()
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = Repository::query()
             ->with(['project:id,name,code', 'verifier:id,name'])
-            ->orderByDesc('id')
-            ->get()
+            ->orderByDesc('id');
+
+        // Scoping untuk developer dan viewer: hanya tampilkan repositori dari proyek yang ditugaskan
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $query->whereIn('project_id', $user->projects()->pluck('projects.id'));
+        }
+
+        $repositories = $query->get()
             ->map(fn (Repository $repo) => $this->sanitizeRepository($repo));
 
         return response()->json([

@@ -14,13 +14,27 @@ use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = Report::query()
+            ->with(['scanJob:id,code,status,project_id,repository_id,target_id,created_by', 'scanJob.project:id,name,code', 'generator:id,name'])
+            ->orderByDesc('id');
+
+        // Scoping untuk developer dan viewer: hanya laporan dari proyek ditugaskan atau scan yang dibuat sendiri
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $assignedProjectIds = $user->projects()->pluck('projects.id');
+            $userId = $user->id;
+            $query->whereHas('scanJob', function ($q) use ($assignedProjectIds, $userId) {
+                $q->whereIn('project_id', $assignedProjectIds)
+                  ->orWhere('created_by', $userId);
+            });
+        }
+
         return response()->json([
-            'reports' => Report::query()
-                ->with(['scanJob:id,code,status,project_id,repository_id,target_id,created_by', 'scanJob.project:id,name,code', 'generator:id,name'])
-                ->orderByDesc('id')
-                ->get(),
+            'reports' => $query->get(),
         ]);
     }
 
@@ -87,9 +101,11 @@ class ReportController extends Controller
         $user = request()->user();
         $role = $user?->role?->name;
 
-        if ($role === 'developer') {
-            $report->loadMissing('scanJob:id,created_by');
-            abort_unless($report->scanJob?->created_by === $user->id, 403);
+        if (in_array($role, ['developer', 'viewer'], true)) {
+            $report->loadMissing('scanJob:id,created_by,project_id');
+            $isCreator = $report->scanJob?->created_by === $user->id;
+            $isAssignedProject = $user->projects()->where('projects.id', $report->scanJob?->project_id)->exists();
+            abort_unless($isCreator || $isAssignedProject, 403, 'Akses laporan ditolak: Anda tidak memiliki izin untuk laporan proyek ini.');
         }
     }
 }

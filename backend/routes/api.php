@@ -141,14 +141,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/findings/{finding}/ai-remediation', [FindingController::class, 'aiRemediation'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
     Route::put('/findings/{finding}', [FindingController::class, 'update'])
-        ->middleware('role:super_admin,security_admin,security_analyst');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer');
 
     Route::get('/reports', [ReportController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
     Route::post('/reports', [ReportController::class, 'store'])
         ->middleware('role:super_admin,security_admin,security_analyst');
     Route::get('/reports/{report}', [ReportController::class, 'show'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
     Route::get('/reports/{report}/download-pdf', [ReportController::class, 'downloadPdf'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
 });

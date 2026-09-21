@@ -8,17 +8,7 @@ import { useSidebar } from "../../composables/useSidebar";
 const route = useRoute();
 const { isMobileSidebarOpen, closeMobileSidebar } = useSidebar();
 const { toggleTheme } = useTheme();
-const { currentUser, userInitials, roleDisplayName } = useAuth();
-
-const isAdmin = computed(() => {
-  const r = currentUser.value?.role?.name || "";
-  return ["super_admin", "security_admin"].includes(r);
-});
-
-const isAnalystOrAdmin = computed(() => {
-  const r = currentUser.value?.role?.name || "";
-  return ["super_admin", "security_admin", "security_analyst"].includes(r);
-});
+const { currentUser, userInitials, roleDisplayName, isAdmin, isAnalystOrAdmin, isDeveloper, isAuditor } = useAuth();
 
 // Tutup drawer secara otomatis jika rute berpindah
 watch(() => route.path, () => {
@@ -80,9 +70,86 @@ watch(() => route.path, () => {
         :class="{ show: isMobileSidebarOpen }"
         id="sidebar-menu"
       >
-        <ul class="navbar-nav pt-lg-2">
-          <!-- 1. Operasional Scan -->
+        <!-- Navigasi Khusus DEVELOPER: Fokus Tiket Perbaikan & Scan Mandiri (Tanpa Dasbor Telemetri) -->
+        <ul v-if="isDeveloper" class="navbar-nav pt-lg-2">
+          <!-- 1. Tiket Perbaikan Celah -->
           <li class="nav-item">
+            <router-link
+              class="nav-link"
+              :class="{ active: route.path === '/findings' }"
+              to="/findings"
+            >
+              <span class="nav-link-icon d-md-none d-lg-inline-block">
+                <!-- icon: list-check -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-teal" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3.5 5.5l1.5 1.5l2.5 -2.5" /><path d="M3.5 11.5l1.5 1.5l2.5 -2.5" /><path d="M3.5 17.5l1.5 1.5l2.5 -2.5" /><path d="M11 6l9 0" /><path d="M11 12l9 0" /><path d="M11 18l9 0" /></svg>
+              </span>
+              <span class="nav-link-title fw-semibold"> Tiket Perbaikan Celah </span>
+            </router-link>
+          </li>
+
+          <!-- 2. Scan Mandiri -->
+          <li class="nav-item">
+            <router-link
+              class="nav-link"
+              :class="{ active: route.path === '/scan-mandiri' || route.path === '/scan-saya' }"
+              to="/scan-mandiri"
+            >
+              <span class="nav-link-icon d-md-none d-lg-inline-block">
+                <!-- icon: scan -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-primary" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7v-1a2 2 0 0 1 2 -2h2" /><path d="M4 17v1a2 2 0 0 0 2 2h2" /><path d="M16 4h2a2 2 0 0 1 2 2v1" /><path d="M16 20h2a2 2 0 0 0 2 -2v-1" /><path d="M5 12l14 0" /></svg>
+              </span>
+              <span class="nav-link-title"> Scan Mandiri </span>
+            </router-link>
+          </li>
+
+          <!-- 3. Aset & Proyek Saya -->
+          <li class="nav-item dropdown" :class="{ active: ['/projects', '/repositories', '/targets'].includes(route.path) }">
+            <a
+              class="nav-link dropdown-toggle"
+              :class="{ active: ['/projects', '/repositories', '/targets'].includes(route.path) }"
+              href="#navbar-assets-dev"
+              data-bs-toggle="dropdown"
+              data-bs-auto-close="false"
+              role="button"
+              :aria-expanded="['/projects', '/repositories', '/targets'].includes(route.path) ? 'true' : 'false'"
+            >
+              <span class="nav-link-icon d-md-none d-lg-inline-block">
+                <!-- icon: folder -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" /></svg>
+              </span>
+              <span class="nav-link-title"> Aset & Proyek Saya </span>
+            </a>
+            <div class="dropdown-menu" :class="{ show: ['/projects', '/repositories', '/targets'].includes(route.path) }">
+              <div class="dropdown-menu-columns">
+                <div class="dropdown-menu-column">
+                  <router-link class="dropdown-item" :class="{ active: route.path === '/projects' }" to="/projects">Proyek Saya</router-link>
+                  <router-link class="dropdown-item" :class="{ active: route.path === '/repositories' }" to="/repositories">Repositori Kode</router-link>
+                  <router-link class="dropdown-item" :class="{ active: route.path === '/targets' }" to="/targets">Target Web & API</router-link>
+                </div>
+              </div>
+            </div>
+          </li>
+
+          <!-- 4. Laporan Keamanan -->
+          <li class="nav-item">
+            <router-link
+              class="nav-link"
+              :class="{ active: route.path === '/reports' }"
+              to="/reports"
+            >
+              <span class="nav-link-icon d-md-none d-lg-inline-block">
+                <!-- icon: file-analytics -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-yellow" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /><path d="M9 17l0 -5" /><path d="M12 17l0 -1" /><path d="M15 17l0 -3" /></svg>
+              </span>
+              <span class="nav-link-title"> Laporan Keamanan </span>
+            </router-link>
+          </li>
+        </ul>
+
+        <!-- Navigasi Standar SOC (Super Admin, Security Admin, Security Analyst, Auditor, Viewer) -->
+        <ul v-else class="navbar-nav pt-lg-2">
+          <!-- 1. Operasional Scan (Sembunyikan dasbor untuk Auditor) -->
+          <li v-if="!isAuditor" class="nav-item">
             <router-link
               class="nav-link"
               :class="{ active: route.path === '/' }"
@@ -140,7 +207,7 @@ watch(() => route.path, () => {
               <span class="nav-link-title"> Pekerjaan Scan </span>
             </router-link>
           </li>
-          <li class="nav-item">
+          <li v-if="!isAuditor" class="nav-item">
             <router-link
               class="nav-link"
               :class="{ active: route.path === '/scan-mandiri' || route.path === '/scan-saya' }"
@@ -234,9 +301,9 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 3. Tata Kelola & Mesin (khusus SOC Admin & Analyst) -->
+          <!-- 3. Tata Kelola & Mesin (khusus SOC Admin, Analyst, Auditor) -->
           <li
-            v-if="isAnalystOrAdmin"
+            v-if="isAnalystOrAdmin || isAuditor"
             class="nav-item dropdown"
             :class="{ active: ['/scopes', '/authorizations', '/engines'].includes(route.path) }"
           >
@@ -369,9 +436,9 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 5. Administrasi & Audit (khusus Super Admin & Security Admin) -->
+          <!-- 5. Administrasi & Audit (khusus Super Admin, Security Admin & Auditor) -->
           <li
-            v-if="isAdmin"
+            v-if="isAdmin || isAuditor"
             class="nav-item dropdown"
             :class="{ active: ['/audit-logs', '/users'].includes(route.path) }"
           >
@@ -421,6 +488,7 @@ watch(() => route.path, () => {
                     Log Audit Forensik
                   </router-link>
                   <router-link
+                    v-if="isAdmin"
                     class="dropdown-item"
                     :class="{ active: route.path === '/users' }"
                     to="/users"

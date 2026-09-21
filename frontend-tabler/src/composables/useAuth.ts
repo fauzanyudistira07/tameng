@@ -133,8 +133,75 @@ export function useAuth() {
     return name.slice(0, 2).toUpperCase()
   })
 
+  const roleName = computed(() => {
+    return currentUser.value?.role?.name || ''
+  })
+
   const roleDisplayName = computed(() => {
     return currentUser.value?.role?.display_name || 'Personel SOC'
+  })
+
+  const isAdmin = computed(() => {
+    return ['super_admin', 'security_admin'].includes(roleName.value)
+  })
+
+  const isSuperAdmin = computed(() => {
+    return roleName.value === 'super_admin'
+  })
+
+  const isSecurityAdmin = computed(() => {
+    return roleName.value === 'security_admin'
+  })
+
+  const isSecurityAnalyst = computed(() => {
+    return roleName.value === 'security_analyst'
+  })
+
+  const isAnalystOrAdmin = computed(() => {
+    return ['super_admin', 'security_admin', 'security_analyst'].includes(roleName.value)
+  })
+
+  const isDeveloper = computed(() => {
+    return roleName.value === 'developer'
+  })
+
+  const isAuditor = computed(() => {
+    return roleName.value === 'auditor'
+  })
+
+  const isViewer = computed(() => {
+    return roleName.value === 'viewer'
+  })
+
+  const isNonAdmin = computed(() => {
+    return !['super_admin', 'security_admin'].includes(roleName.value)
+  })
+
+  const roleBadgeClass = computed(() => {
+    switch (roleName.value) {
+      case 'super_admin':
+        return 'bg-purple-lt text-purple border border-purple-subtle'
+      case 'security_admin':
+        return 'bg-blue-lt text-blue border border-blue-subtle'
+      case 'security_analyst':
+        return 'bg-cyan-lt text-cyan border border-cyan-subtle'
+      case 'developer':
+        return 'bg-teal-lt text-teal border border-teal-subtle'
+      case 'auditor':
+        return 'bg-orange-lt text-orange border border-orange-subtle'
+      case 'viewer':
+        return 'bg-secondary-lt text-secondary border border-secondary-subtle'
+      default:
+        return 'bg-secondary-lt text-secondary'
+    }
+  })
+
+  const assignedProjects = computed(() => {
+    return currentUser.value?.projects || []
+  })
+
+  const assignedProjectNames = computed(() => {
+    return (currentUser.value?.projects || []).map((p) => p.name).join(', ')
   })
 
   async function handleLogout() {
@@ -154,7 +221,20 @@ export function useAuth() {
     openProfileModal,
     closeProfileModal,
     userInitials,
+    roleName,
     roleDisplayName,
+    isAdmin,
+    isSuperAdmin,
+    isSecurityAdmin,
+    isSecurityAnalyst,
+    isAnalystOrAdmin,
+    isDeveloper,
+    isAuditor,
+    isViewer,
+    isNonAdmin,
+    roleBadgeClass,
+    assignedProjects,
+    assignedProjectNames,
     loadUser,
     updateProfile,
     handleLogout

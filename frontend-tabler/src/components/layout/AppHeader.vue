@@ -13,6 +13,9 @@ const {
   currentUser,
   userInitials,
   roleDisplayName,
+  roleBadgeClass,
+  assignedProjects,
+  assignedProjectNames,
   openProfileModal,
   handleLogout
 } = useAuth()
@@ -244,11 +247,27 @@ function handleSelect(url?: string) {
                   {{ userInitials }}
                 </span>
                 <div class="d-none d-xl-block ps-2">
-                  <div class="fw-semibold text-truncate" style="max-width: 140px;">{{ currentUser?.name || 'System Admin' }}</div>
-                  <div class="mt-1 small text-secondary" style="font-size: 0.75rem;">{{ roleDisplayName }}</div>
+                  <div class="fw-semibold text-truncate" style="max-width: 140px;">{{ currentUser?.name || 'User TAMENG' }}</div>
+                  <div class="mt-1">
+                    <span class="badge py-0 px-1" :class="roleBadgeClass" style="font-size: 0.68rem;">{{ roleDisplayName }}</span>
+                  </div>
                 </div>
               </a>
-              <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow">
+              <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow" style="min-width: 220px;">
+                <div class="dropdown-header d-flex flex-column gap-1 pb-2">
+                  <div class="fw-bold text-truncate">{{ currentUser?.name }}</div>
+                  <div class="small text-muted text-truncate">{{ currentUser?.email }}</div>
+                  <div>
+                    <span class="badge" :class="roleBadgeClass">{{ roleDisplayName }}</span>
+                  </div>
+                  <div v-if="assignedProjects.length > 0" class="text-secondary small mt-1">
+                    <strong>{{ assignedProjects.length }} Proyek Ditugaskan:</strong>
+                    <div class="text-truncate text-muted" :title="assignedProjectNames" style="max-width: 200px;">
+                      {{ assignedProjectNames }}
+                    </div>
+                  </div>
+                </div>
+                <div class="dropdown-divider m-0"></div>
                 <a
                   href="#"
                   class="dropdown-item"
@@ -256,10 +275,14 @@ function handleSelect(url?: string) {
                   data-bs-target="#modal-profile"
                   @click.prevent="openProfileModal"
                 >
-                  Profile
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon dropdown-item-icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 10m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" /><path d="M6.168 18.849a4 4 0 0 1 3.832 -2.849h4a4 4 0 0 1 3.834 2.855" /></svg>
+                  Profil Saya
                 </a>
-                <div class="dropdown-divider m-0" style="margin: 0 !important;"></div>
-                <a href="#" class="dropdown-item" @click.prevent="handleLogout">Logout</a>
+                <div class="dropdown-divider m-0"></div>
+                <a href="#" class="dropdown-item text-danger" @click.prevent="handleLogout">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon dropdown-item-icon text-danger" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" /><path d="M9 12h12l-3 -3" /><path d="M18 15l3 -3" /></svg>
+                  Keluar (Logout)
+                </a>
               </div>
             </div>
           </div>

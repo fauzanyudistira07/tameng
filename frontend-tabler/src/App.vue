@@ -5,6 +5,7 @@ import { useTheme } from './composables/useTheme'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import AppHeader from './components/layout/AppHeader.vue'
 import AppFooter from './components/layout/AppFooter.vue'
+import UserPortalLayout from './components/layout/UserPortalLayout.vue'
 import ModalReport from './components/modals/ModalReport.vue'
 import ModalProfile from './components/modals/ModalProfile.vue'
 
@@ -22,7 +23,14 @@ onMounted(() => {
     <router-view />
   </template>
 
-  <!-- Default Authenticated Layout with Sidebar, Header & Footer -->
+  <!-- Dedicated User Portal Workspace Layout (Personal Workspace) -->
+  <template v-else-if="route.meta.layout === 'user'">
+    <UserPortalLayout>
+      <router-view />
+    </UserPortalLayout>
+  </template>
+
+  <!-- Default Authenticated Admin SOC Layout with Sidebar, Header & Footer (Preserved 100%) -->
   <template v-else>
     <div class="page">
       <AppSidebar />
@@ -43,6 +51,14 @@ html,
 body {
   height: 100%;
   min-height: 100vh;
+}
+
+.bg-surface {
+  background-color: var(--tblr-bg-surface, var(--tblr-card-bg, #182433)) !important;
+}
+
+.bg-surface-secondary {
+  background-color: var(--tblr-bg-surface-secondary, var(--tblr-body-bg, #0b1727)) !important;
 }
 
 #app {

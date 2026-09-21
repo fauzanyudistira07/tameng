@@ -68,8 +68,15 @@ async function handleSubmit() {
   isLoading.value = true
   try {
     await loginUser(email.value.trim(), password.value, rememberMe.value)
-    await loadUser(true)
-    router.push({ name: 'dashboard' })
+    const user = await loadUser(true)
+    const role = user?.role?.name || ''
+    if (role === 'developer' || role === 'viewer') {
+      router.push({ name: 'workspace' })
+    } else if (role === 'auditor') {
+      router.push({ name: 'reports' })
+    } else {
+      router.push({ name: 'dashboard' })
+    }
   } catch (err: any) {
     errorMessage.value = err?.message || 'Invalid email address or password. Please try again.'
   } finally {
