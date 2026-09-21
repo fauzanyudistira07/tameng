@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { apiFetch } from '../../services/api'
 import { useAuth } from '../../composables/useAuth'
@@ -77,7 +77,19 @@ onMounted(() => {
     searchQuery.value = route.query.q
   }
   loadTickets()
+  window.addEventListener('keydown', handleKeydown)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    if (isAiModalOpen.value) closeAiGuidance()
+    if (isFixModalOpen.value) closeQuickFix()
+  }
+}
 
 const availableProjects = computed(() => {
   const map = new Map<number, string>()
@@ -527,6 +539,7 @@ function formatDate(d?: string) {
       tabindex="-1"
       role="dialog"
       style="background: rgba(0, 0, 0, 0.5);"
+      @click.self="closeQuickFix"
     >
       <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content border-0 shadow-lg">
@@ -597,6 +610,7 @@ function formatDate(d?: string) {
       tabindex="-1"
       role="dialog"
       style="background: rgba(0, 0, 0, 0.5);"
+      @click.self="closeAiGuidance"
     >
       <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
         <div class="modal-content border-0 shadow-lg">

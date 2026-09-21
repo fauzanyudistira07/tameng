@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { apiFetch } from '../../services/api'
 import { useAuth } from '../../composables/useAuth'
@@ -93,7 +93,18 @@ async function loadDashboardData() {
 
 onMounted(() => {
   loadDashboardData()
+  window.addEventListener('keydown', handleKeydown)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && isFixModalOpen.value) {
+    closeQuickFix()
+  }
+}
 
 // Metrics
 const metrics = computed(() => {
@@ -512,6 +523,7 @@ function formatDate(d?: string) {
       tabindex="-1"
       role="dialog"
       style="background: rgba(0, 0, 0, 0.5);"
+      @click.self="closeQuickFix"
     >
       <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content border-0 shadow-lg">

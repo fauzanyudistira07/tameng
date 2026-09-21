@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { apiFetch } from '../../services/api'
 import { useAuth } from '../../composables/useAuth'
 
@@ -80,7 +80,18 @@ async function loadData() {
 
 onMounted(() => {
   loadData()
+  window.addEventListener('keydown', handleKeydown)
 })
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && isUploadModalOpen.value) {
+    isUploadModalOpen.value = false
+  }
+}
 
 // Unified file/asset representation
 interface UnifiedAsset {
@@ -513,6 +524,7 @@ function formatDate(d?: string) {
       tabindex="-1"
       role="dialog"
       style="background: rgba(0, 0, 0, 0.5);"
+      @click.self="isUploadModalOpen = false"
     >
       <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content border-0 shadow-lg">
