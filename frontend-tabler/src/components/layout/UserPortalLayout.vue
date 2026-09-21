@@ -19,7 +19,6 @@ const {
   handleLogout
 } = useAuth()
 
-const isMobileNavOpen = ref(false)
 const searchQuery = ref('')
 
 // Navigasi menu utama User Workspace (5 alur utama non-admin, tanpa redundansi pengaturan)
@@ -50,10 +49,6 @@ const navItems = [
     icon: 'report'
   }
 ]
-
-watch(() => route.path, () => {
-  isMobileNavOpen.value = false
-})
 
 function onQuickSearch() {
   if (!searchQuery.value.trim()) return
@@ -183,15 +178,6 @@ function onQuickSearch() {
                 </div>
               </div>
 
-              <!-- Hamburger Button for Mobile -->
-              <button
-                type="button"
-                class="btn btn-icon btn-ghost-secondary d-md-none"
-                aria-label="Toggle Navigation"
-                @click="isMobileNavOpen = !isMobileNavOpen"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 6l16 0" /><path d="M4 12l16 0" /><path d="M4 18l16 0" /></svg>
-              </button>
             </div>
           </div>
         </div>
@@ -200,7 +186,7 @@ function onQuickSearch() {
       <!-- Horizontal Navigation Tabs (Clean, Single Line, No Wrap) -->
       <div class="workspace-nav-bar border-bottom">
         <div class="container-xl">
-          <nav class="d-none d-md-flex align-items-center gap-1 py-1 overflow-x-auto text-nowrap">
+          <nav class="d-flex align-items-center gap-1 py-1 overflow-x-auto text-nowrap">
             <router-link
               v-for="item in navItems"
               :key="item.path"
@@ -226,33 +212,6 @@ function onQuickSearch() {
               <span>{{ item.label }}</span>
             </router-link>
           </nav>
-
-          <!-- Mobile Dropdown Navigation -->
-          <div v-if="isMobileNavOpen" class="d-md-none py-2 border-top">
-            <div class="input-icon mb-2">
-              <span class="input-icon-addon">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
-              </span>
-              <input
-                v-model="searchQuery"
-                type="text"
-                class="form-control form-control-sm"
-                placeholder="Cari tiket, repositori, file..."
-                @keydown.enter="onQuickSearch"
-              />
-            </div>
-            <div class="list-group list-group-flush">
-              <router-link
-                v-for="item in navItems"
-                :key="item.path"
-                :to="item.path"
-                class="list-group-item list-group-item-action py-2 px-1 border-0"
-                :class="{ 'fw-bold text-primary': route.path === item.path }"
-              >
-                {{ item.label }}
-              </router-link>
-            </div>
-          </div>
         </div>
       </div>
     </header>
