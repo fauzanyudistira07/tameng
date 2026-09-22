@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { apiFetch } from '../../services/api'
 import { useAuth } from '../../composables/useAuth'
 
 const route = useRoute()
-const { assignedProjects } = useAuth()
+const { currentUser, assignedProjects } = useAuth()
 
 interface Finding {
   id: number
@@ -47,11 +47,24 @@ const copiedId = ref<number | null>(null)
 
 // Quick Fix Modal
 const targetFinding = ref<Finding | null>(null)
-const fixStatusChoice = ref<'fixed' | 'in_progress'>('fixed')
+const fixStatusChoice = ref<'fixed' | 'in_progress' | 'open'>('fixed')
 const fixResolutionNotes = ref('')
 const isSavingFix = ref(false)
 const fixModalError = ref<string | null>(null)
 const isFixModalOpen = ref(false)
+const updatingTicketId = ref<number | null>(null)
+
+// Toast notification
+const toastNotification = ref<{ message: string; type: 'success' | 'info' | 'danger' } | null>(null)
+let toastTimeout: any = null
+
+function showToast(message: string, type: 'success' | 'info' | 'danger' = 'info') {
+  if (toastTimeout) clearTimeout(toastTimeout)
+  toastNotification.value = { message, type }
+  toastTimeout = setTimeout(() => {
+    toastNotification.value = null
+  }, 4000)
+}
 
 // AI Guidance Modal
 const activeGuidanceFinding = ref<Finding | null>(null)
@@ -101,11 +114,20 @@ async function loadTickets() {
   }
 }
 
+watch(
+  () => route.query.q,
+  (newQ) => {
+    if (typeof newQ === 'string' && newQ.trim()) {
+      searchQuery.value = newQ.trim()
+      selectedTab.value = 'all'
+    } else if (newQ === '' || newQ === undefined) {
+      searchQuery.value = ''
+    }
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
-  // Check query parameter from search
-  if (route.query.q && typeof route.query.q === 'string') {
-    searchQuery.value = route.query.q
-  }
   loadTickets()
   window.addEventListener('keydown', handleKeydown)
 })
@@ -232,9 +254,13 @@ function getStatusLabel(st: string) {
 }
 
 // Open Quick Fix Modal
-function openQuickFix(f: Finding) {
+function openQuickFix(f: Finding, defaultStatus?: 'fixed' | 'in_progress' | 'open') {
   targetFinding.value = f
-  fixStatusChoice.value = f.status === 'in_progress' ? 'fixed' : 'in_progress'
+  if (defaultStatus) {
+    fixStatusChoice.value = defaultStatus
+  } else {
+    fixStatusChoice.value = f.status === 'in_progress' ? 'fixed' : 'in_progress'
+  }
   fixResolutionNotes.value = f.normalization_metadata?.triage_notes || ''
   fixModalError.value = null
   isFixModalOpen.value = true
@@ -245,6 +271,94 @@ function closeQuickFix() {
   targetFinding.value = null
 }
 
+async function markAsFixed(ticket: Finding) {
+  updatingTicketId.value = ticket.id
+  try {
+    const res = await apiFetch(`/api/findings/${ticket.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: 'fixed',
+        resolution_notes: `Diselesaikan oleh ${currentUser.value?.name || 'developer'}`
+      })
+    })
+
+    if (res?.finding) {
+      const idx = findings.value.findIndex(f => f.id === ticket.id)
+      if (idx !== -1) {
+        findings.value[idx].status = res.finding.status
+        findings.value[idx].normalization_metadata = res.finding.normalization_metadata
+      }
+      showToast(`Tiket ${ticket.code} berhasil ditandai selesai diperbaiki.`, 'success')
+    }
+  } catch (err: any) {
+    console.error('Gagal menyelesaikan tiket:', err)
+    showToast('Gagal menandai tiket sebagai selesai.', 'danger')
+  } finally {
+    updatingTicketId.value = null
+  }
+}
+
+async function markAsFixedFromAi() {
+  if (!activeGuidanceFinding.value) return
+  const f = activeGuidanceFinding.value
+  await markAsFixed(f)
+  closeAiGuidance()
+}
+
+async function startWorking(ticket: Finding) {
+  updatingTicketId.value = ticket.id
+  try {
+    const res = await apiFetch(`/api/findings/${ticket.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: 'in_progress',
+        resolution_notes: `Mulai dikerjakan oleh ${currentUser.value?.name || 'developer'}`
+      })
+    })
+
+    if (res?.finding) {
+      const idx = findings.value.findIndex(f => f.id === ticket.id)
+      if (idx !== -1) {
+        findings.value[idx].status = res.finding.status
+        findings.value[idx].normalization_metadata = res.finding.normalization_metadata
+      }
+      showToast(`Tiket ${ticket.code} sekarang masuk ke tab 'Sedang Dikerjakan'.`, 'info')
+    }
+  } catch (err: any) {
+    console.error('Gagal memperbarui status pengerjaan:', err)
+    showToast('Gagal mengubah status pengerjaan tiket.', 'danger')
+  } finally {
+    updatingTicketId.value = null
+  }
+}
+
+async function revertToOpen(ticket: Finding) {
+  updatingTicketId.value = ticket.id
+  try {
+    const res = await apiFetch(`/api/findings/${ticket.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: 'open',
+        resolution_notes: `Dikembalikan ke antrean perbaikan oleh ${currentUser.value?.name || 'developer'}`
+      })
+    })
+
+    if (res?.finding) {
+      const idx = findings.value.findIndex(f => f.id === ticket.id)
+      if (idx !== -1) {
+        findings.value[idx].status = res.finding.status
+        findings.value[idx].normalization_metadata = res.finding.normalization_metadata
+      }
+      showToast(`Tiket ${ticket.code} dikembalikan ke antrean 'Perlu Diperbaiki'.`, 'info')
+    }
+  } catch (err: any) {
+    console.error('Gagal mengembalikan status tiket:', err)
+    showToast('Gagal mengembalikan tiket ke antrean.', 'danger')
+  } finally {
+    updatingTicketId.value = null
+  }
+}
+
 async function submitQuickFix() {
   if (!targetFinding.value) return
   isSavingFix.value = true
@@ -253,7 +367,7 @@ async function submitQuickFix() {
   try {
     const payload = {
       status: fixStatusChoice.value,
-      resolution_notes: fixResolutionNotes.value.trim() || 'Diperbarui oleh pengembang'
+      resolution_notes: fixResolutionNotes.value.trim() || `Diperbarui oleh ${currentUser.value?.name || 'pengembang'}`
     }
 
     const res = await apiFetch(`/api/findings/${targetFinding.value.id}`, {
@@ -267,6 +381,8 @@ async function submitQuickFix() {
         findings.value[idx].status = res.finding.status
         findings.value[idx].normalization_metadata = res.finding.normalization_metadata
       }
+      const label = getStatusLabel(res.finding.status)
+      showToast(`Status tiket ${res.finding.code} berhasil diperbarui menjadi '${label}'.`, 'success')
       closeQuickFix()
     } else {
       fixModalError.value = res?.message || 'Gagal menyimpan status perbaikan.'
@@ -276,6 +392,13 @@ async function submitQuickFix() {
   } finally {
     isSavingFix.value = false
   }
+}
+
+async function startWorkingFromAi() {
+  if (!activeGuidanceFinding.value) return
+  const f = activeGuidanceFinding.value
+  await startWorking(f)
+  activeGuidanceFinding.value.status = 'in_progress'
 }
 
 function parseAiRemediation(data: any): AiRemediationData {
@@ -570,35 +693,95 @@ function formatDate(d?: string) {
           </div>
 
           <!-- Right: Actions Buttons -->
-          <div class="d-flex flex-row flex-md-column align-items-end gap-2 flex-shrink-0">
-            <!-- AI Guidance Button -->
+          <div class="d-flex flex-row flex-md-column align-items-stretch gap-2 flex-shrink-0" style="min-width: 165px;">
+            <!-- If Status is OPEN or REVIEWING (Perlu Diperbaiki) -->
+            <template v-if="ticket.status === 'open' || ticket.status === 'reviewing'">
+              <!-- 1. Mulai Kerjakan (PRIMARY) -->
+              <button
+                type="button"
+                class="btn btn-primary btn-sm d-inline-flex align-items-center justify-content-center gap-1 w-100 shadow-sm"
+                :disabled="updatingTicketId === ticket.id"
+                @click="startWorking(ticket)"
+                title="Pindahkan tiket ini ke 'Sedang Dikerjakan'"
+              >
+                <span v-if="updatingTicketId === ticket.id" class="spinner-border spinner-border-sm" role="status"></span>
+                <template v-else>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4v16l13 -8z" /></svg>
+                  <span class="fw-bold">Mulai Kerjakan</span>
+                </template>
+              </button>
+
+              <!-- 2. Tandai Selesai (OUTLINE SUCCESS - Direct 1-Click Action) -->
+              <button
+                type="button"
+                class="btn btn-outline-success btn-sm d-inline-flex align-items-center justify-content-center gap-1 w-100"
+                :disabled="updatingTicketId === ticket.id"
+                @click="markAsFixed(ticket)"
+                title="Langsung tandai celah ini sudah selesai diperbaiki"
+              >
+                <span v-if="updatingTicketId === ticket.id" class="spinner-border spinner-border-sm" role="status"></span>
+                <template v-else>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                  <span>Tandai Selesai</span>
+                </template>
+              </button>
+            </template>
+
+            <!-- If Status is IN_PROGRESS (Sedang Dikerjakan) -->
+            <template v-else-if="ticket.status === 'in_progress'">
+              <!-- 1. Tandai Selesai (SOLID SUCCESS - Direct 1-Click Action) -->
+              <button
+                type="button"
+                class="btn btn-success btn-sm d-inline-flex align-items-center justify-content-center gap-1 w-100 shadow-sm"
+                :disabled="updatingTicketId === ticket.id"
+                @click="markAsFixed(ticket)"
+                title="Selesaikan perbaikan dan tandai celah ini sudah fixed"
+              >
+                <span v-if="updatingTicketId === ticket.id" class="spinner-border spinner-border-sm" role="status"></span>
+                <template v-else>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                  <span class="fw-bold">Tandai Selesai</span>
+                </template>
+              </button>
+
+              <!-- 2. Revert to Open Backlog -->
+              <button
+                type="button"
+                class="btn btn-ghost-secondary btn-sm d-inline-flex align-items-center justify-content-center gap-1 w-100"
+                :disabled="updatingTicketId === ticket.id"
+                @click="revertToOpen(ticket)"
+                title="Kembalikan tiket ini ke antrean 'Perlu Diperbaiki'"
+              >
+                <span v-if="updatingTicketId === ticket.id" class="spinner-border spinner-border-sm" role="status"></span>
+                <template v-else>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l-4 4l4 4m-4 -4h11a4 4 0 0 0 0 -8h-1" /></svg>
+                  <span>Ke Antrean</span>
+                </template>
+              </button>
+            </template>
+
+            <!-- If Status is FIXED or RESOLVED (Sudah Diperbaiki) -->
+            <template v-else>
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center gap-1 w-100"
+                @click="openQuickFix(ticket, 'in_progress')"
+                title="Buka kembali pengerjaan atau ubah status tiket ini"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -5v5h5" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 5v-5h-5" /></svg>
+                <span>Ubah Status</span>
+              </button>
+            </template>
+
+            <!-- AI Guidance Button (always available) -->
             <button
               type="button"
-              class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1 w-100"
+              class="btn btn-outline-primary btn-sm d-inline-flex align-items-center justify-content-center gap-1 w-100"
               @click="openAiGuidance(ticket)"
+              title="Lihat rekomendasi panduan perbaikan AI interaktif"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c1.92 0 3.708 .72 5.074 1.916a9 9 0 1 1 -10.148 0a9 9 0 0 1 5.074 -1.916" /><path d="M12 11l0 6" /><path d="M12 8l.01 0" /></svg>
               <span>Panduan Fix AI</span>
-            </button>
-
-            <!-- Mark Fixed / In Progress Button -->
-            <button
-              v-if="ticket.status !== 'fixed' && ticket.status !== 'resolved'"
-              type="button"
-              class="btn btn-success btn-sm d-inline-flex align-items-center gap-1 w-100 shadow-sm"
-              @click="openQuickFix(ticket)"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
-              <span>Tandai Selesai</span>
-            </button>
-
-            <button
-              v-else
-              type="button"
-              class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1 w-100"
-              @click="openQuickFix(ticket)"
-            >
-              <span>Ubah Status</span>
             </button>
           </div>
         </div>
@@ -643,8 +826,9 @@ function formatDate(d?: string) {
             <div class="mb-3">
               <label class="form-label required">Status Perbaikan</label>
               <select v-model="fixStatusChoice" class="form-select">
+                <option value="in_progress">Sedang Dikerjakan (In Progress - Mulai Kerjakan Sekarang)</option>
                 <option value="fixed">Sudah Diperbaiki (Fixed in commit / PR)</option>
-                <option value="in_progress">Sedang Dikerjakan (In Progress)</option>
+                <option value="open">Perlu Diperbaiki (Open - Kembalikan ke Antrean Backlog)</option>
               </select>
             </div>
 
@@ -945,15 +1129,68 @@ function formatDate(d?: string) {
             <button type="button" class="btn btn-secondary" @click="closeAiGuidance">
               Tutup
             </button>
-            <button
-              type="button"
-              class="btn btn-success d-inline-flex align-items-center gap-2 shadow-sm"
-              @click="closeAiGuidance(); openQuickFix(activeGuidanceFinding);"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
-              <span>Terapkan Solusi & Tandai Selesai</span>
-            </button>
+            <div class="d-flex align-items-center gap-2">
+              <button
+                v-if="activeGuidanceFinding && (activeGuidanceFinding.status === 'open' || activeGuidanceFinding.status === 'reviewing')"
+                type="button"
+                class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm"
+                :disabled="updatingTicketId === activeGuidanceFinding.id"
+                @click="startWorkingFromAi"
+              >
+                <span v-if="updatingTicketId === activeGuidanceFinding.id" class="spinner-border spinner-border-sm" role="status"></span>
+                <template v-else>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4v16l13 -8z" /></svg>
+                  <span>Mulai Kerjakan Tiket Ini</span>
+                </template>
+              </button>
+              <button
+                type="button"
+                class="btn btn-success d-inline-flex align-items-center gap-2 shadow-sm"
+                :disabled="updatingTicketId === activeGuidanceFinding.id"
+                @click="markAsFixedFromAi"
+              >
+                <span v-if="updatingTicketId === activeGuidanceFinding.id" class="spinner-border spinner-border-sm"></span>
+                <template v-else>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                  <span>Terapkan Solusi & Tandai Selesai</span>
+                </template>
+              </button>
+            </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div
+      v-if="toastNotification"
+      class="position-fixed bottom-0 end-0 p-3"
+      style="z-index: 1080; max-width: 440px;"
+    >
+      <div
+        class="toast show align-items-center border-0 shadow-lg text-white"
+        :class="{
+          'bg-success': toastNotification.type === 'success',
+          'bg-primary': toastNotification.type === 'info',
+          'bg-danger': toastNotification.type === 'danger'
+        }"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+      >
+        <div class="d-flex align-items-center p-2">
+          <div class="toast-body d-flex align-items-center gap-2 py-1 px-2 flex-grow-1">
+            <svg v-if="toastNotification.type === 'success'" xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+            <svg v-else-if="toastNotification.type === 'info'" xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
+            <span class="small fw-medium">{{ toastNotification.message }}</span>
+          </div>
+          <button
+            type="button"
+            class="btn-close btn-close-white me-2 m-auto"
+            aria-label="Close"
+            @click="toastNotification = null"
+          ></button>
         </div>
       </div>
     </div>

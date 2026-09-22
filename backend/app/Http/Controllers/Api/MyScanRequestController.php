@@ -116,7 +116,10 @@ class MyScanRequestController extends Controller
         }
 
         $user = $request->user();
-        $scanJob = DB::transaction(function () use ($data, $user, $gateway, $auditLogger, $uploadedFile): ScanJob {
+        $user->loadMissing('role');
+        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin'], true);
+
+        $scanJob = DB::transaction(function () use ($data, $user, $gateway, $auditLogger, $uploadedFile, $isAdmin): ScanJob {
             $profile = ScanProfile::query()
                 ->where('key', $this->profileKey($data['scan_type']))
                 ->where('is_active', true)
@@ -125,7 +128,7 @@ class MyScanRequestController extends Controller
             $project = Project::query()->create([
                 'name' => $data['project_name'],
                 'code' => $this->projectCode($data['project_name'], $user->id),
-                'description' => 'Dibuat otomatis dari permintaan scan user.',
+                'description' => 'Dibuat dari pengajuan scan user (' . $user->name . ').',
                 'criticality' => 'medium',
                 'status' => 'active',
                 'owner_id' => $user->id,
@@ -133,6 +136,9 @@ class MyScanRequestController extends Controller
 
             [$repository, $target] = $this->createAsset($data, $project, $user->id, $uploadedFile);
             $scope = $this->createAllowedScope($data, $project, $target, $user->id);
+
+            $authStatus = $isAdmin ? 'active' : 'pending';
+            $authNotes = $isAdmin ? ($data['notes'] ?? null) : trim(($data['notes'] ?? '') . "\n[Menunggu Persetujuan Admin SOC]");
 
             $authorization = Authorization::query()->create([
                 'code' => 'AUTH-'.now()->format('YmdHis').'-USER-'.Str::upper(Str::random(4)),
@@ -142,7 +148,7 @@ class MyScanRequestController extends Controller
                 'scan_profile_id' => $profile->id,
                 'requested_by' => $user->id,
                 'approved_by' => $user->id,
-                'status' => 'active',
+                'status' => $authStatus,
                 'valid_from' => now(),
                 'valid_until' => now()->addDays(7),
                 'max_concurrency' => 1,
@@ -157,8 +163,9 @@ class MyScanRequestController extends Controller
                     'repository_verified' => $repository?->verification_status === 'verified',
                     'target_verified' => $target?->verification_status === 'verified',
                     'source' => 'user_scan_request',
+                    'requires_admin_approval' => ! $isAdmin,
                 ],
-                'notes' => $data['notes'] ?? null,
+                'notes' => $authNotes,
             ]);
 
             $decision = $gateway->decide([
@@ -178,6 +185,8 @@ class MyScanRequestController extends Controller
                 ]);
             }
 
+            $jobStatus = $isAdmin ? 'queued' : 'pending_approval';
+
             $scanJob = ScanJob::query()->create([
                 'code' => 'SCAN-'.now()->format('YmdHis').'-USER-'.Str::upper(Str::random(4)),
                 'project_id' => $project->id,
@@ -186,15 +195,16 @@ class MyScanRequestController extends Controller
                 'scan_profile_id' => $profile->id,
                 'authorization_id' => $authorization->id,
                 'created_by' => $user->id,
-                'status' => 'queued',
+                'status' => $jobStatus,
                 'progress' => 0,
                 'attempt' => 0,
-                'queued_at' => now(),
+                'queued_at' => $isAdmin ? now() : null,
                 'engine_plan' => $decision['engine_plan'],
                 'execution_policy_snapshot' => [
                     'authorization_decision_id' => $decision['policy_decision']->id,
                     'authorization_reason_code' => $decision['reason_code'],
                     'authorization_policy_snapshot' => $decision['policy_snapshot'],
+                    'requires_admin_approval' => ! $isAdmin,
                 ],
             ]);
 
@@ -211,11 +221,15 @@ class MyScanRequestController extends Controller
                     'code' => $scanJob->code,
                     'scan_type' => $data['scan_type'],
                     'asset_url' => $data['asset_url'],
+                    'status' => $jobStatus,
+                    'requires_admin_approval' => ! $isAdmin,
                     'source' => 'user_scan_request',
                 ],
             ]);
 
-            RunScanJob::dispatch($scanJob->id, $user->id)->afterCommit();
+            if ($isAdmin) {
+                RunScanJob::dispatch($scanJob->id, $user->id)->afterCommit();
+            }
 
             return $scanJob;
         });
@@ -231,8 +245,124 @@ class MyScanRequestController extends Controller
         ]);
 
         return response()->json([
+            'message' => $isAdmin
+                ? 'Permintaan scan berhasil dibuat dan dimasukkan ke antrean runner.'
+                : 'Permintaan scan berhasil diajukan dan sedang menunggu persetujuan Administrator Keamanan (SOC).',
             'scan_request' => $this->sanitizeJob($loaded),
         ], 201);
+    }
+
+    public function approve(Request $request, ScanJob $scanJob, AuditLogger $auditLogger): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($scanJob->status !== 'pending_approval') {
+            return response()->json([
+                'message' => 'Hanya permintaan scan dengan status pending_approval yang dapat disetujui.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($scanJob, $user, $auditLogger, $request): void {
+            if ($scanJob->authorization) {
+                $scanJob->authorization->update([
+                    'status' => 'active',
+                    'approved_by' => $user->id,
+                    'valid_from' => now(),
+                    'valid_until' => now()->addDays(7),
+                ]);
+            }
+
+            $scanJob->update([
+                'status' => 'queued',
+                'queued_at' => now(),
+            ]);
+
+            $auditLogger->record($request, 'scan_job.approve', 'success', [
+                'project_id' => $scanJob->project_id,
+                'authorization_id' => $scanJob->authorization_id,
+                'scan_job_id' => $scanJob->id,
+                'target_type' => 'scan_job',
+                'target_id' => $scanJob->id,
+                'metadata' => [
+                    'code' => $scanJob->code,
+                    'approved_by' => $user->name,
+                ],
+            ]);
+
+            RunScanJob::dispatch($scanJob->id, $user->id)->afterCommit();
+        });
+
+        $loaded = $scanJob->refresh()->load([
+            'project:id,name,code',
+            'repository:id,name,url,default_branch,metadata',
+            'target:id,name,type,base_url,hostname',
+            'scanProfile:id,key,name',
+            'authorization:id,code,status',
+            'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
+            'reports:id,scan_job_id,status,format,generated_at,metadata',
+        ]);
+
+        return response()->json([
+            'message' => 'Permintaan scan berhasil disetujui dan telah dimasukkan ke antrean runner pemindaian.',
+            'scan_request' => $this->sanitizeJob($loaded),
+        ]);
+    }
+
+    public function reject(Request $request, ScanJob $scanJob, AuditLogger $auditLogger): JsonResponse
+    {
+        $user = $request->user();
+
+        if ($scanJob->status !== 'pending_approval') {
+            return response()->json([
+                'message' => 'Hanya permintaan scan dengan status pending_approval yang dapat ditolak.',
+            ], 422);
+        }
+
+        $reason = $request->input('reason', 'Permohonan scan tidak disetujui oleh Administrator SOC.');
+
+        DB::transaction(function () use ($scanJob, $user, $auditLogger, $request, $reason): void {
+            if ($scanJob->authorization) {
+                $scanJob->authorization->update([
+                    'status' => 'rejected',
+                    'approved_by' => $user->id,
+                    'notes' => trim(($scanJob->authorization->notes ?? '') . "\n[Ditolak Admin: {$reason}]"),
+                ]);
+            }
+
+            $scanJob->update([
+                'status' => 'cancelled',
+                'failure_reason' => 'Pengajuan scan ditolak oleh Admin: ' . $reason,
+                'cancelled_at' => now(),
+            ]);
+
+            $auditLogger->record($request, 'scan_job.reject', 'success', [
+                'project_id' => $scanJob->project_id,
+                'authorization_id' => $scanJob->authorization_id,
+                'scan_job_id' => $scanJob->id,
+                'target_type' => 'scan_job',
+                'target_id' => $scanJob->id,
+                'metadata' => [
+                    'code' => $scanJob->code,
+                    'rejected_by' => $user->name,
+                    'reason' => $reason,
+                ],
+            ]);
+        });
+
+        $loaded = $scanJob->refresh()->load([
+            'project:id,name,code',
+            'repository:id,name,url,default_branch,metadata',
+            'target:id,name,type,base_url,hostname',
+            'scanProfile:id,key,name',
+            'authorization:id,code,status',
+            'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
+            'reports:id,scan_job_id,status,format,generated_at,metadata',
+        ]);
+
+        return response()->json([
+            'message' => 'Permintaan scan telah ditolak.',
+            'scan_request' => $this->sanitizeJob($loaded),
+        ]);
     }
 
     public function rerun(Request $request, ScanJob $scanJob, AuditLogger $auditLogger): JsonResponse

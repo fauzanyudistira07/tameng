@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { apiFetch } from '../services/api'
+import { useAuth } from '../composables/useAuth'
+
+const route = useRoute()
+const router = useRouter()
+const { currentUser, isAdmin, isSuperAdmin, isSecurityAdmin, isSecurityAnalyst } = useAuth()
 
 // Tab Navigation State
 const activeTab = ref<'new_scan' | 'my_scans'>('new_scan')
+const notesInputRef = ref<HTMLTextAreaElement | null>(null)
+const autoFilledBanner = ref<string | null>(null)
+const myRepositories = ref<any[]>([])
 
 // Data Types
 interface ScanRun {
@@ -59,7 +68,7 @@ interface ScanReport {
 interface ScanRequest {
   id: number
   code: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'denied'
+  status: 'pending_approval' | 'queued' | 'running' | 'completed' | 'failed' | 'denied' | 'cancelled'
   progress: number
   created_at: string
   started_at?: string | null
@@ -101,6 +110,65 @@ const isSubmitting = ref(false)
 const isRerunningId = ref<number | null>(null)
 const selectedRequestForDetail = ref<ScanRequest | null>(null)
 const activeAiFindingKey = ref<string | null>(null)
+
+// Admin Approval Actions State
+const isApprovingId = ref<number | null>(null)
+const isRejectingId = ref<number | null>(null)
+const rejectModalJob = ref<ScanRequest | null>(null)
+const rejectReasonInput = ref('')
+const isSubmittingReject = ref(false)
+
+async function approveScanRequest(job: ScanRequest) {
+  isApprovingId.value = job.id
+  try {
+    const res = await apiFetch(`/api/my/scan-requests/${job.id}/approve`, {
+      method: 'POST'
+    })
+    if (res?.scan_request) {
+      const idx = scanRequests.value.findIndex(j => j.id === job.id)
+      if (idx !== -1) {
+        scanRequests.value[idx] = res.scan_request
+      }
+      showAlert('success', `Pengajuan scan #${job.code} disetujui dan telah masuk ke antrean runner pemindaian.`)
+    }
+  } catch (err: any) {
+    showAlert('danger', err?.message || 'Gagal menyetujui pengajuan scan.')
+  } finally {
+    isApprovingId.value = null
+  }
+}
+
+function openRejectModal(job: ScanRequest) {
+  rejectModalJob.value = job
+  rejectReasonInput.value = ''
+}
+
+async function submitRejectScanRequest() {
+  if (!rejectModalJob.value) return
+  isSubmittingReject.value = true
+  const job = rejectModalJob.value
+  try {
+    const res = await apiFetch(`/api/my/scan-requests/${job.id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: rejectReasonInput.value.trim() || 'Permintaan tidak disetujui oleh Administrator SOC'
+      })
+    })
+    if (res?.scan_request) {
+      const idx = scanRequests.value.findIndex(j => j.id === job.id)
+      if (idx !== -1) {
+        scanRequests.value[idx] = res.scan_request
+      }
+      showAlert('warning', `Pengajuan scan #${job.code} telah ditolak.`)
+      rejectModalJob.value = null
+    }
+  } catch (err: any) {
+    showAlert('danger', err?.message || 'Gagal menolak pengajuan scan.')
+  } finally {
+    isSubmittingReject.value = false
+  }
+}
+
 interface AiRemediationResult {
   summary?: string
   category?: string
@@ -144,7 +212,7 @@ const autoRefreshEnabled = ref(true)
 const lastSyncedAt = ref<string>('')
 
 // Filter & Pagination for Tab 2 (My Scans)
-const filterStatus = ref<'all' | 'running' | 'queued' | 'completed' | 'failed'>('all')
+const filterStatus = ref<'all' | 'pending' | 'running' | 'queued' | 'completed' | 'failed'>('all')
 const searchQuery = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -153,9 +221,9 @@ const pageSize = ref(10)
 const findingsFilter = ref<'all' | 'critical' | 'high' | 'medium' | 'low'>('all')
 
 // Toast Alert
-const alertMessage = ref<{ type: 'success' | 'danger' | 'info'; text: string } | null>(null)
+const alertMessage = ref<{ type: 'success' | 'danger' | 'info' | 'warning'; text: string } | null>(null)
 
-function showAlert(type: 'success' | 'danger' | 'info', text: string) {
+function showAlert(type: 'success' | 'danger' | 'info' | 'warning', text: string) {
   alertMessage.value = { type, text }
   setTimeout(() => {
     if (alertMessage.value?.text === text) {
@@ -335,6 +403,65 @@ function resetForm() {
   form.notes = ''
   removeMobileFile()
   showAuthOptions.value = false
+  autoFilledBanner.value = null
+}
+
+async function loadMyRepositories() {
+  try {
+    const res = await apiFetch('/api/repositories')
+    if (res && Array.isArray(res.repositories)) {
+      myRepositories.value = res.repositories
+    }
+  } catch (err) {
+    console.warn('[MyScanRequests] Gagal memuat repositori terdaftar:', err)
+  }
+}
+
+function selectPredefinedRepo(repo: any) {
+  form.scan_type = 'repository'
+  form.project_name = repo.project?.name || repo.name
+  form.asset_url = repo.url && (repo.url.startsWith('http://') || repo.url.startsWith('https://'))
+    ? repo.url
+    : (repo.name.includes('/') ? `https://github.com/${repo.name}.git` : repo.name)
+  form.default_branch = repo.default_branch || 'main'
+
+  autoFilledBanner.value = `Target pemindaian untuk [${form.project_name}] berhasil dimuat otomatis. Silakan lengkapi deskripsi/alasan permohonan di bawah ini, lalu klik 'Ajukan Pemindaian ke Admin SOC'.`
+
+  nextTick(() => {
+    if (notesInputRef.value) {
+      notesInputRef.value.focus()
+      notesInputRef.value.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  })
+}
+
+function applyQueryParams() {
+  const q = route.query
+  if (q.scan_type || q.project_name || q.asset_url || q.action === 'new') {
+    activeTab.value = 'new_scan'
+
+    if (q.scan_type && ['repository', 'web', 'api', 'container', 'mobile'].includes(q.scan_type as string)) {
+      form.scan_type = q.scan_type as ScanType
+    }
+    if (q.project_name) {
+      form.project_name = String(q.project_name)
+    }
+    if (q.asset_url) {
+      form.asset_url = String(q.asset_url)
+    }
+    if (q.branch) {
+      form.default_branch = String(q.branch)
+    }
+
+    autoFilledBanner.value = `Target pemindaian untuk [${form.project_name || form.asset_url}] berhasil dimuat otomatis. Silakan lengkapi deskripsi/alasan permohonan di bawah ini, lalu klik 'Ajukan Pemindaian ke Admin SOC'.`
+
+    nextTick(() => {
+      if (notesInputRef.value) {
+        notesInputRef.value.focus()
+        notesInputRef.value.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    })
+  }
 }
 
 // Submit Scan Request
@@ -390,12 +517,13 @@ async function submitScanRequest() {
     })
 
     const newScan = res?.scan_request || res?.scan_job
-    showAlert('success', `Pemindaian mandiri #${newScan?.code || 'Baru'} berhasil didaftarkan ke antrean sandbox.`)
+    const defaultMsg = 'Pengajuan pemindaian berhasil dikirimkan! Status saat ini: Menunggu Persetujuan Admin.'
+    showAlert('success', res?.message || defaultMsg)
     resetForm()
     activeTab.value = 'my_scans'
     await loadMyScanRequests(false)
   } catch (err: any) {
-    showAlert('danger', err?.message || 'Gagal mendaftarkan pemindaian mandiri.')
+    showAlert('danger', err?.message || 'Gagal mengajukan pemindaian.')
   } finally {
     isSubmitting.value = false
   }
@@ -423,11 +551,12 @@ async function loadMyScanRequests(showLoading = false) {
 // KPIs
 const kpiCounts = computed(() => {
   const total = scanRequests.value.length
+  const pending = scanRequests.value.filter(j => j.status === 'pending_approval').length
   const running = scanRequests.value.filter(j => j.status === 'running').length
   const queued = scanRequests.value.filter(j => j.status === 'queued').length
   const completed = scanRequests.value.filter(j => j.status === 'completed').length
-  const failed = scanRequests.value.filter(j => ['failed', 'denied'].includes(j.status)).length
-  return { total, running, queued, completed, failed }
+  const failed = scanRequests.value.filter(j => ['failed', 'denied', 'cancelled'].includes(j.status)).length
+  return { total, pending, running, queued, completed, failed }
 })
 
 // Filtered & Paginated Requests (Murni Identik dengan Pekerjaan Scan)
@@ -435,10 +564,11 @@ const filteredRequests = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   const list = scanRequests.value.filter(job => {
     // Status Filter
+    if (filterStatus.value === 'pending' && job.status !== 'pending_approval') return false
     if (filterStatus.value === 'running' && job.status !== 'running') return false
     if (filterStatus.value === 'queued' && job.status !== 'queued') return false
     if (filterStatus.value === 'completed' && job.status !== 'completed') return false
-    if (filterStatus.value === 'failed' && !['failed', 'denied'].includes(job.status)) return false
+    if (filterStatus.value === 'failed' && !['failed', 'denied', 'cancelled'].includes(job.status)) return false
 
     // Search Query: MURNI HANYA NAMA PROYEK (Sama persis dengan Pekerjaan Scan)
     if (!q) return true
@@ -514,11 +644,13 @@ function getJobStatusBadgeClass(job: ScanRequest): string {
     return 'bg-warning text-warning-fg'
   }
   switch (job.status) {
+    case 'pending_approval': return 'bg-warning text-dark fw-bold'
     case 'completed': return 'bg-success text-success-fg'
     case 'running': return 'bg-primary text-primary-fg'
     case 'queued': return 'bg-azure text-azure-fg'
     case 'failed':
-    case 'denied': return 'bg-danger text-danger-fg'
+    case 'denied':
+    case 'cancelled': return 'bg-danger text-danger-fg'
     default: return 'bg-secondary text-secondary-fg'
   }
 }
@@ -526,11 +658,13 @@ function getJobStatusBadgeClass(job: ScanRequest): string {
 function getJobStatusLabel(job: ScanRequest): string {
   if (isJobPartialSuccess(job)) return 'Selesai Parsial'
   switch (job.status) {
+    case 'pending_approval': return 'Menunggu Persetujuan Admin'
     case 'completed': return 'Selesai'
     case 'running': return 'Berjalan'
     case 'queued': return 'Antrean'
     case 'failed': return 'Gagal'
     case 'denied': return 'Ditolak'
+    case 'cancelled': return 'Dibatalkan / Ditolak'
     default: return job.status
   }
 }
@@ -958,7 +1092,12 @@ async function downloadReportPdfFile() {
 // Lifecycle Hooks
 // -------------------------------------------------------------
 onMounted(async () => {
-  await loadMyScanRequests(true)
+  await Promise.all([
+    loadMyScanRequests(true),
+    loadMyRepositories()
+  ])
+
+  applyQueryParams()
 
   // 1-second ticker for running durations
   secondTickerTimer = setInterval(() => {
@@ -971,6 +1110,10 @@ onMounted(async () => {
       loadMyScanRequests(false)
     }
   }, 6000)
+})
+
+watch(() => route.query, () => {
+  applyQueryParams()
 })
 
 onUnmounted(() => {
@@ -1066,8 +1209,8 @@ onUnmounted(() => {
       <div class="page-header d-print-none mb-3">
         <div class="row g-2 align-items-center">
           <div class="col">
-            <div class="page-pretitle text-secondary text-uppercase fw-bold fs-6">
-              Layanan Keamanan Mandiri &middot; Pengembang &amp; Tim QA
+            <div class="page-pretitle text-secondary">
+              Layanan Keamanan &middot; Pengajuan Audit &amp; Assessment
             </div>
             <h2 class="page-title d-flex align-items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" class="icon text-primary" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -1078,8 +1221,11 @@ onUnmounted(() => {
                 <path d="M16 20h2a2 2 0 0 0 2 -2v-1" />
                 <path d="M5 12l14 0" />
               </svg>
-              <span>Portal Scan Mandiri</span>
+              <span>Pengajuan Pemindaian Keamanan</span>
             </h2>
+            <div class="text-secondary small mt-1">
+              Pengajuan pemindaian keamanan memerlukan persetujuan Administrator Keamanan (SOC) sebelum antrean pemindaian dijalankan.
+            </div>
           </div>
 
           
@@ -1102,7 +1248,7 @@ onUnmounted(() => {
                   <path d="M12 5l0 14" />
                   <path d="M5 12l14 0" />
                 </svg>
-                <span>Buat Pemindaian Baru</span>
+                <span>Form Pengajuan Scan</span>
               </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -1118,7 +1264,7 @@ onUnmounted(() => {
                   <path d="M9 3m0 2a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2z" />
                   <path d="M9 14l2 2l4 -4" />
                 </svg>
-                <span>Riwayat Pemindaian Saya</span>
+                <span>Riwayat Pengajuan Scan</span>
                 <span class="badge ms-1" :class="activeTab === 'my_scans' ? 'bg-primary-lt' : 'bg-secondary-lt'">
                   <span v-if="isLoadingRequests && scanRequests.length === 0" class="spinner-border spinner-border-sm" style="width: 0.65rem; height: 0.65rem;" role="status"></span>
                   <span v-else>{{ scanRequests.length }}</span>
@@ -1197,6 +1343,44 @@ onUnmounted(() => {
           </div>
           <div class="card-body">
             <form @submit.prevent="submitScanRequest">
+              <!-- Auto-Filled Banner Alert -->
+              <div
+                v-if="autoFilledBanner"
+                class="alert alert-success d-flex align-items-center justify-content-between py-2 px-3 mb-3 border-0 bg-success-lt rounded-2 shadow-sm"
+              >
+                <div class="d-flex align-items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon text-success" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                  <span class="small fw-semibold">{{ autoFilledBanner }}</span>
+                </div>
+                <button type="button" class="btn-close" @click="autoFilledBanner = null" aria-label="Close"></button>
+              </div>
+
+              <!-- Quick Predefined Repositories Selection -->
+              <div
+                v-if="form.scan_type === 'repository' && myRepositories.length > 0"
+                class="mb-3 p-3 bg-body rounded border"
+              >
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="small fw-bold text-secondary text-uppercase ls-1">
+                    Pilih Cepat dari Repositori Saya:
+                  </span>
+                  <span class="text-muted small">{{ myRepositories.length }} repositori terdaftar</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                  <button
+                    v-for="repo in myRepositories"
+                    :key="repo.id"
+                    type="button"
+                    class="btn btn-sm d-inline-flex align-items-center gap-1 transition-all"
+                    :class="form.asset_url === repo.url ? 'btn-primary shadow-sm' : 'btn-outline-secondary'"
+                    @click="selectPredefinedRepo(repo)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 18a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M5 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M15 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M7 8l0 8" /><path d="M9 18h6a2 2 0 0 0 2 -2v-5" /><path d="M14 14l3 -3l3 3" /></svg>
+                    <span>{{ repo.name }}</span>
+                    <span class="badge bg-secondary-lt ms-1">{{ repo.project?.name || 'Proyek' }}</span>
+                  </button>
+                </div>
+              </div>
               <!-- Mobile Binary Dropzone -->
               <div v-if="form.scan_type === 'mobile'" class="mb-3">
                 <label class="form-label required fw-medium">
@@ -1371,15 +1555,26 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- Notes -->
+              <!-- Notes / Description -->
               <div class="mb-4">
-                <label class="form-label fw-medium small text-secondary">Catatan / Deskripsi Pemindaian (Opsional)</label>
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <label class="form-label fw-bold mb-0">
+                    Deskripsi / Alasan Permohonan Pemindaian
+                  </label>
+                  <span v-if="form.asset_url" class="badge bg-primary-lt">
+                    Target Siap Diajukan
+                  </span>
+                </div>
                 <textarea
+                  ref="notesInputRef"
                   v-model="form.notes"
                   class="form-control"
-                  rows="2"
-                  placeholder="Tambahkan catatan konteks pengujian, nomor tiket pengajuan, atau lingkup pengujian..."
+                  rows="3"
+                  placeholder="Tuliskan deskripsi ringkas tujuan pemindaian, perubahan kode/fitur yang baru dilakukan, atau konteks pengujian untuk Admin SOC..."
                 ></textarea>
+                <div class="form-text text-secondary small">
+                  Deskripsi ini akan ditinjau oleh Administrator Keamanan (SOC) saat memverifikasi pengajuan pemindaian Anda.
+                </div>
               </div>
 
               <!-- Submit Buttons -->
@@ -1392,9 +1587,20 @@ onUnmounted(() => {
                 >
                   Atur Ulang Form
                 </button>
+                <!-- Persetujuan Admin Notice Banner -->
+                <div class="alert alert-info d-flex align-items-start gap-3 py-3 px-3 mb-3 border-0 bg-info-lt rounded-3 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon text-info mt-1 flex-shrink-0" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>
+                  <div>
+                    <div class="fw-bold">Persetujuan Administrator SOC Diperlukan:</div>
+                    <div class="small text-secondary">
+                      Setiap permohonan pemindaian keamanan akan diverifikasi dan disetujui terlebih dahulu oleh tim Administrator Keamanan (SOC) sebelum antrean pemindaian dijalankan pada engine sandbox.
+                    </div>
+                  </div>
+                </div>
+
                 <button
                   type="submit"
-                  class="btn btn-primary d-flex align-items-center justify-content-center gap-2 w-100 w-sm-auto py-2"
+                  class="btn btn-primary d-flex align-items-center justify-content-center gap-2 w-100 w-sm-auto py-2 shadow-sm"
                   :disabled="isSubmitting"
                 >
                   <svg
@@ -1430,7 +1636,7 @@ onUnmounted(() => {
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                     <path d="M7 4v16l13 -8z" />
                   </svg>
-                  <span>{{ isSubmitting ? 'Mendaftarkan Sandbox...' : 'Mulai Pemindaian Mandiri Sekarang' }}</span>
+                  <span>{{ isSubmitting ? 'Mengirim Pengajuan...' : 'Ajukan Pemindaian ke Admin SOC' }}</span>
                 </button>
               </div>
             </form>
@@ -1550,6 +1756,16 @@ onUnmounted(() => {
               <li class="nav-item">
                 <button
                   class="nav-link"
+                  :class="{ active: filterStatus === 'pending' }"
+                  @click="filterStatus = 'pending'"
+                >
+                  <span class="status-dot status-warning me-1"></span>
+                  Menunggu Approval ({{ kpiCounts.pending }})
+                </button>
+              </li>
+              <li class="nav-item">
+                <button
+                  class="nav-link"
                   :class="{ active: filterStatus === 'running' }"
                   @click="filterStatus = 'running'"
                 >
@@ -1584,7 +1800,7 @@ onUnmounted(() => {
                   @click="filterStatus = 'failed'"
                 >
                   <span class="status-dot status-red me-1"></span>
-                  Gagal ({{ kpiCounts.failed }})
+                  Gagal / Ditolak ({{ kpiCounts.failed }})
                 </button>
               </li>
             </ul>
@@ -1807,52 +2023,85 @@ onUnmounted(() => {
 
                     <!-- 6. Aksi -->
                     <td class="text-end" @click.stop>
-                      <div class="btn-list flex-nowrap justify-content-end">
-                        <!-- Rerun Button -->
-                        <button
-                          class="btn btn-sm btn-secondary"
-                          :disabled="isRerunningId === job.id || job.status === 'running'"
-                          @click="promptRerun(job)"
-                          title="Jalankan ulang pemindaian ini"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            class="icon"
-                            :class="{ 'animate-spin': isRerunningId === job.id }"
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            stroke-width="2"
-                            stroke="currentColor"
-                            fill="none"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
+                      <div class="btn-list flex-nowrap justify-content-end align-items-center">
+                        <!-- Admin Approval Controls for pending_approval -->
+                        <template v-if="job.status === 'pending_approval'">
+                          <div v-if="isAdmin || isSecurityAnalyst" class="d-flex align-items-center gap-1">
+                            <button
+                              class="btn btn-sm btn-success d-inline-flex align-items-center gap-1 shadow-sm"
+                              :disabled="isApprovingId === job.id"
+                              @click="approveScanRequest(job)"
+                              title="Setujui permohonan scan ini dan masukkan ke antrean runner"
+                            >
+                              <span v-if="isApprovingId === job.id" class="spinner-border spinner-border-sm"></span>
+                              <template v-else>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                                <span>Setujui</span>
+                              </template>
+                            </button>
+                            <button
+                              class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1"
+                              :disabled="isRejectingId === job.id"
+                              @click="openRejectModal(job)"
+                              title="Tolak permohonan scan ini"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                              <span>Tolak</span>
+                            </button>
+                          </div>
+                          <span v-else class="badge bg-warning-lt text-warning d-inline-flex align-items-center gap-1">
+                            ⏳ Menunggu Review Admin
+                          </span>
+                        </template>
+
+                        <!-- Standard Action Buttons -->
+                        <template v-else>
+                          <!-- Rerun Button -->
+                          <button
+                            class="btn btn-sm btn-secondary"
+                            :disabled="isRerunningId === job.id || job.status === 'running'"
+                            @click="promptRerun(job)"
+                            title="Jalankan ulang pemindaian ini"
                           >
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                            <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
-                            <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
-                          </svg>
-                          <span class="d-none d-lg-inline ms-1">Rerun</span>
-                        </button>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              class="icon"
+                              :class="{ 'animate-spin': isRerunningId === job.id }"
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              stroke-width="2"
+                              stroke="currentColor"
+                              fill="none"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                              <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+                              <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+                            </svg>
+                            <span class="d-none d-lg-inline ms-1">Rerun</span>
+                          </button>
 
-                        <!-- Detail Temuan Modal Button -->
-                        <button
-                          class="btn btn-sm btn-primary"
-                          @click="openDetailModal(job)"
-                          title="Buka rincian kerentanan temuan"
-                        >
-                          Temuan
-                        </button>
+                          <!-- Detail Temuan Modal Button -->
+                          <button
+                            class="btn btn-sm btn-primary"
+                            @click="openDetailModal(job)"
+                            title="Buka rincian kerentanan temuan"
+                          >
+                            Temuan
+                          </button>
 
-                        <!-- Detail Inspector Toggle -->
-                        <button
-                          class="btn btn-sm"
-                          :class="expandedJobId === job.id ? 'btn-secondary' : 'btn-azure'"
-                          @click="toggleExpandRow(job.id)"
-                          title="Buka log rincian mesin"
-                        >
-                          Log Mesin
-                        </button>
+                          <!-- Detail Inspector Toggle -->
+                          <button
+                            class="btn btn-sm"
+                            :class="expandedJobId === job.id ? 'btn-secondary' : 'btn-azure'"
+                            @click="toggleExpandRow(job.id)"
+                            title="Buka log rincian mesin"
+                          >
+                            Log Mesin
+                          </button>
+                        </template>
                       </div>
                     </td>
                   </tr>
@@ -2547,6 +2796,49 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Konfirmasi Tolak Pengajuan Scan (Admin Only) -->
+    <div
+      v-if="rejectModalJob"
+      class="modal modal-blur fade show d-block"
+      tabindex="-1"
+      role="dialog"
+      style="background: rgba(0, 0, 0, 0.5);"
+      @click.self="rejectModalJob = null"
+    >
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content border-0 shadow-lg">
+          <div class="modal-header bg-danger text-white py-3">
+            <h5 class="modal-title fw-bold">Tolak Pengajuan Pemindaian</h5>
+            <button type="button" class="btn-close btn-close-white" @click="rejectModalJob = null"></button>
+          </div>
+          <div class="modal-body">
+            <p class="mb-2">Anda akan menolak pengajuan scan untuk proyek <strong>{{ rejectModalJob.project?.name }}</strong> ({{ rejectModalJob.code }}).</p>
+            <div class="mb-3">
+              <label class="form-label required">Alasan Penolakan</label>
+              <textarea
+                v-model="rejectReasonInput"
+                class="form-control"
+                rows="3"
+                placeholder="Contoh: Target berada di luar cakupan otorisasi pengujian organisasi atau URL tidak dapat diakses."
+              ></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="rejectModalJob = null">Batal</button>
+            <button
+              type="button"
+              class="btn btn-danger d-inline-flex align-items-center gap-2"
+              :disabled="isSubmittingReject"
+              @click="submitRejectScanRequest"
+            >
+              <span v-if="isSubmittingReject" class="spinner-border spinner-border-sm"></span>
+              <span>Konfirmasi Tolak Scan</span>
+            </button>
           </div>
         </div>
       </div>

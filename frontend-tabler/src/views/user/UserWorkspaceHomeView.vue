@@ -65,11 +65,12 @@ const fetchError = ref<string | null>(null)
 
 // Quick Fix Modal State
 const targetFinding = ref<Finding | null>(null)
-const fixStatusChoice = ref<'fixed' | 'in_progress'>('fixed')
+const fixStatusChoice = ref<'fixed' | 'in_progress' | 'open'>('fixed')
 const fixResolutionNotes = ref('')
 const isSavingFix = ref(false)
 const fixModalError = ref<string | null>(null)
 const isFixModalOpen = ref(false)
+const updatingTicketId = ref<number | null>(null)
 
 async function loadDashboardData() {
   isLoading.value = true
@@ -166,12 +167,79 @@ function getStatusLabel(st: string) {
   }
 }
 
-function openQuickFix(f: Finding) {
+function openQuickFix(f: Finding, defaultStatus?: 'fixed' | 'in_progress' | 'open') {
   targetFinding.value = f
-  fixStatusChoice.value = 'fixed'
-  fixResolutionNotes.value = ''
+  fixStatusChoice.value = defaultStatus || (f.status === 'in_progress' ? 'fixed' : 'in_progress')
+  fixResolutionNotes.value = f.normalization_metadata?.triage_notes || ''
   fixModalError.value = null
   isFixModalOpen.value = true
+}
+
+async function startWorking(ticket: Finding) {
+  updatingTicketId.value = ticket.id
+  try {
+    const res = await apiFetch(`/api/findings/${ticket.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: 'in_progress',
+        resolution_notes: `Mulai dikerjakan oleh ${currentUser.value?.name || 'developer'}`
+      })
+    })
+
+    if (res?.finding) {
+      const idx = findings.value.findIndex(f => f.id === ticket.id)
+      if (idx !== -1) {
+        findings.value[idx].status = res.finding.status
+        findings.value[idx].normalization_metadata = res.finding.normalization_metadata
+      }
+    }
+  } catch (err: any) {
+    console.error('Gagal memperbarui status pengerjaan:', err)
+  } finally {
+    updatingTicketId.value = null
+  }
+}
+
+async function markAsFixed(ticket: Finding) {
+  updatingTicketId.value = ticket.id
+  try {
+    const res = await apiFetch(`/api/findings/${ticket.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        status: 'fixed',
+        resolution_notes: `Diselesaikan oleh ${currentUser.value?.name || 'developer'}`
+      })
+    })
+
+    if (res?.finding) {
+      const idx = findings.value.findIndex(f => f.id === ticket.id)
+      if (idx !== -1) {
+        findings.value[idx].status = res.finding.status
+        findings.value[idx].normalization_metadata = res.finding.normalization_metadata
+      }
+    }
+  } catch (err: any) {
+    console.error('Gagal menyelesaikan tiket:', err)
+  } finally {
+    updatingTicketId.value = null
+  }
+}
+
+function startScanForRepo(repo: any) {
+  const targetUrl = repo.url && (repo.url.startsWith('http://') || repo.url.startsWith('https://'))
+    ? repo.url
+    : (repo.name.includes('/') ? `https://github.com/${repo.name}.git` : repo.name)
+
+  router.push({
+    path: '/workspace/scans',
+    query: {
+      action: 'new',
+      scan_type: 'repository',
+      project_name: repo.project?.name || repo.name,
+      asset_url: targetUrl,
+      branch: repo.default_branch || 'main'
+    }
+  })
 }
 
 function closeQuickFix() {
@@ -396,13 +464,36 @@ function formatDate(d?: string) {
                 </div>
 
                 <div class="d-flex align-items-center gap-2">
+                  <!-- Mulai Kerjakan if open -->
+                  <button
+                    v-if="ticket.status === 'open' || ticket.status === 'reviewing'"
+                    type="button"
+                    class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 shadow-sm"
+                    :disabled="updatingTicketId === ticket.id"
+                    @click="startWorking(ticket)"
+                    title="Mulai kerjakan perbaikan celah ini sekarang"
+                  >
+                    <span v-if="updatingTicketId === ticket.id" class="spinner-border spinner-border-sm" role="status"></span>
+                    <template v-else>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 4v16l13 -8z" /></svg>
+                      <span>Mulai Kerjakan</span>
+                    </template>
+                  </button>
+
+                  <!-- Tandai Selesai (Direct 1-Click Action) -->
                   <button
                     type="button"
-                    class="btn btn-sm btn-outline-success d-inline-flex align-items-center gap-1"
-                    @click="openQuickFix(ticket)"
+                    class="btn btn-sm d-inline-flex align-items-center gap-1"
+                    :class="ticket.status === 'in_progress' ? 'btn-success shadow-sm' : 'btn-outline-success'"
+                    :disabled="updatingTicketId === ticket.id"
+                    @click="markAsFixed(ticket)"
+                    title="Langsung tandai celah ini selesai diperbaiki"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
-                    <span>Tandai Selesai</span>
+                    <span v-if="updatingTicketId === ticket.id" class="spinner-border spinner-border-sm" role="status"></span>
+                    <template v-else>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                      <span>Tandai Selesai</span>
+                    </template>
                   </button>
                 </div>
               </div>
@@ -452,13 +543,15 @@ function formatDate(d?: string) {
                   </div>
                 </div>
 
-                <router-link
-                  to="/workspace/scans"
-                  class="btn btn-sm btn-ghost-primary"
-                  title="Scan repositori ini"
+                <button
+                  type="button"
+                  class="btn btn-sm btn-ghost-primary d-inline-flex align-items-center gap-1"
+                  title="Ajukan scan untuk repositori ini"
+                  @click="startScanForRepo(repo)"
                 >
-                  Scan
-                </router-link>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /></svg>
+                  <span>Scan</span>
+                </button>
               </div>
             </div>
           </div>
@@ -480,9 +573,9 @@ function formatDate(d?: string) {
             </div>
 
             <div v-else-if="recentScans.length === 0" class="p-4 text-center text-muted">
-              <div class="small">Belum ada riwayat scan yang Anda jalankan.</div>
+              <div class="small">Belum ada riwayat pengajuan scan yang Anda buat.</div>
               <router-link to="/workspace/scans" class="btn btn-sm btn-primary mt-2">
-                Mulai Scan Pertama
+                Ajukan Scan Baru
               </router-link>
             </div>
 
@@ -502,12 +595,14 @@ function formatDate(d?: string) {
                 <span
                   class="badge"
                   :class="{
+                    'bg-warning text-dark fw-bold': scan.status === 'pending_approval',
                     'bg-success-lt text-success': scan.status === 'completed',
-                    'bg-danger-lt text-danger': scan.status === 'failed',
+                    'bg-danger-lt text-danger': scan.status === 'failed' || scan.status === 'cancelled',
+                    'bg-azure-lt text-azure': scan.status === 'queued',
                     'bg-blue-lt text-blue': scan.status === 'processing' || scan.status === 'running'
                   }"
                 >
-                  {{ scan.status }}
+                  {{ scan.status === 'pending_approval' ? 'Menunggu Approval' : (scan.status === 'cancelled' ? 'Ditolak' : scan.status) }}
                 </span>
               </div>
             </div>
@@ -556,8 +651,9 @@ function formatDate(d?: string) {
             <div class="mb-3">
               <label class="form-label required">Status Perbaikan</label>
               <select v-model="fixStatusChoice" class="form-select">
+                <option value="in_progress">Sedang Dikerjakan (In Progress - Mulai Kerjakan Sekarang)</option>
                 <option value="fixed">Sudah Diperbaiki (Fixed in commit / PR)</option>
-                <option value="in_progress">Sedang Dikerjakan (In Progress)</option>
+                <option value="open">Perlu Diperbaiki (Open - Kembalikan ke Antrean Backlog)</option>
               </select>
             </div>
 

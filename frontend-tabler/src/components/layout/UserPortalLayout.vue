@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../../composables/useTheme'
 import { useAuth } from '../../composables/useAuth'
+import { apiFetch } from '../../services/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,8 +19,6 @@ const {
   assignedProjectNames,
   handleLogout
 } = useAuth()
-
-const searchQuery = ref('')
 
 // Navigasi menu utama User Workspace (5 alur utama non-admin, tanpa redundansi pengaturan)
 const navItems = [
@@ -39,7 +38,7 @@ const navItems = [
     icon: 'folder'
   },
   {
-    label: 'Scan Mandiri',
+    label: 'Pengajuan Scan',
     path: '/workspace/scans',
     icon: 'scan'
   },
@@ -50,13 +49,161 @@ const navItems = [
   }
 ]
 
+// Live Quick Search State
+const searchQuery = ref('')
+const searchContainerRef = ref<HTMLElement | null>(null)
+const isDropdownOpen = ref(false)
+const isLoadingSearchData = ref(false)
+const hasLoadedSearchData = ref(false)
+const searchFindings = ref<any[]>([])
+const searchRepos = ref<any[]>([])
+
+async function loadSearchData() {
+  if (hasLoadedSearchData.value || isLoadingSearchData.value) return
+  isLoadingSearchData.value = true
+  try {
+    const [findingsRes, reposRes] = await Promise.all([
+      apiFetch('/api/findings').catch(() => ({ findings: [] })),
+      apiFetch('/api/repositories').catch(() => ({ repositories: [] }))
+    ])
+    searchFindings.value = findingsRes?.findings || []
+    searchRepos.value = reposRes?.repositories || []
+    hasLoadedSearchData.value = true
+  } catch (err) {
+    console.error('Gagal memuat data pencarian:', err)
+  } finally {
+    isLoadingSearchData.value = false
+  }
+}
+
+function onInputFocus() {
+  isDropdownOpen.value = true
+  loadSearchData()
+}
+
+function onInputChange() {
+  isDropdownOpen.value = true
+  loadSearchData()
+}
+
+const filteredFindings = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  if (!q) return []
+  return searchFindings.value
+    .filter(f => {
+      const titleMatch = f.title?.toLowerCase().includes(q)
+      const codeMatch = f.code?.toLowerCase().includes(q)
+      const cveMatch = f.cve?.toLowerCase().includes(q)
+      const fileMatch = f.normalization_metadata?.location?.file?.toLowerCase().includes(q)
+      const projMatch = f.project?.name?.toLowerCase().includes(q)
+      return titleMatch || codeMatch || cveMatch || fileMatch || projMatch
+    })
+    .slice(0, 5)
+})
+
+const filteredRepos = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  if (!q) return []
+  return searchRepos.value
+    .filter(r => {
+      const nameMatch = r.name?.toLowerCase().includes(q)
+      const urlMatch = r.url?.toLowerCase().includes(q)
+      const projMatch = r.project?.name?.toLowerCase().includes(q)
+      return nameMatch || urlMatch || projMatch
+    })
+    .slice(0, 4)
+})
+
+const filteredFiles = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim()
+  if (!q) return []
+  const fileMap = new Map<string, { file: string; projectName: string; count: number }>()
+  searchFindings.value.forEach(f => {
+    const file = f.normalization_metadata?.location?.file
+    if (file && file.toLowerCase().includes(q)) {
+      const existing = fileMap.get(file)
+      if (existing) {
+        existing.count++
+      } else {
+        fileMap.set(file, {
+          file,
+          projectName: f.project?.name || 'Umum',
+          count: 1
+        })
+      }
+    }
+  })
+  return Array.from(fileMap.values()).slice(0, 4)
+})
+
+const totalResultsCount = computed(() => {
+  return filteredFindings.value.length + filteredRepos.value.length + filteredFiles.value.length
+})
+
+function selectFinding(f: any) {
+  isDropdownOpen.value = false
+  searchQuery.value = ''
+  router.push({
+    path: '/workspace/tickets',
+    query: { q: f.code || f.title }
+  })
+}
+
+function selectRepo(r: any) {
+  isDropdownOpen.value = false
+  searchQuery.value = ''
+  router.push({
+    path: '/workspace/files',
+    query: { q: r.name }
+  })
+}
+
+function selectFile(fileItem: any) {
+  isDropdownOpen.value = false
+  searchQuery.value = ''
+  router.push({
+    path: '/workspace/tickets',
+    query: { q: fileItem.file }
+  })
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  isDropdownOpen.value = false
+}
+
 function onQuickSearch() {
   if (!searchQuery.value.trim()) return
+  isDropdownOpen.value = false
   router.push({
     path: '/workspace/tickets',
     query: { q: searchQuery.value.trim() }
   })
 }
+
+function getSeverityBadge(sev?: string) {
+  switch (sev?.toLowerCase()) {
+    case 'critical': return 'bg-danger text-danger-fg'
+    case 'high': return 'bg-warning text-warning-fg'
+    case 'medium': return 'bg-yellow text-yellow-fg'
+    case 'low': return 'bg-info text-info-fg'
+    default: return 'bg-secondary text-secondary-fg'
+  }
+}
+
+function handleDocumentClick(e: MouseEvent) {
+  if (searchContainerRef.value && !searchContainerRef.value.contains(e.target as Node)) {
+    isDropdownOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleDocumentClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocumentClick)
+})
 </script>
 
 <template>
@@ -85,7 +232,7 @@ function onQuickSearch() {
             </div>
 
             <!-- Center: Quick Search Bar (Desktop) -->
-            <div class="d-none d-md-flex flex-grow-1 mx-3" style="max-width: 440px;">
+            <div ref="searchContainerRef" class="d-none d-md-flex flex-grow-1 mx-3 position-relative" style="max-width: 460px;">
               <div class="input-icon w-100">
                 <span class="input-icon-addon">
                   <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
@@ -95,8 +242,121 @@ function onQuickSearch() {
                   type="text"
                   class="form-control form-control-sm bg-body"
                   placeholder="Cari tiket celah, repositori, file..."
+                  @focus="onInputFocus"
+                  @input="onInputChange"
                   @keydown.enter="onQuickSearch"
+                  @keydown.esc="clearSearch"
                 />
+                <span v-if="searchQuery" class="input-icon-addon input-icon-addon-end cursor-pointer" @click="clearSearch" title="Hapus pencarian">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-muted" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                </span>
+              </div>
+
+              <!-- Live Search Dropdown Popover -->
+              <div
+                v-if="isDropdownOpen && searchQuery.trim().length > 0"
+                class="search-results-dropdown shadow-lg rounded-3 border"
+              >
+                <!-- Loading State -->
+                <div v-if="isLoadingSearchData" class="p-3 text-center text-muted">
+                  <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                  <span style="font-size: 0.85rem;">Mencari data...</span>
+                </div>
+
+                <!-- Empty State -->
+                <div v-else-if="totalResultsCount === 0" class="p-3 text-center text-muted">
+                  <div class="small fw-medium">Tidak ada hasil yang cocok dengan "{{ searchQuery }}"</div>
+                  <div class="text-muted mt-1" style="font-size: 0.75rem;">Coba judul celah, berkas, CVE, atau repositori.</div>
+                </div>
+
+                <!-- Results Grouped by Category -->
+                <div v-else class="search-results-body py-1">
+                  <!-- 1. Tiket Celah -->
+                  <div v-if="filteredFindings.length > 0" class="search-category-group">
+                    <div class="search-category-header px-3 py-1 d-flex align-items-center justify-content-between text-uppercase fw-bold text-muted">
+                      <span>Tiket Celah</span>
+                      <span class="badge bg-primary-lt">{{ filteredFindings.length }}</span>
+                    </div>
+                    <div
+                      v-for="finding in filteredFindings"
+                      :key="'f-' + finding.id"
+                      class="search-result-item px-3 py-2 cursor-pointer border-bottom-subtle text-start"
+                      @click="selectFinding(finding)"
+                    >
+                      <div class="d-flex align-items-center justify-content-between gap-2 mb-1">
+                        <span class="badge" :class="getSeverityBadge(finding.severity)">
+                          {{ finding.severity?.toUpperCase() || 'INFO' }}
+                        </span>
+                        <span class="text-muted text-truncate" style="font-size: 0.72rem;">{{ finding.project?.name || finding.code }}</span>
+                      </div>
+                      <div class="fw-medium text-body text-truncate" style="font-size: 0.85rem;" :title="finding.title">
+                        {{ finding.title }}
+                      </div>
+                      <div v-if="finding.normalization_metadata?.location?.file" class="text-muted text-truncate font-monospace mt-1" style="font-size: 0.72rem;">
+                        📄 {{ finding.normalization_metadata.location.file }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 2. Repositori -->
+                  <div v-if="filteredRepos.length > 0" class="search-category-group">
+                    <div class="search-category-header px-3 py-1 d-flex align-items-center justify-content-between text-uppercase fw-bold text-muted">
+                      <span>Repositori</span>
+                      <span class="badge bg-teal-lt">{{ filteredRepos.length }}</span>
+                    </div>
+                    <div
+                      v-for="repo in filteredRepos"
+                      :key="'r-' + repo.id"
+                      class="search-result-item px-3 py-2 cursor-pointer border-bottom-subtle text-start"
+                      @click="selectRepo(repo)"
+                    >
+                      <div class="d-flex align-items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon text-teal flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" /><path d="M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2" /></svg>
+                        <div class="flex-grow-1 min-w-0">
+                          <div class="fw-medium text-body text-truncate" style="font-size: 0.85rem;">{{ repo.name }}</div>
+                          <div class="text-muted text-truncate" style="font-size: 0.72rem;">Proyek: {{ repo.project?.name || '-' }} • Branch: {{ repo.default_branch || 'main' }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 3. Berkas / File Terkait -->
+                  <div v-if="filteredFiles.length > 0" class="search-category-group">
+                    <div class="search-category-header px-3 py-1 d-flex align-items-center justify-content-between text-uppercase fw-bold text-muted">
+                      <span>Berkas Celah</span>
+                      <span class="badge bg-purple-lt">{{ filteredFiles.length }}</span>
+                    </div>
+                    <div
+                      v-for="fileItem in filteredFiles"
+                      :key="'fl-' + fileItem.file"
+                      class="search-result-item px-3 py-2 cursor-pointer border-bottom-subtle text-start"
+                      @click="selectFile(fileItem)"
+                    >
+                      <div class="d-flex align-items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon text-purple flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /></svg>
+                        <div class="flex-grow-1 min-w-0">
+                          <div class="fw-medium text-body text-truncate font-monospace" style="font-size: 0.8rem;">{{ fileItem.file }}</div>
+                          <div class="text-muted text-truncate" style="font-size: 0.72rem;">Proyek: {{ fileItem.projectName }} ({{ fileItem.count }} celah)</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Dropdown Footer -->
+                <div class="search-dropdown-footer p-2 bg-body-tertiary border-top d-flex align-items-center justify-content-between">
+                  <span class="text-muted" style="font-size: 0.75rem;">
+                    Tekan <kbd class="bg-body text-body border px-1">Enter ↵</kbd> untuk hasil lengkap
+                  </span>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-link p-0 text-decoration-none text-primary"
+                    style="font-size: 0.75rem;"
+                    @click="onQuickSearch"
+                  >
+                    Buka di Tiket Celah →
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -315,5 +575,46 @@ function onQuickSearch() {
 
 .workspace-footer {
   background-color: var(--tblr-bg-surface, #182433) !important;
+}
+
+.search-results-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background-color: var(--tblr-bg-surface, #182433) !important;
+  border-color: var(--tblr-border-color, rgba(255, 255, 255, 0.12)) !important;
+  z-index: 1060;
+  max-height: 480px;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+}
+
+.search-category-header {
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  background-color: rgba(var(--tblr-body-color-rgb, 220, 225, 231), 0.04);
+}
+
+.search-result-item {
+  transition: background-color 0.15s ease-in-out;
+}
+
+.search-result-item:hover {
+  background-color: rgba(var(--tblr-primary-rgb, 0, 84, 166), 0.12);
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.border-bottom-subtle {
+  border-bottom: 1px solid var(--tblr-border-color-translucent, rgba(255, 255, 255, 0.06));
+}
+
+.input-icon-addon-end {
+  right: 8px;
+  left: auto;
+  pointer-events: auto;
 }
 </style>

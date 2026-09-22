@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { apiFetch } from '../../services/api'
 import { useAuth } from '../../composables/useAuth'
 
+const route = useRoute()
+const router = useRouter()
 const { assignedProjects } = useAuth()
 
 interface Project {
@@ -78,6 +81,18 @@ async function loadData() {
   }
 }
 
+watch(
+  () => route.query.q,
+  (newQ) => {
+    if (typeof newQ === 'string') {
+      searchQuery.value = newQ.trim()
+    } else {
+      searchQuery.value = ''
+    }
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   loadData()
   window.addEventListener('keydown', handleKeydown)
@@ -104,6 +119,8 @@ interface UnifiedAsset {
   projectName: string
   location: string
   updatedAt: string
+  url?: string
+  defaultBranch?: string
 }
 
 const allAssets = computed<UnifiedAsset[]>(() => {
@@ -111,6 +128,10 @@ const allAssets = computed<UnifiedAsset[]>(() => {
 
   repositories.value.forEach(r => {
     const isZip = r.url?.endsWith('.zip') || r.name?.toLowerCase().includes('zip')
+    const finalUrl = r.url && (r.url.startsWith('http://') || r.url.startsWith('https://'))
+      ? r.url
+      : (r.name.includes('/') ? `https://github.com/${r.name}.git` : `https://github.com/${r.name}`)
+
     list.push({
       id: `repo-${r.id}`,
       rawId: r.id,
@@ -119,8 +140,10 @@ const allAssets = computed<UnifiedAsset[]>(() => {
       typeLabel: isZip ? 'Arsip Source (ZIP)' : 'Git Repository',
       projectId: r.project_id,
       projectName: r.project?.name || 'Proyek',
-      location: r.default_branch ? `Branch: ${r.default_branch}` : r.url,
-      updatedAt: r.created_at
+      location: r.default_branch ? `Branch: ${r.default_branch}` : (r.url || 'Default'),
+      updatedAt: r.created_at,
+      url: finalUrl,
+      defaultBranch: r.default_branch || 'main'
     })
   })
 
@@ -144,12 +167,41 @@ const allAssets = computed<UnifiedAsset[]>(() => {
       projectId: t.project_id,
       projectName: t.project?.name || 'Proyek',
       location: t.base_url || 'Target Endpoint',
-      updatedAt: t.created_at
+      updatedAt: t.created_at,
+      url: t.base_url || '',
+      defaultBranch: 'main'
     })
   })
 
   return list
 })
+
+function startScanForAsset(item: UnifiedAsset) {
+  let scanType = 'repository'
+  if (item.type === 'web') scanType = 'web'
+  else if (item.type === 'api') scanType = 'api'
+  else if (item.type === 'mobile') scanType = 'mobile'
+
+  let targetUrl = item.url || ''
+  if (!targetUrl) {
+    if (item.type === 'git' || item.type === 'archive') {
+      targetUrl = item.name.includes('/') ? `https://github.com/${item.name}.git` : `https://github.com/${item.name}`
+    } else {
+      targetUrl = item.location || item.name
+    }
+  }
+
+  router.push({
+    path: '/workspace/scans',
+    query: {
+      action: 'new',
+      scan_type: scanType,
+      project_name: item.projectName || item.name,
+      asset_url: targetUrl,
+      branch: item.defaultBranch || 'main'
+    }
+  })
+}
 
 const filteredAssets = computed(() => {
   return allAssets.value.filter(a => {
@@ -210,7 +262,7 @@ async function submitUploadScan() {
       body: formData
     })
 
-    uploadMessage.value = { type: 'success', text: 'Berkas berhasil diunggah dan scan mandiri sedang diproses!' }
+    uploadMessage.value = { type: 'success', text: 'Berkas berhasil diunggah dan permohonan scan telah dikirim ke Admin SOC!' }
     setTimeout(() => {
       isUploadModalOpen.value = false
       uploadFile.value = null
@@ -451,12 +503,15 @@ function formatDate(d?: string) {
               Proyek: <strong>{{ item.projectName }}</strong>
             </div>
 
-            <router-link
-              to="/workspace/scans"
-              class="btn btn-sm btn-outline-primary"
+            <button
+              type="button"
+              class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1"
+              title="Ajukan scan untuk aset ini"
+              @click="startScanForAsset(item)"
             >
-              Scan
-            </router-link>
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /></svg>
+              <span>Scan</span>
+            </button>
           </div>
         </div>
       </div>
@@ -507,9 +562,15 @@ function formatDate(d?: string) {
                 {{ formatDate(item.updatedAt) }}
               </td>
               <td>
-                <router-link to="/workspace/scans" class="btn btn-sm btn-ghost-primary">
-                  Scan
-                </router-link>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-ghost-primary d-inline-flex align-items-center gap-1"
+                  title="Ajukan scan untuk aset ini"
+                  @click="startScanForAsset(item)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /></svg>
+                  <span>Scan</span>
+                </button>
               </td>
             </tr>
           </tbody>

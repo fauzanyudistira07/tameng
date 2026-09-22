@@ -38,6 +38,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role:super_admin,security_admin,security_analyst,developer');
     Route::post('/my/scan-requests/{scanJob}/rerun', [MyScanRequestController::class, 'rerun'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer');
+    Route::post('/my/scan-requests/{scanJob}/approve', [MyScanRequestController::class, 'approve'])
+        ->middleware('role:super_admin,security_admin,security_analyst');
+    Route::post('/my/scan-requests/{scanJob}/reject', [MyScanRequestController::class, 'reject'])
+        ->middleware('role:super_admin,security_admin,security_analyst');
 
     // Dynamic 20 Security Engines Registry & Profiles
     Route::get('/security/engines', [SecurityEngineController::class, 'index'])
