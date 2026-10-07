@@ -325,7 +325,7 @@ class TargetController extends Controller
                 'approved_by' => $user->id,
                 'status' => 'active',
                 'valid_from' => now()->subMinute(),
-                'valid_until' => now()->addDays(7),
+                'valid_until' => $user->isAdmin() ? null : now()->addDays(7),
                 'max_concurrency' => 1,
                 'rate_limit_per_minute' => 60,
                 'allowed_engines' => $profile->engine_keys,

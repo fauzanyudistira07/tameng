@@ -78,6 +78,12 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class);
     }
 
+    public function isAdmin(): bool
+    {
+        $this->loadMissing('role');
+        return in_array($this->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+    }
+
     public function authenticationLogs(): HasMany
     {
         return $this->hasMany(AuthenticationLog::class);

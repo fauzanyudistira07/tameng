@@ -196,6 +196,10 @@ export function useNotifications() {
       items.sort((a, b) => b.timestamp - a.timestamp)
       notifications.value = items
       lastFetchedTime = Date.now()
+
+      // Set default filter based on unread count
+      const hasUnread = items.some(item => !item.isRead)
+      activeFilter.value = hasUnread ? 'unread' : 'all'
     } catch (err) {
       console.error('[Notifications] Global load error:', err)
     } finally {
@@ -271,6 +275,10 @@ export function useNotifications() {
     }
   }
 
+  function resetFilterOnOpen() {
+    activeFilter.value = unreadCount.value > 0 ? 'unread' : 'all'
+  }
+
   return {
     notifications,
     activeFilter,
@@ -283,6 +291,7 @@ export function useNotifications() {
     markAllAsRead,
     toggleStar,
     removeNotification,
-    handleNotificationClick
+    handleNotificationClick,
+    resetFilterOnOpen
   }
 }

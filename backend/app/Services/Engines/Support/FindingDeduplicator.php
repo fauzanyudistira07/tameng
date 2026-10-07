@@ -23,7 +23,7 @@ class FindingDeduplicator
                 $scanJob->project_id,
                 $item['asset_type'] ?? 'repository',
                 $item['file_path'] ?? $item['endpoint'] ?? null,
-                $item['cwe'] ?? $item['cve'] ?? $item['rule_id'] ?? 'rule',
+                $item['rule_id'] ?? $item['cve'] ?? $item['cwe'] ?? 'rule',
                 $item['line_start'] ?? null
             );
 
@@ -58,7 +58,8 @@ class FindingDeduplicator
                 $finding->cve = $item['cve'] ?? null;
                 $finding->cvss = $item['cvss'] ?? null;
                 $finding->status = 'open';
-                $finding->evidence_summary = $item['evidence_summary'] ?? [];
+                $evidenceSummary = $item['evidence_summary'] ?? $item['metadata'] ?? [];
+                $finding->evidence_summary = is_array($evidenceSummary) ? $evidenceSummary : ['raw' => $evidenceSummary];
                 $finding->normalization_metadata = $item['normalization_metadata'] ?? [];
                 $finding->save();
             } else {
@@ -72,6 +73,7 @@ class FindingDeduplicator
             }
 
             // 2. Attach Evidence Record
+            $evidenceSummary = $item['evidence_summary'] ?? $item['metadata'] ?? [];
             FindingEvidence::updateOrCreate(
                 [
                     'finding_id' => $finding->id,
@@ -81,7 +83,7 @@ class FindingDeduplicator
                     'engine_version' => $item['normalization_metadata']['engine_version'] ?? '1.0.0',
                     'confidence' => (float) ($item['confidence'] ?? 0.80),
                     'fingerprint_hash' => $fingerprint,
-                    'evidence_summary' => $item['evidence_summary'] ?? [],
+                    'evidence_summary' => is_array($evidenceSummary) ? $evidenceSummary : ['raw' => $evidenceSummary],
                     'raw_artifact_path' => $item['raw_artifact_path'] ?? null,
                 ]
             );

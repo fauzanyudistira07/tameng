@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -123,6 +124,18 @@ class AuthController extends Controller
                         'email' => $credentials['email'],
                         'reason' => 'user_not_found',
                     ],
+                ]);
+            }
+
+            if ($targetUser && ! empty($targetUser->auth_provider) && $targetUser->auth_provider !== 'local') {
+                $providerTitles = [
+                    'keycloak' => 'SSO Keycloak',
+                    'google' => 'Google Workspace',
+                    'active_directory' => 'Active Directory / Entra',
+                ];
+                $title = $providerTitles[$targetUser->auth_provider] ?? $targetUser->auth_provider;
+                throw ValidationException::withMessages([
+                    'email' => ["Akun ini terdaftar dengan metode autentikasi {$title}. Silakan masuk menggunakan tombol Single Sign-On ({$title})."],
                 ]);
             }
 
@@ -339,6 +352,8 @@ class AuthController extends Controller
             'phone' => $user->phone,
             'department' => $user->department,
             'avatar_path' => $user->avatar_path,
+            'auth_provider' => $user->auth_provider ?? 'local',
+            'provider_id' => $user->provider_id,
             'status' => $user->status,
             'last_login_at' => $user->last_login_at?->toISOString(),
             'last_login_ip' => $user->last_login_ip,

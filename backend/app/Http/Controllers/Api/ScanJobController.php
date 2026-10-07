@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\RunScanJob;
+use App\Models\Report;
 use App\Models\ScanJob;
+use App\Models\ScanRun;
 use App\Services\AuditLogger;
 use App\Services\AuthorizationGateway;
 use App\Services\Engines\EngineRunner;
+use App\Services\ReportGenerator;
 use App\Services\SimulatedWorker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,7 +28,7 @@ class ScanJobController extends Controller
                     'repository:id,name',
                     'target:id,name,type',
                     'scanProfile:id,key,name',
-                    'authorization:id,code',
+                    'authorization:id,code,status,valid_from,valid_until',
                     'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
                 ])
                 ->select([
@@ -113,7 +116,7 @@ class ScanJobController extends Controller
                 'repository:id,name',
                 'target:id,name,type',
                 'scanProfile:id,key,name',
-                'authorization:id,code',
+                'authorization:id,code,status,valid_from,valid_until',
                 'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
             ]),
         ], 201);
@@ -147,8 +150,49 @@ class ScanJobController extends Controller
         string $engineKey,
         EngineRunner $engineRunner,
         AuditLogger $auditLogger,
+        ReportGenerator $reportGenerator,
     ): JsonResponse {
         $scanRun = $engineRunner->execute($scanJob, $engineKey);
+
+        $scanJob->refresh();
+        $runs = $scanJob->scanRuns()->get();
+        $totalEngines = max(1, count($scanJob->engine_plan ?? []));
+        $terminalRuns = $runs->filter(fn (ScanRun $run): bool => in_array($run->status, ['completed', 'failed', 'denied', 'skipped'], true));
+        $completedCount = $runs->where('status', 'completed')->count();
+        $failedCount = $runs->where('status', 'failed')->count();
+        $hasDenied = $runs->contains(fn (ScanRun $run): bool => $run->status === 'denied');
+        $finalStatus = $hasDenied ? 'denied' : ($completedCount > 0 ? 'completed' : ($failedCount > 0 ? 'failed' : 'completed'));
+        $progress = $terminalRuns->count() >= $totalEngines ? 100 : (int) round(($terminalRuns->count() / $totalEngines) * 100);
+
+        $updatedPlan = collect($scanJob->engine_plan ?? [])->map(function ($planItem) use ($runs) {
+            $key = $planItem['engine_key'] ?? null;
+            $matchedRun = $runs->firstWhere('engine_key', $key);
+            return [
+                ...$planItem,
+                'status' => $matchedRun?->status ?? 'queued',
+                'finding_count' => $matchedRun?->runtime_metrics['finding_count'] ?? 0,
+            ];
+        })->all();
+
+        $scanJob->forceFill([
+            'status' => $finalStatus,
+            'progress' => $progress,
+            'engine_plan' => $updatedPlan,
+            'completed_engine_count' => $completedCount,
+            'failed_engine_count' => $failedCount,
+            'coverage_pass' => ($failedCount === 0 && $completedCount > 0),
+            'finished_at' => in_array($finalStatus, ['completed', 'failed', 'denied'], true) ? ($scanJob->finished_at ?? now()) : null,
+        ])->save();
+
+        // If a report already exists for this scan job, automatically sync it
+        $existingReport = Report::where('scan_job_id', $scanJob->id)->first();
+        if ($existingReport) {
+            try {
+                $reportGenerator->syncReport($existingReport, $request->user());
+            } catch (\Throwable $e) {
+                // Ignore sync errors gracefully
+            }
+        }
 
         $auditLogger->record($request, 'engine.run_guarded', $scanRun->status === 'failed' ? 'failed' : 'success', [
             'project_id' => $scanJob->project_id,
@@ -172,7 +216,7 @@ class ScanJobController extends Controller
                 'repository:id,name',
                 'target:id,name,type',
                 'scanProfile:id,key,name',
-                'authorization:id,code',
+                'authorization:id,code,status,valid_from,valid_until',
                 'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
             ]),
         ]);
@@ -180,6 +224,33 @@ class ScanJobController extends Controller
 
     public function rerun(Request $request, ScanJob $scanJob, AuditLogger $auditLogger): JsonResponse
     {
+        $user = $request->user();
+        $isAdminOrAnalyst = $user?->isAdmin() ?? false;
+
+        // Kebijakan Masa Berlaku:
+        // Jika Admin: hilangkan masa berlaku (valid_until = null / unlimited)
+        // Jika Pengguna Biasa: terapkan masa berlaku 7 hari jika sudah kedaluwarsa
+        if ($scanJob->authorization) {
+            $auth = $scanJob->authorization;
+            if ($isAdminOrAnalyst) {
+                $auth->update([
+                    'status' => 'active',
+                    'valid_from' => now()->subMinute(),
+                    'valid_until' => null, // Admin = Tanpa Masa Berlaku
+                    'notes' => trim(($auth->notes ?? '') . "\n[Diperbarui oleh Administrator: Tanpa Masa Berlaku pada " . now()->format('Y-m-d H:i') . "]"),
+                ]);
+            } else {
+                if ($auth->status !== 'active' || ($auth->valid_until && \Carbon\Carbon::parse($auth->valid_until)->isPast())) {
+                    $auth->update([
+                        'status' => 'active',
+                        'valid_from' => now()->subMinute(),
+                        'valid_until' => now()->addDays(7),
+                        'notes' => trim(($auth->notes ?? '') . "\n[Diperpanjang untuk Pengguna Biasa (7 hari) pada " . now()->format('Y-m-d H:i') . "]"),
+                    ]);
+                }
+            }
+        }
+
         $newScanJob = ScanJob::query()->create([
             'code' => 'SCAN-'.now()->format('YmdHis').'-'.Str::upper(Str::random(6)),
             'project_id' => $scanJob->project_id,
@@ -216,7 +287,7 @@ class ScanJobController extends Controller
                 'repository:id,name',
                 'target:id,name,type',
                 'scanProfile:id,key,name',
-                'authorization:id,code',
+                'authorization:id,code,status,valid_from,valid_until',
                 'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
             ]),
         ], 201);

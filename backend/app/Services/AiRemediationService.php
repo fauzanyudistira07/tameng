@@ -18,7 +18,7 @@ class AiRemediationService
         $finding->loadMissing(['project', 'scanJob', 'scanRun']);
 
         // Cache key based on finding ID and last updated timestamp
-        $cacheKey = "ai_remediation_v2_{$finding->id}_" . ($finding->updated_at?->timestamp ?? 0);
+        $cacheKey = "ai_remediation_gemini_{$finding->id}_" . ($finding->updated_at?->timestamp ?? 0);
         $cached = Cache::get($cacheKey);
         if ($cached && is_array($cached) && !empty($cached['summary'])) {
             return $cached;
@@ -84,14 +84,17 @@ class AiRemediationService
     }
 
     /**
-     * Call Google Gemini API (gemini-1.5-flash / gemini-2.0-flash / gemini-1.5-pro)
+     * Call Google Gemini API (gemini-3.5-flash / gemini-3.5-flash-lite)
      */
     private function callGeminiApi(Finding $finding, string $apiKey): ?array
     {
-        $model = config('secsys.ai.gemini_model', env('GEMINI_MODEL', 'gemini-1.5-flash'));
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
-        $timeout = (int) config('secsys.ai.timeout_seconds', env('AI_TIMEOUT_SECONDS', 15));
+        $configuredModel = config('secsys.ai.gemini_model', env('GEMINI_MODEL', 'gemini-3.5-flash'));
+        // Sanitize outdated model names like 1.5-flash or 2.0-flash to current active release
+        if (Str::contains($configuredModel, ['1.5', '2.0', '2.5-flash-lite', '2.5-flash'])) {
+            $configuredModel = 'gemini-3.5-flash';
+        }
 
+        $timeout = (int) config('secsys.ai.timeout_seconds', env('AI_TIMEOUT_SECONDS', 30));
         $prompt = $this->buildLlmPrompt($finding);
 
         $payload = [
@@ -106,30 +109,52 @@ class AiRemediationService
             'generationConfig' => [
                 'responseMimeType' => 'application/json',
                 'temperature' => 0.2,
-                'maxOutputTokens' => 2048,
+                'maxOutputTokens' => 4096,
             ],
         ];
 
-        $response = Http::timeout($timeout)->post($url, $payload);
+        // Primary model with fallback
+        $modelsToTry = array_unique([$configuredModel, 'gemini-3.5-flash-lite', 'gemini-3.5-flash']);
 
-        if (! $response->successful()) {
-            Log::warning('Gemini API request failed: ' . $response->status() . ' - ' . $response->body());
-            return null;
+        foreach ($modelsToTry as $model) {
+            $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+
+            try {
+                $response = Http::timeout($timeout)->post($url, $payload);
+
+                if (! $response->successful()) {
+                    Log::warning("Gemini API request failed for model {$model}: " . $response->status() . ' - ' . $response->body());
+                    continue;
+                }
+
+                $json = $response->json();
+                $rawText = null;
+                $parts = data_get($json, 'candidates.0.content.parts', []);
+                foreach ($parts as $part) {
+                    if (!empty($part['text'])) {
+                        $rawText = $part['text'];
+                        break;
+                    }
+                }
+
+                if (! $rawText) {
+                    continue;
+                }
+
+                $cleanJson = preg_replace('/^```(?:json)?\s*|\s*```$/m', '', trim($rawText));
+                $parsed = json_decode($cleanJson, true);
+                if (! is_array($parsed) || empty($parsed['summary'])) {
+                    continue;
+                }
+
+                $modelBadge = "Google Gemini (" . strtoupper(str_replace('gemini-', '', $model)) . ")";
+                return $this->formatLlmResult($finding, $parsed, $modelBadge, 'gemini');
+            } catch (\Throwable $e) {
+                Log::warning("Gemini API exception on {$model}: " . $e->getMessage());
+            }
         }
 
-        $json = $response->json();
-        $rawText = data_get($json, 'candidates.0.content.parts.0.text');
-
-        if (! $rawText) {
-            return null;
-        }
-
-        $parsed = json_decode($rawText, true);
-        if (! is_array($parsed) || empty($parsed['summary'])) {
-            return null;
-        }
-
-        return $this->formatLlmResult($finding, $parsed, "Google Gemini (" . strtoupper(str_replace('gemini-', '', $model)) . ")", 'gemini');
+        return null;
     }
 
     /**
@@ -399,7 +424,7 @@ PROMPT;
                 'cvss_score' => $finding->cvss ?? $this->defaultCvss($finding->severity),
             ],
             'owasp_guidance' => $owaspGuidance,
-            'ai_model' => 'TAMENG Cyber Intelligence Engine v2.5 (Expert Heuristic)',
+            'ai_model' => 'TAMENG Cyber Intelligence Engine v3.0 (Expert Heuristic)',
             'ai_badge' => 'tameng-ai',
             'is_live_llm' => false,
             'disclaimer' => 'TAMENG Cyber Intelligence: Analisis keamanan otomatis berstandar OWASP & CIS Benchmarks. Selalu tinjau arsitektur aplikasi dan jalankan testing sebelum deploy ke production.',
@@ -410,8 +435,28 @@ PROMPT;
     {
         $rule = strtolower($finding->rule_id ?? '');
         $title = strtolower($finding->title ?? '');
+        $engine = strtolower($finding->engine_key ?? '');
+        $filePath = strtolower($finding->file_path ?? '');
+        $cve = strtolower($finding->cve ?? '');
+        $package = data_get($finding->evidence_summary, 'package');
 
-        // 1. Clickjacking
+        // 1. Vulnerable Dependency (SCA - OSV, Trivy, Grype, Dependency-Check, lockfiles, CVEs, GHSAs)
+        $isDependencyEngine = in_array($engine, ['osv', 'trivy', 'grype', 'dependency-check', 'dependabot', 'snyk']);
+        $isDependencyFile = Str::contains($filePath, ['composer.lock', 'composer.json', 'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock', 'requirements.txt', 'gemfile', 'go.mod', 'pom.xml', 'build.gradle']);
+        $isDependencyRule = Str::startsWith($rule, ['ghsa-', 'cve-', 'pysec-', 'govuln-']) || Str::contains($rule, ['cve', 'trivy', 'osv', 'package', 'dependency', 'ghsa', 'vulnerable-dependency']);
+        $isDependencyTitle = Str::contains($title, ['vulnerable dependency', 'outdated', 'cve-', 'ghsa-']) || !empty($package) || !empty($cve);
+
+        if ($isDependencyEngine || $isDependencyFile || $isDependencyRule || $isDependencyTitle) {
+            $pkgName = is_string($package) && !empty($package) ? $package : ($finding->cve ?: ($finding->rule_id ?: 'Third-Party Package'));
+            return [
+                'type' => 'vulnerable_dependency',
+                'name' => "Vulnerable Dependency: {$pkgName}",
+                'cwe' => $finding->cwe ?: 'CWE-1395: Dependency on Vulnerable Third-Party Component',
+                'owasp' => $finding->owasp ?: 'A06:2021-Vulnerable and Outdated Components',
+            ];
+        }
+
+        // 2. Clickjacking
         if (Str::contains($rule, ['clickjacking', 'x-frame-options', '10020']) || Str::contains($title, ['clickjacking', 'x-frame-options', 'anti-clickjacking'])) {
             return [
                 'type' => 'clickjacking',
@@ -421,7 +466,7 @@ PROMPT;
             ];
         }
 
-        // 2. CSP (Content Security Policy)
+        // 3. CSP (Content Security Policy)
         if (Str::contains($rule, ['content-security-policy', 'csp', '10038', '10055']) || Str::contains($title, ['content security policy', 'csp header'])) {
             return [
                 'type' => 'csp_missing',
@@ -431,7 +476,7 @@ PROMPT;
             ];
         }
 
-        // 3. X-Content-Type-Options
+        // 4. X-Content-Type-Options
         if (Str::contains($rule, ['x-content-type-options', 'nosniff', '10021']) || Str::contains($title, ['x-content-type-options', 'nosniff'])) {
             return [
                 'type' => 'x_content_type_options',
@@ -441,7 +486,7 @@ PROMPT;
             ];
         }
 
-        // 4. HSTS (Strict-Transport-Security)
+        // 5. HSTS (Strict-Transport-Security)
         if (Str::contains($rule, ['strict-transport-security', 'hsts', '10035']) || Str::contains($title, ['strict-transport-security', 'hsts'])) {
             return [
                 'type' => 'hsts_missing',
@@ -451,7 +496,7 @@ PROMPT;
             ];
         }
 
-        // 5. Permissions-Policy
+        // 6. Permissions-Policy
         if (Str::contains($rule, ['permissions-policy', 'feature-policy', '10063']) || Str::contains($title, ['permissions policy', 'feature policy'])) {
             return [
                 'type' => 'permissions_policy',
@@ -461,7 +506,7 @@ PROMPT;
             ];
         }
 
-        // 6. COEP / COOP (Cross-Origin Policies)
+        // 7. COEP / COOP (Cross-Origin Policies)
         if (Str::contains($rule, ['cross-origin-embedder', 'cross-origin-opener', 'coep', 'coop', '90004', '90005']) || Str::contains($title, ['cross-origin-embedder', 'cross-origin-opener', 'coep'])) {
             return [
                 'type' => 'coep_coop',
@@ -471,7 +516,27 @@ PROMPT;
             ];
         }
 
-        // 7. SSL / TLS / Cipher Weaknesses
+        // 8a. SSL/TLS Certificate Chain & Trust Validation
+        if (Str::contains($rule, ['cert_chain', 'chain_of_trust', 'certificate_chain', 'incomplete-chain', 'cert_trust']) || Str::contains($title, ['chain of trust', 'certificate chain', 'cert chain', 'incomplete chain'])) {
+            return [
+                'type' => 'ssl_cert_chain',
+                'name' => 'SSL/TLS Certificate Chain Validation & Trust Path',
+                'cwe' => 'CWE-295: Improper Certificate Validation',
+                'owasp' => 'A05:2021-Security Misconfiguration',
+            ];
+        }
+
+        // 8b. BREACH / CRIME Attack (Compression-based oracle attack)
+        if (Str::contains($rule, ['breach', 'crime']) || Str::contains($title, ['breach', 'crime'])) {
+            return [
+                'type' => 'breach_attack',
+                'name' => 'TLS/SSL: BREACH Attack Vulnerability (HTTP Compression over TLS)',
+                'cwe' => 'CWE-200: Exposure of Sensitive Information to an Unauthorized Actor',
+                'owasp' => 'A02:2021-Cryptographic Failures',
+            ];
+        }
+
+        // 8c. SSL / TLS / Cipher Weaknesses
         if (Str::contains($rule, ['weak-cipher', 'deprecated-tls', 'tls-version', 'ssl-issuer', 'wildcard-tls', 'ssl-dns-names', 'testssl', 'cipher']) || Str::contains($title, ['cipher', 'tls', 'ssl'])) {
             return [
                 'type' => 'weak_ssl_ciphers',
@@ -481,7 +546,7 @@ PROMPT;
             ];
         }
 
-        // 8. Cache-Control & Storable Content
+        // 9. Cache-Control & Storable Content
         if (Str::contains($rule, ['cache-control', 'storable', 'cacheable', '10015', '10049', '10050']) || Str::contains($title, ['cache-control', 'cacheable', 'cache'])) {
             return [
                 'type' => 'cache_control',
@@ -491,8 +556,8 @@ PROMPT;
             ];
         }
 
-        // 9. Secrets / Credentials
-        if (Str::contains($rule, ['secret', 'gitleaks', 'key', 'token', 'password', 'credential', 'auth-token']) || Str::contains($title, ['secret', 'token', 'credential', 'api key', 'password'])) {
+        // 10. Secrets / Credentials (Gitleaks, Trufflehog, API keys)
+        if (in_array($engine, ['gitleaks', 'trufflehog']) || Str::contains($rule, ['secret', 'gitleaks', 'key', 'token', 'password', 'credential', 'auth-token', 'private-key', 'api-key']) || Str::contains($title, ['secret', 'token', 'credential', 'api key', 'password', 'private key'])) {
             return [
                 'type' => 'secret_leak',
                 'name' => 'Hardcoded Secrets & Credential Exposure',
@@ -501,8 +566,8 @@ PROMPT;
             ];
         }
 
-        // 10. SQL Injection
-        if (Str::contains($rule, ['sql', 'sqli', 'injection']) || Str::contains($title, ['sql injection', 'sqli', 'raw query'])) {
+        // 11. SQL Injection
+        if (Str::contains($rule, ['sql', 'sqli', 'injection', 'tainted-sql']) || Str::contains($title, ['sql injection', 'sqli', 'raw query', 'tainted sql'])) {
             return [
                 'type' => 'sql_injection',
                 'name' => 'SQL Injection (SQLi) Vulnerability',
@@ -511,7 +576,7 @@ PROMPT;
             ];
         }
 
-        // 11. XSS
+        // 12. XSS (Cross-Site Scripting)
         if (Str::contains($rule, ['xss', 'cross-site-scripting', 'dangerouslysetinnerhtml', 'unescaped']) || Str::contains($title, ['cross-site scripting', 'xss'])) {
             return [
                 'type' => 'xss',
@@ -521,7 +586,7 @@ PROMPT;
             ];
         }
 
-        // 12. Subresource Integrity (SRI)
+        // 13. Subresource Integrity (SRI)
         if (Str::contains($rule, ['integrity', 'sri', 'subresource']) || Str::contains($title, ['subresource integrity', 'integrity attribute'])) {
             return [
                 'type' => 'sri_missing',
@@ -531,8 +596,8 @@ PROMPT;
             ];
         }
 
-        // 13. RCE / Command Injection
-        if (Str::contains($rule, ['rce', 'eval', 'exec', 'command-injection', 'unserialize', 'system']) || Str::contains($title, ['remote code execution', 'command injection', 'code execution'])) {
+        // 14. RCE / Command Injection
+        if (Str::contains($rule, ['rce', 'eval', 'exec', 'command-injection', 'unserialize', 'system', 'command execution']) || Str::contains($title, ['remote code execution', 'command injection', 'code execution', 'command execution'])) {
             return [
                 'type' => 'rce',
                 'name' => 'Remote Code Execution / OS Command Injection',
@@ -541,18 +606,38 @@ PROMPT;
             ];
         }
 
-        // 14. Vulnerable Dependency (SCA)
-        if (Str::contains($rule, ['cve', 'trivy', 'osv', 'package', 'dependency', 'vulnerable-dependency']) || Str::contains($title, ['vulnerable dependency', 'outdated', 'cve-'])) {
+        // 15. SSRF (Server-Side Request Forgery)
+        if (Str::contains($rule, ['ssrf', 'request-forgery', 'server-side request']) || Str::contains($title, ['ssrf', 'server-side request forgery'])) {
             return [
-                'type' => 'vulnerable_dependency',
-                'name' => 'Vulnerable Third-Party Component (CVE)',
-                'cwe' => 'CWE-1395: Dependency on Vulnerable Third-Party Component',
-                'owasp' => 'A06:2021-Vulnerable and Outdated Components',
+                'type' => 'ssrf',
+                'name' => 'Server-Side Request Forgery (SSRF)',
+                'cwe' => 'CWE-918: Server-Side Request Forgery (SSRF)',
+                'owasp' => 'A10:2021-Server-Side Request Forgery (SSRF)',
             ];
         }
 
-        // 15. Server Misconfiguration (Nikto / Generic)
-        if (Str::contains($rule, ['nikto', 'misconfig', 'cors', 'csrf', 'security-header', 'cookie', 'helmet']) || Str::contains($title, ['nikto', 'cors', 'csrf', 'header', 'cookie', 'server'])) {
+        // 16. Path Traversal / LFI
+        if (Str::contains($rule, ['traversal', 'path-traversal', 'lfi', 'file-inclusion']) || Str::contains($title, ['path traversal', 'directory traversal', 'file inclusion'])) {
+            return [
+                'type' => 'path_traversal',
+                'name' => 'Path Traversal & Local File Inclusion (LFI)',
+                'cwe' => 'CWE-22: Improper Limitation of a Pathname to a Restricted Directory',
+                'owasp' => 'A01:2021-Broken Access Control',
+            ];
+        }
+
+        // 17. CSRF (Cross-Site Request Forgery)
+        if (Str::contains($rule, ['csrf', 'xsrf', 'cross-site request']) || Str::contains($title, ['csrf', 'cross-site request forgery'])) {
+            return [
+                'type' => 'csrf',
+                'name' => 'Cross-Site Request Forgery (CSRF)',
+                'cwe' => 'CWE-352: Cross-Site Request Forgery (CSRF)',
+                'owasp' => 'A01:2021-Broken Access Control',
+            ];
+        }
+
+        // 18. Server Misconfiguration (Nikto / Generic)
+        if (Str::contains($rule, ['nikto', 'misconfig', 'cors', 'security-header', 'cookie', 'helmet']) || Str::contains($title, ['nikto', 'cors', 'header', 'cookie', 'server'])) {
             return [
                 'type' => 'misconfig',
                 'name' => 'Web Server Security Misconfiguration',
@@ -563,9 +648,9 @@ PROMPT;
 
         return [
             'type' => 'generic',
-            'name' => 'Security Weakness / Code Quality Issue',
-            'cwe' => 'CWE-699: Software Development Concepts',
-            'owasp' => 'A04:2021-Insecure Design',
+            'name' => $finding->title ? "Security Weakness: " . Str::limit($finding->title, 45) : 'Security Weakness / Code Quality Issue',
+            'cwe' => $finding->cwe ?: 'CWE-699: Software Development Concepts',
+            'owasp' => $finding->owasp ?: 'A04:2021-Insecure Design',
         ];
     }
 
@@ -614,12 +699,26 @@ PROMPT;
                 'impact' => 'Kebocoran data rahasia lintas konteks tab browser dan penurunan derajat isolasi komputasi klien.',
                 'verification' => 'curl -I https://' . ($finding->endpoint ?: 'example.com') . ' | grep -i "Cross-Origin"',
             ],
+            'ssl_cert_chain' => [
+                'summary' => 'Rantai sertifikat SSL/TLS tidak lengkap (Chain of Trust Incomplete / Missing Intermediate CA). Web server hanya mengirimkan sertifikat domain tanpa sertifikat perantara (intermediate certificate).',
+                'cause' => 'File sertifikat pada konfigurasi web server (Nginx/Apache) hanya mengarah ke berkas cert.pem/domain.crt, bukan berkas fullchain.pem/bundle.crt yang menyertakan Intermediate CA.',
+                'attack_vector' => "1. Klien, browser mobile, aplikasi Android/iOS, atau API consumer yang belum menyimpan sertifikat Intermediate CA di trust store lokal akan menolak koneksi HTTPS.\n2. Muncul peringatan 'SSL Handshake Failed', 'SEC_ERROR_UNKNOWN_ISSUER', atau 'Untrusted Connection' yang memblokir akses pengguna sah.",
+                'impact' => 'Aplikasi web gagal diakses di perangkat mobile dan sistem pihak ketiga, penurunan reputasi domain, serta kegagalan kepatuhan keamanan TLS.',
+                'verification' => 'openssl s_client -connect ' . ($finding->endpoint ?: 'example.com:443') . ' -showcerts',
+            ],
             'weak_ssl_ciphers' => [
                 'summary' => 'Audit SSL/TLS menemukan penggunaan cipher suite usang, algoritma hashing lemah (e.g. SHA-1/MD5), atau dukungan versi protokol TLS lawas (TLS 1.0 / 1.1).',
                 'cause' => 'Konfigurasi SSL pada web server mengizinkan cipher CBC mode atau algoritma enkripsi RC4/3DES demi kompatibilitas klien sangat tua.',
                 'attack_vector' => "1. Penyerang merekam lalu lintas jaringan terenkripsi (traffic capture).\n2. Penyerang memanfaatkan kelemahan matematis cipher lama (misal POODLE, BEAST, SWEET32) untuk mendekripsi paket data sesi pengguna.",
                 'impact' => 'Dekripsi data transaksi finansial, kebocoran kredensial, serta kegagalan audit kepatuhan PCI-DSS / ISO 27001.',
                 'verification' => 'openssl s_client -connect ' . ($finding->endpoint ?: 'example.com:443') . ' -tls1_1',
+            ],
+            'breach_attack' => [
+                'summary' => 'Celah keamanan BREACH (CVE-2013-3587) mengeksploitasi fitur kompresi HTTP (seperti gzip atau deflate) pada protokol HTTPS. Penyerang di posisi man-in-the-middle dapat memantau fluktuasi ukuran respon HTTP terkompresi untuk merekonstruksi dan mencuri rahasia dalam halaman web (seperti token CSRF).',
+                'cause' => 'Web server mengaktifkan kompresi HTTP (gzip/deflate) pada respon yang memuat konten rahasia dan input dinamis pengguna.',
+                'attack_vector' => "1. Penyerang memicu request berbahaya dari browser korban ke target HTTPS.\n2. Penyerang mengamati perubahan ukuran bytes dari respon gzip terenkripsi.\n3. Melalui metode eliminasi berbasis pola kompresi (adaptive compression oracle), penyerang menebak karakter token rahasia satu per satu.",
+                'impact' => 'Pencurian token CSRF, session tokens, atau data rahasia pengguna yang mengakibatkan serangan pemalsuan permintaan antar-situs (CSRF).',
+                'verification' => 'curl -s -I -H "Accept-Encoding: gzip" https://' . ($finding->endpoint ?: 'example.com') . ' | grep -i "content-encoding"',
             ],
             'cache_control' => [
                 'summary' => 'Halaman yang memuat informasi sensitif atau data akun pengguna disimpan di cache browser lokal tanpa proteksi no-store / no-cache.',
@@ -663,19 +762,72 @@ PROMPT;
                 'impact' => 'Kompromi server total (Full Root/System Takeover), pemasangan backdoor, lateral movement ke server database internal, dan penghapusan data sistem.',
                 'verification' => 'Audit pemanggilan fungsi exec/shell_exec/system pada seluruh kode sumber repositori.',
             ],
+            'ssrf' => [
+                'summary' => 'Aplikasi web mengambil resource eksternal atau memanggil URL menggunakan parameter yang dapat dikontrol oleh pengguna tanpa validasi whitelist domain atau filter IP lokal/private.',
+                'cause' => 'Fungsi HTTP client (seperti cURL, Guzzle, file_get_contents, atau fetch) langsung memanggil URL yang dikirim oleh pengguna luar tanpa validasi IP tujuan.',
+                'attack_vector' => "1. Penyerang memasukkan alamat IP internal atau loopback (contoh: http://127.0.0.1:8080/admin atau http://169.254.169.254/latest/meta-data/).\n2. Server web mengeksekusi permintaan tersebut atas nama server dan mengembalikan respon internal rahasia atau kredensial metadata cloud (AWS/GCP/Azure) ke penyerang.",
+                'impact' => 'Pencurian metadata cloud tokens, pemindaian port jaringan privat internal, dan pengambilalihan kontrol layanan internal di balik firewall.',
+                'verification' => 'curl -I -X POST -d "url=http://127.0.0.1" https://' . ($finding->endpoint ?: 'example.com'),
+            ],
+            'path_traversal' => [
+                'summary' => 'Aplikasi menerima nama file atau path direktori dari input pengguna dan langsung membuka berkas tersebut tanpa validasi batasan direktori dasar (Directory Traversal / LFI).',
+                'cause' => 'Penggunaan fungsi manipulasi berkas (file_get_contents, readfile, include, fopen) dengan konkatenasi parameter tanpa fungsi realpath() atau basename().',
+                'attack_vector' => "1. Penyerang menyisipkan karakter dot-dot-slash (../../) pada parameter nama file (contoh: ?file=../../../../etc/passwd atau ../../.env).\n2. Sistem membaca dan merender berkas konfigurasi rahasia atau berkas sistem operasi langsung ke respon pengguna.",
+                'impact' => 'Kebocoran kredensial database di .env, pembacaan source code rahasia, dan potensi Remote Code Execution jika dikombinasikan dengan log poisoning.',
+                'verification' => "Audit pemanggilan fungsi pembacaan berkas pada " . ($finding->file_path ?: 'kode sumber'),
+            ],
+            'csrf' => [
+                'summary' => 'Aplikasi web memproses permintaan pengubahan status sensitif (state-changing request) tanpa memverifikasi token anti-CSRF yang unik per sesi pengguna.',
+                'cause' => 'Rute form POST/PUT/DELETE tidak dilindungi oleh middleware CSRF token atau cookie sesi tidak memiliki atribut SameSite.',
+                'attack_vector' => "1. Penyerang membuat halaman web jebakan yang memuat formulir tersembunyi yang otomatis mengirimkan request POST ke aplikasi Anda.\n2. Saat korban yang sedang login mengunjungi website penyerang, browser korban otomatis menyertakan session cookie dan mengeksekusi aksi penting (seperti ganti password atau transfer dana) tanpa sepengetahuan korban.",
+                'impact' => 'Pengambilalihan akun pengguna, pengubahan email/password, dan transaksi manipulatif tidak sah.',
+                'verification' => 'Periksa apakah form menyertakan token @csrf dan header X-CSRF-TOKEN divalidasi.',
+            ],
             'vulnerable_dependency' => [
-                'summary' => 'Komponen dependensi / library pihak ketiga yang terdaftar pada manifest proyek memiliki celah keamanan publik yang telah tercatat dalam database CVE/NVD.',
-                'cause' => 'Versi library pada composer.json / package.json / Dockerfile sudah usang dan belum diperbarui ke rilis patch yang aman.',
-                'attack_vector' => "1. Penyerang meninjau komponen open-source yang digunakan aplikasi Anda dan mencocokkannya dengan database exploit publik.\n2. Penyerang menggunakan public PoC exploit yang menargetkan kerentanan pada versi library tersebut.",
-                'impact' => 'Bergantung pada CVE terkait, mulai dari Denial of Service (DoS), bypass autentikasi, hingga Remote Code Execution (RCE).',
-                'verification' => 'composer audit (atau npm audit)',
+                'summary' => (function () use ($finding) {
+                    $package = data_get($finding->evidence_summary, 'package') ?: 'pustaka/dependensi pihak ketiga';
+                    $version = data_get($finding->evidence_summary, 'version') ?: '';
+                    $aliases = data_get($finding->evidence_summary, 'aliases');
+                    $advisory = $finding->cve ?: (is_array($aliases) && !empty($aliases[0]) ? $aliases[0] : ($finding->rule_id ?: 'Advisory'));
+                    $filePath = $finding->file_path ?: 'composer.lock';
+                    $fileName = basename($filePath);
+                    $title = $finding->title ?: 'Kerentanan pada pustaka pihak ketiga';
+                    return "Pustaka pihak ketiga **{$package}**" . ($version ? " versi `{$version}`" : "") . " pada berkas `{$fileName}` terdeteksi mengandung celah keamanan publik terdaftar ({$advisory}). Ringkasan kerentanan: {$title}.";
+                })(),
+                'cause' => (function () use ($finding) {
+                    $package = data_get($finding->evidence_summary, 'package') ?: 'paket terkait';
+                    $version = data_get($finding->evidence_summary, 'version') ?: '';
+                    return "Versi pustaka {$package}" . ($version ? " ({$version})" : "") . " yang terpasang pada proyek memiliki cacat keamanan yang telah dipublikasikan di basis data keamanan (CVE/GHSA/OSV). Versi ini belum diperbarui ke rilis versi patch yang aman.";
+                })(),
+                'attack_vector' => (function () use ($finding) {
+                    $package = data_get($finding->evidence_summary, 'package') ?: 'library';
+                    $version = data_get($finding->evidence_summary, 'version') ?: '';
+                    $aliases = data_get($finding->evidence_summary, 'aliases');
+                    $advisory = $finding->cve ?: (is_array($aliases) && !empty($aliases[0]) ? $aliases[0] : ($finding->rule_id ?: 'Advisory'));
+                    $title = $finding->title ?: 'Kerentanan pustaka';
+                    return "1. Penyerang mengidentifikasi keberadaan pustaka `{$package}`" . ($version ? " ({$version})" : "") . " melalui manifest proyek publik, header respon, atau fingerprinting error trace.\n"
+                        . "2. Penyerang menganalisis detail advisori `{$advisory}` ({$title}) dan memanfaatkan Proof-of-Concept (PoC) publik yang menargetkan fungsi rentan pada pustaka tersebut.\n"
+                        . "3. Melalui masukan/input berbahaya ke endpoint aplikasi yang memproses data menggunakan komponen `{$package}`, penyerang memicu eksploitasi (seperti pembajakan eksekusi perintah sistem, bypass otorisasi, kebocoran data, atau crash layanan).";
+                })(),
+                'impact' => (function () use ($finding) {
+                    $package = data_get($finding->evidence_summary, 'package') ?: 'library';
+                    return "Bergantung pada titik integrasi paket `{$package}`, penyerang berpotensi mengeksekusi perintah sewenang-wenang (RCE), memicu Denial of Service (DoS), membocorkan data sensitif, atau mengambil alih kendali server.";
+                })(),
+                'verification' => (function () use ($finding) {
+                    $package = data_get($finding->evidence_summary, 'package') ?: '';
+                    $filePath = strtolower($finding->file_path ?: 'composer.lock');
+                    $isComposer = Str::contains($filePath, ['composer', '.php']) || Str::contains($package, '/');
+                    return $isComposer
+                        ? "composer update " . ($package ?: 'vendor/package') . " --with-all-dependencies && composer audit"
+                        : "npm audit fix || yarn audit";
+                })(),
             ],
             default => [
-                'summary' => "Ditemukan indikasi kelemahan keamanan teknis pada aturan {$finding->rule_id}.",
-                'cause' => 'Implementasi kode sumber atau konfigurasi server belum memenuhi panduan pengamanan minimum OWASP / CIS Benchmarks.',
-                'attack_vector' => "Penyerang menganalisis respon server atau struktur endpoint untuk menemukan kelemahan logika dan memanipulasi parameter sistem.",
-                'impact' => 'Penurunan postur keamanan aplikasi dan potensi kebocoran data atau gangguan layanan.',
-                'verification' => 'Jalankan ulang scanner TAMENG setelah perbaikan kode diterapkan.',
+                'summary' => "Pemindai keamanan **" . strtoupper($finding->engine_key ?: 'TAMENG') . "** mendeteksi indikasi celah keamanan pada aturan `{$finding->rule_id}` di `" . ($finding->file_path ?: ($finding->endpoint ?: 'sistem')) . "`" . ($finding->line_start ? " (baris {$finding->line_start})" : "") . ". Temuan: " . ($finding->title ?: 'Potensi kelemahan keamanan teknis') . ".",
+                'cause' => 'Implementasi kode sumber atau konfigurasi server pada lokasi ini belum sepenuhnya memenuhi standar pengamanan terbaik ' . ($finding->owasp ?: 'OWASP') . ' / ' . ($finding->cwe ?: 'CWE') . '.',
+                'attack_vector' => "1. Penyerang menganalisis permukaan serang pada `" . ($finding->file_path ?: ($finding->endpoint ?: 'endpoint')) . "`.\n2. Penyerang mengirimkan vektor manipulasi atau muatan payload untuk mengeksploitasi karakteristik aturan {$finding->rule_id}.\n3. Keberhasilan serangan dapat menyebabkan bypass kendali logika atau manipulasi parameter sistem.",
+                'impact' => 'Penurunan postur keamanan aplikasi dengan tingkat keparahan ' . strtoupper($finding->severity ?: 'medium') . ', berpotensi menyebabkan pelanggaran privasi data, penurunan ketersediaan, atau eskalasi hak akses.',
+                'verification' => $finding->file_path ? "Tinjau baris kode pada berkas `{$finding->file_path}` dan jalankan automated security test." : "Jalankan ulang scanner TAMENG setelah perbaikan kode diterapkan.",
             ],
         };
     }
@@ -721,11 +873,23 @@ PROMPT;
                 'vulnerable_code' => "# KONDISI RENTAN:\n# Halaman dokumen tidak diisolasi dari resource lintas-domain",
                 'secure_code' => "# SOLUSI PERBAIKAN PADA NGINX:\nadd_header Cross-Origin-Embedder-Policy \"require-corp\" always;\nadd_header Cross-Origin-Opener-Policy \"same-origin\" always;\nadd_header Cross-Origin-Resource-Policy \"same-origin\" always;",
             ],
+            'ssl_cert_chain' => [
+                'language' => 'nginx',
+                'file_path' => '/etc/nginx/sites-available/default',
+                'vulnerable_code' => "# KONDISI RENTAN (Hanya menggunakan cert domain tanpa intermediate CA):\nssl_certificate /etc/ssl/certs/domain.crt;\nssl_certificate_key /etc/ssl/private/domain.key;",
+                'secure_code' => "# SOLUSI PERBAIKAN PADA NGINX (Gunakan Fullchain / Gabungan CA Bundle):\n# Gabungkan sertifikat domain dengan intermediate CA:\n# cat domain.crt intermediate.crt > /etc/ssl/certs/fullchain.pem\n\nssl_certificate /etc/ssl/certs/fullchain.pem;\nssl_certificate_key /etc/ssl/private/domain.key;\n\n# JIKA MENGGUNAKAN APACHE (httpd.conf / ssl.conf):\n# SSLCertificateFile /etc/ssl/certs/domain.crt\n# SSLCertificateChainFile /etc/ssl/certs/intermediate.crt\n# SSLCertificateKeyFile /etc/ssl/private/domain.key",
+            ],
             'weak_ssl_ciphers' => [
                 'language' => 'nginx',
                 'file_path' => '/etc/nginx/nginx.conf',
                 'vulnerable_code' => "# KONDISI RENTAN (Protokol dan cipher lawas masih diizinkan):\nssl_protocols TLSv1 TLSv1.1 TLSv1.2;\nssl_ciphers ALL:!aNULL:!eNULL;",
                 'secure_code' => "# SOLUSI PERBAIKAN PADA NGINX (Standar Mozilla Modern/Intermediate):\nssl_protocols TLSv1.2 TLSv1.3;\nssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;\nssl_prefer_server_ciphers on;\nssl_session_cache shared:SSL:10m;\nssl_session_timeout 1d;",
+            ],
+            'breach_attack' => [
+                'language' => 'nginx',
+                'file_path' => '/etc/nginx/nginx.conf',
+                'vulnerable_code' => "# KONDISI RENTAN (Kompresi gzip aktif pada seluruh respon termasuk token sensitif):\ngzip on;\ngzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;",
+                'secure_code' => "# SOLUSI PERBAIKAN PADA NGINX:\n# Opsi 1: Nonaktifkan kompresi gzip pada web server jika memproses data sensitif\ngzip off;\n\n# Opsi 2: Pisahkan rute statis (gunakan gzip) dengan rute sensitif/login/CSRF (tanpa gzip)\nlocation /api/ {\n    gzip off;\n    proxy_pass http://backend;\n}",
             ],
             'cache_control' => [
                 'language' => 'php',
@@ -763,17 +927,64 @@ PROMPT;
                 'vulnerable_code' => "// KODE RENTAN (Input pengguna diteruskan langsung ke shell sistem):\n\$target = \$_GET['ip'];\nexec(\"ping -c 4 \" . \$target, \$output);",
                 'secure_code' => "// KODE AMAN (Validasi format ketat dan escapeshellarg):\n\$target = filter_var(\$_GET['ip'], FILTER_VALIDATE_IP);\nif (!\$target) {\n    throw new InvalidArgumentException('Alamat IP tidak valid.');\n}\nexec(escapeshellcmd(\"ping -c 4 \" . escapeshellarg(\$target)), \$output);",
             ],
-            'vulnerable_dependency' => [
-                'language' => $fileExt === 'json' ? 'json' : 'bash',
-                'file_path' => $fileExt === 'json' ? 'composer.json / package.json' : 'Terminal CLI',
-                'vulnerable_code' => "# Versi library lama yang memiliki catatan CVE kerentanan:\ncomposer require vendor/package:1.2.0",
-                'secure_code' => "# Perbarui dependensi ke versi patch terbaru yang telah diperbaiki:\ncomposer update vendor/package\n# Atau pada Node.js:\nnpm audit fix",
+            'ssrf' => [
+                'language' => $fileExt,
+                'file_path' => $filePath,
+                'vulnerable_code' => "// KODE RENTAN (Memanggil URL dari input pengguna tanpa validasi):\n\$url = \$_GET['target_url'];\n\$response = file_get_contents(\$url);",
+                'secure_code' => "// KODE AMAN (Whitelist domain & blokir IP privat/internal):\n\$url = filter_var(\$_GET['target_url'], FILTER_VALIDATE_URL);\n\$host = parse_url(\$url, PHP_URL_HOST);\n\$allowedHosts = ['api.trusted.com', 'webhook.partner.com'];\n\nif (!in_array(\$host, \$allowedHosts, true) || filter_var(gethostbyname(\$host), FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {\n    throw new Exception('Akses URL tidak diizinkan atau mengarah ke IP privat.');\n}\n\$response = Http::get(\$url);",
             ],
+            'path_traversal' => [
+                'language' => $fileExt,
+                'file_path' => $filePath,
+                'vulnerable_code' => "// KODE RENTAN (Konkatenasi nama berkas langsung):\n\$file = \$_GET['doc'];\ninclude('/var/www/storage/' . \$file);",
+                'secure_code' => "// KODE AMAN (Gunakan basename dan validasi realpath):\n\$file = basename(\$_GET['doc']); // Mencegah traversal ../\n\$baseDir = realpath(storage_path('app/documents'));\n\$targetPath = realpath(\$baseDir . DIRECTORY_SEPARATOR . \$file);\n\nif (!\$targetPath || !str_starts_with(\$targetPath, \$baseDir)) {\n    abort(403, 'Akses berkas di luar direktori aman ditolak.');\n}\nreturn response()->file(\$targetPath);",
+            ],
+            'csrf' => [
+                'language' => $fileExt,
+                'file_path' => $filePath,
+                'vulnerable_code' => "<!-- FORM RENTAN (Tanpa Token CSRF): -->\n<form action=\"/user/update-email\" method=\"POST\">\n    <input type=\"email\" name=\"email\" />\n    <button type=\"submit\">Simpan</button>\n</form>",
+                'secure_code' => "<!-- FORM AMAN (Menyertakan CSRF Token): -->\n<form action=\"/user/update-email\" method=\"POST\">\n    @csrf\n    <input type=\"email\" name=\"email\" />\n    <button type=\"submit\">Simpan</button>\n</form>\n\n// Pada request AJAX / Fetch API sertakan header:\n// 'X-CSRF-TOKEN': document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content')",
+            ],
+            'vulnerable_dependency' => (function () use ($finding) {
+                $package = data_get($finding->evidence_summary, 'package') ?: 'vendor/package';
+                $version = data_get($finding->evidence_summary, 'version') ?: 'versi-rentan';
+                $aliases = data_get($finding->evidence_summary, 'aliases');
+                $advisory = $finding->cve ?: (is_array($aliases) && !empty($aliases[0]) ? $aliases[0] : ($finding->rule_id ?: 'CVE'));
+                $filePath = $finding->file_path ?: 'composer.lock';
+                $fileName = basename($filePath);
+                $isComposer = Str::contains(strtolower($filePath), ['composer', '.php']) || Str::contains($package, '/');
+                $isNpm = Str::contains(strtolower($filePath), ['package.json', 'package-lock', 'yarn', 'pnpm']) || Str::startsWith($package, '@');
+
+                if ($isComposer) {
+                    return [
+                        'language' => 'bash',
+                        'file_path' => "composer.json / {$fileName}",
+                        'vulnerable_code' => "# VERSI DEPENDENSI RENTAN ({$advisory}):\n# Paket: {$package}\n# Versi terpasang saat ini: {$version}\n# Lokasi berkas manifest: {$filePath}",
+                        'secure_code' => "# SOLUSI 1 (Direkomendasikan): Perbarui paket spesifik ke versi patch yang aman via Composer:\ncomposer update {$package} --with-all-dependencies\n\n# SOLUSI 2: Jika terdaftar langsung di composer.json, perbarui batasan versi minimal yang aman:\n# \"require\": {\n#     \"{$package}\": \"^<versi_patch_terbaru>\"\n# }\n# composer update {$package}\n\n# SOLUSI 3: Verifikasi status audit keamanan setelah pembaruan:\ncomposer audit",
+                    ];
+                }
+
+                if ($isNpm) {
+                    return [
+                        'language' => 'bash',
+                        'file_path' => "package.json / {$fileName}",
+                        'vulnerable_code' => "# VERSI DEPENDENSI RENTAN ({$advisory}):\n# Paket: {$package}\n# Versi terpasang: {$version}\n# Lokasi berkas: {$filePath}",
+                        'secure_code' => "# SOLUSI 1: Jalankan perbaikan otomatis via npm audit:\nnpm audit fix\n\n# SOLUSI 2: Perbarui paket secara eksplisit ke versi terbaru yang aman:\nnpm install {$package}@latest\n\n# SOLUSI 3: Verifikasi status dependensi:\nnpm audit",
+                    ];
+                }
+
+                return [
+                    'language' => 'bash',
+                    'file_path' => $fileName,
+                    'vulnerable_code' => "# VERSI DEPENDENSI RENTAN ({$advisory}):\n# Paket: {$package}\n# Versi: {$version}",
+                    'secure_code' => "# SOLUSI PERBAIKAN:\n# Perbarui paket {$package} ke versi rilis yang telah menambal {$advisory}.\n# Jalankan perintah package manager proyek Anda (composer update / npm audit fix).",
+                ];
+            })(),
             default => [
-                'language' => 'nginx',
-                'file_path' => 'Konfigurasi Web Server / Source Code',
-                'vulnerable_code' => "# Tinjau baris kode atau konfigurasi terkait pada aturan " . ($finding->rule_id ?? 'keamanan'),
-                'secure_code' => "# Terapkan validasi parameter masukan, aktifkan security headers, dan batasi hak akses",
+                'language' => $fileExt,
+                'file_path' => $filePath,
+                'vulnerable_code' => "# LOKASI TEMUAN: {$filePath}" . ($finding->line_start ? " (Baris {$finding->line_start})" : '') . "\n# Aturan Pemindai: " . ($finding->rule_id ?? 'Security Rule') . "\n# " . ($finding->title ?? 'Tinjau baris kode atau konfigurasi terkait'),
+                'secure_code' => "# SOLUSI PERBAIKAN DIREKOMENDASIKAN:\n# 1. Terapkan validasi masukan ketat (positive validation / whitelisting).\n# 2. Batasi hak akses fungsi menurut prinsip Least Privilege.\n# 3. Aktifkan pertahanan berlapis (defense-in-depth) dan enkripsi data.\n# 4. Tinjau panduan resmi OWASP / CIS Benchmarks untuk aturan ini.",
             ],
         };
     }
@@ -808,10 +1019,22 @@ PROMPT;
                 'Pasang header `Cross-Origin-Embedder-Policy: require-corp` dan `Cross-Origin-Opener-Policy: same-origin`.',
                 'Verifikasi bahwa aset eksternal (CDN/font) mendukung header CORS `Cross-Origin-Resource-Policy`.',
             ],
+            'ssl_cert_chain' => [
+                'Unduh file Intermediate CA / CA Bundle yang disediakan oleh otoritas penerbit sertifikat (Sectigo, DigiCert, Let\'s Encrypt, dll).',
+                'Gabungkan sertifikat domain dengan intermediate certificate ke dalam satu file berkas (fullchain.pem). Urutan: [Sertifikat Server] diikuti [Sertifikat Intermediate CA].',
+                'Di Nginx, arahkan directive `ssl_certificate` ke berkas `fullchain.pem`.',
+                'Di Apache, gunakan directive `SSLCertificateChainFile /path/to/intermediate.crt` atau sertakan di dalam SSLCertificateFile.',
+                'Uji validitas rantai sertifikat menggunakan perintah: `openssl s_client -connect domain.com:443 -showcerts` atau SSL Labs test.',
+            ],
             'weak_ssl_ciphers' => [
                 'Nonaktifkan protokol usang SSLv2, SSLv3, TLS 1.0, dan TLS 1.1 pada file konfigurasi Nginx/Apache.',
                 'Aktifkan hanya TLS 1.2 dan TLS 1.3 dengan cipher modern berbasis AEAD (GCM / Poly1305).',
                 'Jalankan uji SSL Labs atau TestSSL untuk memastikan rating SSL mencapai nilai A+.',
+            ],
+            'breach_attack' => [
+                'Nonaktifkan kompresi HTTP gzip/deflate pada respon yang memuat token CSRF atau rahasia sensitif (`gzip off;`).',
+                'Terapkan masking token CSRF pada level aplikasi (setiap token diacak salt-nya per request seperti bawaan Laravel/Django).',
+                'Gunakan atribut cookie `SameSite=Lax` atau `SameSite=Strict` pada session cookie.',
             ],
             'cache_control' => [
                 'Pada halaman yang memuat data pengguna atau formulir autentikasi, set header `Cache-Control: no-store, no-cache, must-revalidate`.',
@@ -843,15 +1066,37 @@ PROMPT;
                 'Jika eksekusi shell tidak dapat dihindari, gunakan validasi whitelist ketat dan bungkus argumen dengan `escapeshellarg()`.',
                 'Jalankan proses web worker dengan hak akses pengguna sistem operasi minimal (least privilege).',
             ],
+            'ssrf' => [
+                'Terapkan URL parsing ketat dan validasi skema (hanya izinkan https://).',
+                'Buat whitelist domain yang diizinkan dan tolak semua host di luar daftar.',
+                'Gunakan DNS resolution check untuk memblokir IP rentang privat (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.1) dan AWS/cloud metadata IP (169.254.169.254).',
+                'Nonaktifkan HTTP redirection otomatis pada HTTP Client agar penyerang tidak dapat melakukan bypass redirect ke IP privat.',
+            ],
+            'path_traversal' => [
+                'Gunakan fungsi `basename()` untuk menghilangkan seluruh prefix direktori dan manipulasi traversal (`../`).',
+                'Gunakan `realpath()` dan pastikan direktori hasil resolusi selalu diawali dengan direktori root berkas yang diizinkan.',
+                'Jangan pernah menggunakan input mentah pengguna sebagai argumen fungsi `include`, `require`, atau `file_get_contents`.',
+                'Simpan berkas menggunakan ID acak (UUID/hash) di database daripada nama berkas asli dari pengguna.',
+            ],
+            'csrf' => [
+                'Pastikan middleware CSRF (`VerifyCsrfToken`) aktif pada semua rute yang memodifikasi status data (POST/PUT/PATCH/DELETE).',
+                'Konfigurasi atribut session cookie dengan `SameSite=Lax` atau `SameSite=Strict`.',
+                'Gunakan header HTTP kustom seperti `X-Requested-With` atau `X-CSRF-TOKEN` untuk request API SPA.',
+            ],
             'vulnerable_dependency' => [
-                'Jalankan `composer update` atau `npm audit fix` untuk menaikkan versi paket ke versi yang telah ditambal.',
-                'Pastikan file `composer.lock` atau `package-lock.json` di-commit ke repositori git.',
-                'Aktifkan dependabot atau automated vulnerability scanning pada pipeline CI/CD.',
+                "Jalankan audit keamanan dependensi (`" . ((Str::contains(strtolower($finding->file_path ?: ''), ['composer', '.php']) || Str::contains(data_get($finding->evidence_summary, 'package') ?? '', '/')) ? "composer audit" : "npm audit") . "`) untuk memeriksa rincian advisory " . ($finding->cve ?: ($finding->rule_id ?: 'keamanan')) . ".",
+                "Perbarui paket `" . (data_get($finding->evidence_summary, 'package') ?: 'terkait') . "` ke versi patch terbaru yang aman dengan menjalankan: `" . ((Str::contains(strtolower($finding->file_path ?: ''), ['composer', '.php']) || Str::contains(data_get($finding->evidence_summary, 'package') ?? '', '/')) ? "composer update " . (data_get($finding->evidence_summary, 'package') ?: '') . " --with-all-dependencies" : "npm audit fix") . "`.",
+                "Tinjau catatan rilis (release notes / changelog) pustaka `" . (data_get($finding->evidence_summary, 'package') ?: 'terkait') . "` untuk memastikan kompatibilitas dan tidak ada breaking changes.",
+                "Jalankan seluruh rangkaian automated unit & integration test untuk memastikan aplikasi tetap berjalan normal.",
+                "Commit berkas lockfile terbaru (`" . basename($finding->file_path ?: 'composer.lock') . "`) ke repositori Git agar seluruh lingkungan produksi terlindungi.",
+                "Jalankan ulang pemindaian mandiri TAMENG untuk memvalidasi bahwa celah keamanan dependensi telah teratasi secara tuntas.",
             ],
             default => [
-                'Lakukan code review terfokus pada lokasi berkas dan baris yang dilaporkan oleh scanner.',
-                'Terapkan prinsip least privilege (hak akses minimal) dan validasi input berlapis (defense-in-depth).',
-                'Tambahkan automated security unit test untuk mencegah regresi di masa mendatang.',
+                "Lakukan code review terfokus pada berkas `{$filePath}`" . ($finding->line_start ? " (baris {$finding->line_start})" : '') . " yang dilaporkan oleh pemindai " . strtoupper($finding->engine_key ?: 'keamanan') . ".",
+                "Terapkan validasi input berlapis (positive validation) dan sanitasi data kontekstual sebelum data diproses atau disimpan.",
+                "Pastikan prinsip Least Privilege (hak akses terendah) dan pemisahan wewenang diterapkan secara konsisten.",
+                "Tambahkan automated security unit test untuk menguji skenario negatif (edge-cases & invalid payload) guna mencegah regresi di masa mendatang.",
+                "Jalankan ulang pemindaian mandiri TAMENG setelah patch diterapkan untuk memvalidasi penutupan celah.",
             ],
         };
     }
@@ -876,3 +1121,4 @@ PROMPT;
         };
     }
 }
+

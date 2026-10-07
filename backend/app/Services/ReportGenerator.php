@@ -5,11 +5,93 @@ namespace App\Services;
 use App\Models\Finding;
 use App\Models\Report;
 use App\Models\ScanJob;
+use App\Models\ScanRun;
 use App\Models\User;
 
 class ReportGenerator
 {
     public function generateStandardJson(ScanJob $scanJob, User $user): Report
+    {
+        $payload = $this->buildReportPayload($scanJob, $user);
+
+        return Report::query()->create([
+            'scan_job_id' => $scanJob->id,
+            'type' => 'standard',
+            'status' => 'generated',
+            'format' => 'json',
+            'generated_by' => $user->id,
+            'generated_at' => now(),
+            'metadata' => [
+                'content' => $payload['content'],
+                'finding_count' => $payload['summary']['total'],
+                'risk_summary' => $payload['summary'],
+                'simulated' => ! $payload['hasScannerExecution'],
+                'scanner_execution' => $payload['hasScannerExecution'],
+                'partial' => $payload['isPartialReport'],
+                'description' => $payload['content']['description'],
+            ],
+        ]);
+    }
+
+    public function syncReport(Report $report, ?User $user = null): Report
+    {
+        $report->loadMissing(['scanJob', 'generator']);
+        $scanJob = $report->scanJob;
+
+        if (! $scanJob) {
+            return $report;
+        }
+
+        // Re-synchronize scanJob counters and terminal status from actual runs
+        $runs = $scanJob->scanRuns()->get();
+        $totalEngines = max(1, count($scanJob->engine_plan ?? []));
+        $terminalRuns = $runs->filter(fn (ScanRun $run): bool => in_array($run->status, ['completed', 'failed', 'denied', 'skipped'], true));
+        $completedCount = $runs->where('status', 'completed')->count();
+        $failedCount = $runs->where('status', 'failed')->count();
+        $hasDenied = $runs->contains(fn (ScanRun $run): bool => $run->status === 'denied');
+        $finalStatus = $hasDenied ? 'denied' : ($completedCount > 0 ? 'completed' : ($failedCount > 0 ? 'failed' : 'completed'));
+        $progress = $terminalRuns->count() >= $totalEngines ? 100 : (int) round(($terminalRuns->count() / $totalEngines) * 100);
+
+        $updatedPlan = collect($scanJob->engine_plan ?? [])->map(function ($planItem) use ($runs) {
+            $key = $planItem['engine_key'] ?? null;
+            $matchedRun = $runs->firstWhere('engine_key', $key);
+            return [
+                ...$planItem,
+                'status' => $matchedRun?->status ?? 'queued',
+                'finding_count' => $matchedRun?->runtime_metrics['finding_count'] ?? 0,
+            ];
+        })->all();
+
+        $scanJob->forceFill([
+            'status' => $finalStatus,
+            'progress' => $progress,
+            'engine_plan' => $updatedPlan,
+            'completed_engine_count' => $completedCount,
+            'failed_engine_count' => $failedCount,
+            'coverage_pass' => ($failedCount === 0 && $completedCount > 0),
+            'finished_at' => in_array($finalStatus, ['completed', 'failed', 'denied'], true) ? ($scanJob->finished_at ?? now()) : null,
+        ])->save();
+
+        $effectiveUser = $user ?? $report->generator ?? User::first();
+        $payload = $this->buildReportPayload($scanJob, $effectiveUser);
+
+        $report->forceFill([
+            'generated_at' => now(),
+            'metadata' => [
+                'content' => $payload['content'],
+                'finding_count' => $payload['summary']['total'],
+                'risk_summary' => $payload['summary'],
+                'simulated' => ! $payload['hasScannerExecution'],
+                'scanner_execution' => $payload['hasScannerExecution'],
+                'partial' => $payload['isPartialReport'],
+                'description' => $payload['content']['description'],
+            ],
+        ])->save();
+
+        return $report->refresh();
+    }
+
+    public function buildReportPayload(ScanJob $scanJob, User $user): array
     {
         $scanJob->load([
             'project:id,name,code',
@@ -126,22 +208,12 @@ class ReportGenerator
             ],
         ];
 
-        return Report::query()->create([
-            'scan_job_id' => $scanJob->id,
-            'type' => 'standard',
-            'status' => 'generated',
-            'format' => 'json',
-            'generated_by' => $user->id,
-            'generated_at' => now(),
-            'metadata' => [
-                'content' => $content,
-                'finding_count' => $summary['total'],
-                'risk_summary' => $summary,
-                'simulated' => ! $hasScannerExecution,
-                'scanner_execution' => $hasScannerExecution,
-                'partial' => $isPartialReport,
-                'description' => $content['description'],
-            ],
-        ]);
+        return [
+            'content' => $content,
+            'summary' => $summary,
+            'hasScannerExecution' => $hasScannerExecution,
+            'isPartialReport' => $isPartialReport,
+        ];
     }
 }
+

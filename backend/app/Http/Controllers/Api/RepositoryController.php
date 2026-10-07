@@ -206,6 +206,39 @@ class RepositoryController extends Controller
         ]);
     }
 
+    public function destroy(
+        Request $request,
+        Repository $repository,
+        RepositoryWorkspaceManager $workspaceManager,
+        AuditLogger $auditLogger,
+    ): JsonResponse {
+        $repoName = $repository->name;
+        $repoId = $repository->id;
+        $projectId = $repository->project_id;
+
+        try {
+            $workspaceManager->clear($repository);
+        } catch (\Throwable $e) {
+            // Ignore if workspace does not exist
+        }
+
+        $repository->delete();
+
+        $auditLogger->record($request, 'repository.delete', 'success', [
+            'project_id' => $projectId,
+            'target_type' => 'repository',
+            'target_id' => $repoId,
+            'metadata' => [
+                'repository_id' => $repoId,
+                'repository_name' => $repoName,
+            ],
+        ]);
+
+        return response()->json([
+            'message' => "Repositori \"{$repoName}\" berhasil dihapus dari sistem.",
+        ]);
+    }
+
     public function scan(
         Request $request,
         Repository $repository,
@@ -253,7 +286,7 @@ class RepositoryController extends Controller
                 'approved_by' => $user->id,
                 'status' => 'active',
                 'valid_from' => now()->subMinute(),
-                'valid_until' => now()->addDays(7),
+                'valid_until' => $user->isAdmin() ? null : now()->addDays(7),
                 'max_concurrency' => 1,
                 'rate_limit_per_minute' => 60,
                 'allowed_engines' => $profile->engine_keys,

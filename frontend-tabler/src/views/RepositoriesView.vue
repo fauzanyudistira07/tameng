@@ -304,23 +304,69 @@ async function syncWorkspace(repo: Repository) {
   }
 }
 
-// Clear local workspace storage
-async function clearWorkspace(repo: Repository) {
-  if (!confirm(`Hapus workspace lokal untuk repositori "${repo.name}"? Kode sumber yang di-clone di server akan dibersihkan.`)) {
-    return
-  }
+// Modal Konfirmasi Bersihkan Workspace
+const cleanModalRepo = ref<Repository | null>(null)
+const isClearingWorkspace = ref(false)
+
+function clearWorkspace(repo: Repository) {
+  cleanModalRepo.value = repo
+}
+
+function closeCleanModal() {
+  cleanModalRepo.value = null
+  isClearingWorkspace.value = false
+}
+
+async function confirmClearWorkspace() {
+  if (!cleanModalRepo.value) return
+  const repo = cleanModalRepo.value
+  isClearingWorkspace.value = true
   clearingRepoId.value = repo.id
   try {
     await apiFetch(`/api/repositories/${repo.id}/workspace`, {
       method: 'DELETE'
     })
-    showFeedback('info', `Workspace lokal untuk "${repo.name}" telah dibersihkan.`)
+    showFeedback('success', `File workspace di server untuk "${repo.name}" telah berhasil dibersihkan.`)
+    closeCleanModal()
     await loadData()
   } catch (err: any) {
     console.error('Gagal membersihkan workspace:', err)
     showFeedback('danger', err?.data?.message || err?.message || 'Gagal membersihkan workspace lokal.')
   } finally {
+    isClearingWorkspace.value = false
     clearingRepoId.value = null
+  }
+}
+
+// Modal Konfirmasi Hapus Repositori (Permanent Delete)
+const deleteModalRepo = ref<Repository | null>(null)
+const isDeletingRepo = ref(false)
+
+function openDeleteModal(repo: Repository) {
+  deleteModalRepo.value = repo
+}
+
+function closeDeleteModal() {
+  deleteModalRepo.value = null
+  isDeletingRepo.value = false
+}
+
+async function confirmDeleteRepo() {
+  if (!deleteModalRepo.value) return
+  const repo = deleteModalRepo.value
+  isDeletingRepo.value = true
+  try {
+    const res = await apiFetch<any>(`/api/repositories/${repo.id}`, {
+      method: 'DELETE'
+    })
+    showFeedback('success', res?.message || `Repositori "${repo.name}" berhasil dihapus dari sistem.`)
+    closeDeleteModal()
+    await loadData()
+  } catch (err: any) {
+    console.error('Gagal menghapus repositori:', err)
+    showFeedback('danger', err?.data?.message || err?.message || 'Gagal menghapus repositori dari sistem.')
+  } finally {
+    isDeletingRepo.value = false
   }
 }
 
@@ -442,7 +488,7 @@ watch(() => route.query.project_id, (newVal) => {
               </svg>
             </div>
             <div class="flex-grow-1 pe-2">
-              <div class="fw-bold fs-5 mb-1">{{ alertMessage.type === 'success' ? 'Berhasil!' : 'Terjadi Kesalahan' }}</div>
+              <div class="fw-bold fs-5 mb-1">{{ alertMessage.type === 'success' ? 'Berhasil!' : (alertMessage.type === 'info' ? 'Informasi' : 'Terjadi Kesalahan') }}</div>
               <div class="text-secondary small lh-sm">{{ alertMessage.text }}</div>
               <div v-if="alertMessage.scanJobCode" class="mt-2">
                 <router-link
@@ -800,14 +846,14 @@ watch(() => route.query.project_id, (newVal) => {
                     <button
                       v-if="repo.metadata?.local_path && canManage"
                       type="button"
-                      class="btn btn-sm btn-danger d-flex align-items-center gap-1"
+                      class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1"
                       :disabled="clearingRepoId === repo.id"
                       @click="clearWorkspace(repo)"
-                      title="Bersihkan File Workspace Lokal Server"
+                      title="Bersihkan File Clone di Server Worker (Menghemat Disk)"
                     >
                       <span v-if="clearingRepoId === repo.id" class="spinner-border spinner-border-sm" role="status"></span>
-                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
-                      <span>Bersihkan</span>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 20h-10.5l-4.21 -4.3a1 1 0 0 1 0 -1.41l10 -10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41l-9.2 9.3" /><path d="M18 13.3l-6.3 -6.3" /></svg>
+                      <span>Bersihkan File</span>
                     </button>
 
                     <!-- Edit button -->
@@ -820,6 +866,18 @@ watch(() => route.query.project_id, (newVal) => {
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" /><path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" /><path d="M16 5l3 3" /></svg>
                       <span>Edit</span>
+                    </button>
+
+                    <!-- Delete button -->
+                    <button
+                      v-if="canManage"
+                      type="button"
+                      class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1"
+                      @click="openDeleteModal(repo)"
+                      title="Hapus Repositori dari Sistem"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
+                      <span>Hapus</span>
                     </button>
                   </div>
                 </td>
@@ -953,9 +1011,21 @@ watch(() => route.query.project_id, (newVal) => {
                       <span>Pindai</span>
                     </button>
                   </div>
-                  <div :class="repo.metadata?.local_path && canManage ? 'col-6' : 'col-12'">
+                  <div v-if="repo.metadata?.local_path && canManage" class="col-12">
                     <button
-                      v-if="canManage"
+                      type="button"
+                      class="btn btn-sm btn-outline-warning w-100 d-flex align-items-center justify-content-center gap-1"
+                      :disabled="clearingRepoId === repo.id"
+                      @click="clearWorkspace(repo)"
+                      title="Bersihkan File Clone di Server Worker"
+                    >
+                      <span v-if="clearingRepoId === repo.id" class="spinner-border spinner-border-sm" role="status"></span>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 20h-10.5l-4.21 -4.3a1 1 0 0 1 0 -1.41l10 -10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41l-9.2 9.3" /><path d="M18 13.3l-6.3 -6.3" /></svg>
+                      <span>Bersihkan File Server</span>
+                    </button>
+                  </div>
+                  <div v-if="canManage" class="col-6">
+                    <button
                       type="button"
                       class="btn btn-sm btn-secondary w-100 d-flex align-items-center justify-content-center gap-1"
                       @click="openEditModal(repo)"
@@ -964,16 +1034,14 @@ watch(() => route.query.project_id, (newVal) => {
                       <span>Edit</span>
                     </button>
                   </div>
-                  <div v-if="repo.metadata?.local_path && canManage" class="col-6">
+                  <div v-if="canManage" class="col-6">
                     <button
                       type="button"
-                      class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center gap-1"
-                      :disabled="clearingRepoId === repo.id"
-                      @click="clearWorkspace(repo)"
+                      class="btn btn-sm btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-1"
+                      @click="openDeleteModal(repo)"
                     >
-                      <span v-if="clearingRepoId === repo.id" class="spinner-border spinner-border-sm" role="status"></span>
-                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
-                      <span>Bersihkan</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
+                      <span>Hapus</span>
                     </button>
                   </div>
                 </div>
@@ -1251,6 +1319,144 @@ watch(() => route.query.project_id, (newVal) => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL KONFIRMASI BERSIHKAN FILE WORKSPACE -->
+    <div
+      v-if="cleanModalRepo"
+      class="modal modal-blur fade show d-block"
+      tabindex="-1"
+      style="background-color: rgba(0, 0, 0, 0.65); z-index: 1060;"
+      @click.self="closeCleanModal"
+    >
+      <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg border-0">
+          <button type="button" class="btn-close" aria-label="Close" @click="closeCleanModal"></button>
+          
+          <!-- Status Warning Bar -->
+          <div class="modal-status bg-warning"></div>
+
+          <div class="modal-body text-center py-4">
+            <div class="avatar avatar-lg bg-warning-lt rounded-circle mx-auto mb-3 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg text-warning" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M19 20h-10.5l-4.21 -4.3a1 1 0 0 1 0 -1.41l10 -10a1 1 0 0 1 1.41 0l5 5a1 1 0 0 1 0 1.41l-9.2 9.3" />
+                <path d="M18 13.3l-6.3 -6.3" />
+              </svg>
+            </div>
+            <h3 class="modal-title mb-1 text-body fw-bold">Bersihkan File di Server?</h3>
+            <div class="text-secondary small mb-3">
+              File hasil clone repositori <strong>{{ cleanModalRepo.name }}</strong> di disk server worker akan dibersihkan untuk menghemat ruang penyimpanan.
+            </div>
+
+            <div class="card card-sm bg-body text-start border p-3 mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                <span class="text-secondary small">Repositori:</span>
+                <span class="fw-bold small text-truncate" style="max-width: 150px;">{{ cleanModalRepo.name }}</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="text-secondary small">Proyek:</span>
+                <span class="small text-truncate" style="max-width: 150px;">{{ cleanModalRepo.project?.name || '-' }}</span>
+              </div>
+            </div>
+
+            <div class="alert alert-info py-2 px-3 small text-start mb-0">
+              <div class="d-flex align-items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm text-info flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12.01" y2="8" /><polyline points="11 12 12 12 12 16 13 16" /></svg>
+                <span><strong>Catatan:</strong> Repositori tidak terhapus dari sistem Tameng. Anda dapat melakukan Clone/Pull kembali kapan saja.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer py-2 d-flex align-items-center justify-content-between">
+            <button type="button" class="btn btn-secondary" :disabled="isClearingWorkspace" @click="closeCleanModal">
+              Batal
+            </button>
+            <button
+              type="button"
+              class="btn btn-warning d-flex align-items-center gap-1"
+              :disabled="isClearingWorkspace"
+              @click="confirmClearWorkspace"
+            >
+              <span v-if="isClearingWorkspace" class="spinner-border spinner-border-sm me-1" role="status"></span>
+              <span>Bersihkan File Server</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL KONFIRMASI HAPUS REPOSITORI (PERMANENT) -->
+    <div
+      v-if="deleteModalRepo"
+      class="modal modal-blur fade show d-block"
+      tabindex="-1"
+      style="background-color: rgba(0, 0, 0, 0.65); z-index: 1060;"
+      @click.self="closeDeleteModal"
+    >
+      <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg border-0">
+          <button type="button" class="btn-close" aria-label="Close" @click="closeDeleteModal"></button>
+          
+          <!-- Status Danger Bar -->
+          <div class="modal-status bg-danger"></div>
+
+          <div class="modal-body text-center py-4">
+            <div class="avatar avatar-lg bg-danger-lt rounded-circle mx-auto mb-3 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg text-danger" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M4 7l16 0" />
+                <path d="M10 11l0 6" />
+                <path d="M14 11l0 6" />
+                <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+                <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+              </svg>
+            </div>
+            <h3 class="modal-title mb-1 text-body fw-bold">Hapus Repositori?</h3>
+            <div class="text-secondary small mb-3">
+              Apakah Anda yakin ingin menghapus repositori <strong>{{ deleteModalRepo.name }}</strong> secara permanen dari sistem Tameng?
+            </div>
+
+            <div class="card card-sm bg-body text-start border p-3 mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                <span class="text-secondary small">Repositori:</span>
+                <span class="fw-bold small text-truncate" style="max-width: 150px;">{{ deleteModalRepo.name }}</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-1 pb-1 border-bottom">
+                <span class="text-secondary small">Proyek:</span>
+                <span class="small text-truncate" style="max-width: 150px;">{{ deleteModalRepo.project?.name || '-' }}</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="text-secondary small">Tipe:</span>
+                <span class="badge bg-blue-lt text-uppercase">{{ deleteModalRepo.repository_type || 'git' }}</span>
+              </div>
+            </div>
+
+            <div class="alert alert-danger py-2 px-3 small text-start mb-0">
+              <div class="d-flex align-items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-sm text-danger flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+                <span>Tindakan ini permanen. File clone di server dan riwayat verifikasi repositori ini akan ikut dihapus.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer py-2 d-flex align-items-center justify-content-between">
+            <button type="button" class="btn btn-secondary" :disabled="isDeletingRepo" @click="closeDeleteModal">
+              Batal
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger d-flex align-items-center gap-1"
+              :disabled="isDeletingRepo"
+              @click="confirmDeleteRepo"
+            >
+              <span v-if="isDeletingRepo" class="spinner-border spinner-border-sm me-1" role="status"></span>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0" /><path d="M10 11l0 6" /><path d="M14 11l0 6" /><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" /><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" /></svg>
+              <span>Hapus Permanen</span>
+            </button>
           </div>
         </div>
       </div>

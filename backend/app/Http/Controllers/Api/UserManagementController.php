@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -77,6 +78,7 @@ class UserManagementController extends Controller
             'phone' => $data['phone'] ?? null,
             'department' => $data['department'] ?? null,
             'auth_provider' => $data['auth_provider'] ?? 'local',
+            'provider_id' => $data['provider_id'] ?? null,
             'status' => $data['status'],
             'password' => $hashedPassword,
             'password_changed_at' => now(),
@@ -122,7 +124,8 @@ class UserManagementController extends Controller
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:25'],
             'department' => ['nullable', 'string', 'max:150'],
-            'auth_provider' => ['nullable', 'string', 'max:50'],
+            'auth_provider' => ['nullable', 'string', Rule::in(['local', 'keycloak', 'google', 'active_directory'])],
+            'provider_id' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string', 'min:10'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'project_ids' => ['nullable', 'array'],
@@ -165,6 +168,7 @@ class UserManagementController extends Controller
             'phone' => $data['phone'] ?? null,
             'department' => $data['department'] ?? null,
             'auth_provider' => $data['auth_provider'] ?? $user->auth_provider,
+            'provider_id' => array_key_exists('provider_id', $data) ? $data['provider_id'] : $user->provider_id,
             'status' => $data['status'],
             ...(! empty($data['password']) ? ['password' => $data['password'], 'password_changed_at' => $data['password_changed_at']] : []),
         ]);

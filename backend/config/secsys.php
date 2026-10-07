@@ -18,6 +18,7 @@ return [
     'testssl_image' => env('SECSYS_TESTSSL_IMAGE', 'drwetter/testssl.sh:3.0'),
     'nuclei_image' => env('SECSYS_NUCLEI_IMAGE', 'projectdiscovery/nuclei:latest'),
     'zap_image' => env('SECSYS_ZAP_IMAGE', 'ghcr.io/zaproxy/zaproxy:stable'),
+    'nikto_image' => env('SECSYS_NIKTO_IMAGE', 'frapsoft/nikto:latest'),
     'docker_binary' => env('SECSYS_DOCKER_BINARY', 'docker'),
     'container_workspace_path' => env('SECSYS_CONTAINER_WORKSPACE_PATH', '/repo'),
     'container_output_path' => env('SECSYS_CONTAINER_OUTPUT_PATH', '/out'),
@@ -34,13 +35,13 @@ return [
     'ai' => [
         'provider' => env('AI_PROVIDER', 'auto'),
         'gemini_api_key' => env('GEMINI_API_KEY'),
-        'gemini_model' => env('GEMINI_MODEL', 'gemini-1.5-flash'),
+        'gemini_model' => env('GEMINI_MODEL', 'gemini-3.5-flash'),
         'openai_api_key' => env('OPENAI_API_KEY'),
         'openai_model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
         'deepseek_api_key' => env('DEEPSEEK_API_KEY'),
         'deepseek_model' => env('DEEPSEEK_MODEL', 'deepseek-chat'),
         'ollama_host' => env('OLLAMA_HOST', 'http://localhost:11434'),
         'ollama_model' => env('OLLAMA_MODEL', 'llama3'),
-        'timeout_seconds' => (int) env('AI_TIMEOUT_SECONDS', 15),
+        'timeout_seconds' => (int) env('AI_TIMEOUT_SECONDS', 30),
     ],
 ];

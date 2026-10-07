@@ -63,10 +63,10 @@ class HadolintAdapter extends RepositoryDockerAdapter
         return parent::execute($plan);
     }
 
-    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath): array
+    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath, ?string $imageTag = null): array
     {
         return [
-            '/bin/hadolint',
+            'hadolint',
             '-f',
             'json',
             '--no-fail',

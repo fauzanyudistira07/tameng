@@ -24,7 +24,7 @@ class SemgrepAdapter extends RepositoryDockerAdapter
         return [0, 1, 2, 3];
     }
 
-    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath): array
+    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath, ?string $imageTag = null): array
     {
         return [
             'semgrep',

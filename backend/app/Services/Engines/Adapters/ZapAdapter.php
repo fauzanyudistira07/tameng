@@ -48,14 +48,24 @@ class ZapAdapter implements EngineAdapter
         }
 
         $dockerBinary = (string) config('secsys.docker_binary', 'docker');
-        $outputDirectory = storage_path('app/private/engine-output/' . $plan->scanJob->id . '/zap');
+        if (! $this->binaryExists($dockerBinary)) {
+            return EngineExecutionResult::skipped($commandSpec, 'DOCKER_BINARY_NOT_FOUND');
+        }
+
+        $outputDirectory = rtrim((string) config('secsys.engine_output_root', storage_path('app/private/engine-output')), DIRECTORY_SEPARATOR)
+            .DIRECTORY_SEPARATOR.$plan->scanJob->id
+            .DIRECTORY_SEPARATOR.$this->key();
+
         File::ensureDirectoryExists($outputDirectory);
+        @chmod($outputDirectory, 0777);
+
         $reportPath = $outputDirectory . DIRECTORY_SEPARATOR . 'zap-report.json';
+        $hostMountOutput = $this->dockerStorageMountSource($outputDirectory);
 
         $engineModel = \App\Models\SecurityEngine::where('code', $this->key())->first();
         $cpuLimit = (string) ($engineModel?->cpu_limit ?? '2.0');
         $memoryLimit = ($engineModel?->memory_limit_mb ?? 2048).'m';
-        $image = $engineModel?->container_image ?: 'ghcr.io/zaproxy/zaproxy:stable';
+        $image = $engineModel?->container_image ?: (config('secsys.zap_image') ?: 'ghcr.io/zaproxy/zaproxy:stable');
 
         // Check for authenticated cookie/header
         $zapExtraArgs = [];
@@ -70,6 +80,11 @@ class ZapAdapter implements EngineAdapter
                     $cookieVal = Crypt::decryptString($auth['cookie_value']);
                     $zapExtraArgs[] = '-z';
                     $zapExtraArgs[] = "-config replacer.full_list(0).description=auth -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr=Cookie -config replacer.full_list(0).replacement=\"{$cookieVal}\"";
+                } elseif ($auth['type'] === 'header' && ! empty($auth['header_value'])) {
+                    $headerName = $auth['header_name'] ?? 'Authorization';
+                    $headerVal = Crypt::decryptString($auth['header_value']);
+                    $zapExtraArgs[] = '-z';
+                    $zapExtraArgs[] = "-config replacer.full_list(0).description=auth -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr={$headerName} -config replacer.full_list(0).replacement=\"{$headerVal}\"";
                 }
             } catch (\Throwable) {
                 // Ignore decrypt error
@@ -80,10 +95,11 @@ class ZapAdapter implements EngineAdapter
             $dockerBinary,
             'run',
             '--rm',
+            '--user', '0:0',
             '--cpus', $cpuLimit,
             '--memory', $memoryLimit,
             '--security-opt=no-new-privileges',
-            '-v', "{$outputDirectory}:/zap/wrk:rw",
+            '-v', "{$hostMountOutput}:/zap/wrk:rw",
             $image,
             'zap-baseline.py',
             '-t', $targetUrl,
@@ -94,14 +110,32 @@ class ZapAdapter implements EngineAdapter
             ...$zapExtraArgs,
         ];
 
-        $commandSpec['command'] = $dockerArgs;
+        $commandSpec['command'] = [
+            'docker',
+            'run',
+            '--rm',
+            '--user', '0:0',
+            '--cpus', $cpuLimit,
+            '--memory', $memoryLimit,
+            '-v', '[REDACTED_OUTPUT]:/zap/wrk:rw',
+            $image,
+            'zap-baseline.py',
+            '-t', $targetUrl,
+            '-J', 'zap-report.json',
+            '-m', '1',
+            '-T', '3',
+            '-I',
+        ];
         $commandSpec['scanner_execution'] = true;
         $commandSpec['container_image'] = $image;
 
-        $process = new Process($dockerArgs, null, null, null, 360);
+        $timeoutSeconds = (int) config('secsys.engine_timeout_seconds', 400);
+        $process = new Process($dockerArgs, null, null, null, $timeoutSeconds);
 
+        $startTime = microtime(true);
         try {
             $process->run();
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
             $exitCode = $process->getExitCode();
 
             $output = '';
@@ -111,13 +145,14 @@ class ZapAdapter implements EngineAdapter
                 $output = $process->getOutput() ?: $process->getErrorOutput();
             }
 
-            $findings = $this->parseFindings($output);
+            $findings = $this->parseFindings($output, $targetUrl);
 
             return new EngineExecutionResult(
                 status: 'completed',
                 exitCode: $exitCode ?? 0,
                 commandSpec: $commandSpec,
                 runtimeMetrics: [
+                    'duration_ms' => $durationMs,
                     'finding_count' => count($findings),
                     'stdout_preview' => Str::limit($process->getOutput(), 500),
                 ],
@@ -130,7 +165,7 @@ class ZapAdapter implements EngineAdapter
                 status: 'failed',
                 exitCode: 124,
                 commandSpec: $commandSpec,
-                runtimeMetrics: ['error' => 'timeout'],
+                runtimeMetrics: ['error' => 'timeout', 'timeout_seconds' => $timeoutSeconds],
                 rawOutput: null,
                 failureReason: 'ZAP_PROCESS_TIMEOUT',
                 normalizedFindings: [],
@@ -142,13 +177,13 @@ class ZapAdapter implements EngineAdapter
                 commandSpec: $commandSpec,
                 runtimeMetrics: ['error' => $e->getMessage()],
                 rawOutput: null,
-                failureReason: 'ZAP_EXECUTION_ERROR',
+                failureReason: 'ZAP_EXECUTION_ERROR: ' . $e->getMessage(),
                 normalizedFindings: [],
             );
         }
     }
 
-    private function parseFindings(string $output): array
+    public function parseFindings(string $output, string $targetUrl = ''): array
     {
         $findings = [];
         $decoded = json_decode($output, true);
@@ -157,7 +192,12 @@ class ZapAdapter implements EngineAdapter
         }
 
         $sites = $decoded['site'] ?? [];
+        if (! isset($sites[0]) && is_array($sites) && ! empty($sites)) {
+            $sites = [$sites];
+        }
+
         foreach ($sites as $site) {
+            $siteName = $site['@name'] ?? $targetUrl;
             $alerts = $site['alerts'] ?? [];
             foreach ($alerts as $alert) {
                 if (! is_array($alert)) {
@@ -177,25 +217,101 @@ class ZapAdapter implements EngineAdapter
                 $cleanDesc = strip_tags($alert['desc'] ?? '');
                 $cleanSolution = strip_tags($alert['solution'] ?? '');
 
+                $instances = $alert['instances'] ?? [];
+                $firstInstance = isset($instances[0]) && is_array($instances[0]) ? $instances[0] : [];
+                $uri = $firstInstance['uri'] ?? $siteName;
+                $method = $firstInstance['method'] ?? 'GET';
+                $evidence = $firstInstance['evidence'] ?? '';
+                $param = $firstInstance['param'] ?? '';
+                $attack = $firstInstance['attack'] ?? '';
+
+                $cweId = ! empty($alert['cweid']) ? 'CWE-' . $alert['cweid'] : null;
+                $wascId = ! empty($alert['wascid']) ? 'WASC-' . $alert['wascid'] : null;
+
+                $evidenceText = '';
+                if ($evidence) {
+                    $evidenceText .= "Evidence: {$evidence}\n";
+                }
+                if ($param) {
+                    $evidenceText .= "Parameter: {$param}\n";
+                }
+                if ($attack) {
+                    $evidenceText .= "Attack Payload: {$attack}\n";
+                }
+                if (empty(trim($evidenceText))) {
+                    $evidenceText = $cleanDesc ?: $name;
+                }
+
                 $findings[] = [
                     'rule_id' => 'zap.' . $pluginId,
                     'title' => 'OWASP ZAP: ' . $name,
-                    'description' => Str::limit($cleanDesc, 200),
                     'severity' => $severity,
+                    'severity_raw' => $riskCode,
+                    'confidence' => 0.85,
+                    'asset_type' => 'web_target',
+                    'asset_identifier' => $targetUrl ?: $siteName,
+                    'endpoint' => $uri,
+                    'http_method' => strtoupper($method),
                     'file_path' => null,
-                    'line_number' => null,
-                    'metadata' => [
+                    'line_start' => 1,
+                    'line_end' => 1,
+                    'cwe' => $cweId,
+                    'owasp' => 'A05:2021-Security Misconfiguration',
+                    'evidence_summary' => [
                         'plugin_id' => $pluginId,
                         'risk_code' => $riskCode,
-                        'cwe_id' => $alert['cweid'] ?? null,
-                        'wasc_id' => $alert['wascid'] ?? null,
+                        'cwe_id' => $cweId,
+                        'wasc_id' => $wascId,
+                        'endpoint' => $uri,
+                        'method' => $method,
+                        'param' => $param,
                         'remediation' => $cleanSolution,
                         'reference' => strip_tags($alert['reference'] ?? ''),
+                        'description' => $cleanDesc,
                     ],
+                    'evidence' => trim($evidenceText),
                 ];
             }
         }
 
         return $findings;
+    }
+
+    private function dockerStorageMountSource(string $storagePath): string
+    {
+        $path = rtrim($storagePath, DIRECTORY_SEPARATOR);
+        $containerRoot = rtrim(storage_path('app/private'), DIRECTORY_SEPARATOR);
+        $hostRoot = config('secsys.docker_host_storage_root');
+
+        if (! is_string($hostRoot) || $hostRoot === '') {
+            return $path;
+        }
+
+        $hostRoot = rtrim($hostRoot, '/\\');
+
+        if ($path === $containerRoot) {
+            return $hostRoot;
+        }
+
+        $relativePath = ltrim(substr($path, strlen($containerRoot)), '/\\');
+
+        return $hostRoot.DIRECTORY_SEPARATOR.$relativePath;
+    }
+
+    private function binaryExists(string $binary): bool
+    {
+        if (File::exists($binary)) {
+            return true;
+        }
+
+        $command = PHP_OS_FAMILY === 'Windows'
+            ? ['where.exe', $binary]
+            : ['/bin/sh', '-lc', 'command -v '.escapeshellarg($binary)];
+
+        $process = new Process($command);
+        $process->setTimeout(5);
+        $process->run();
+
+        return $process->isSuccessful();
     }
 }

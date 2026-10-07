@@ -59,8 +59,11 @@ class NucleiAdapter implements EngineAdapter
         $memoryLimit = ($engineModel?->memory_limit_mb ?? 2048).'m';
         $image = $engineModel?->container_image ?: config('secsys.nuclei_image', 'projectdiscovery/nuclei:latest');
         
-        $outputDirectory = storage_path('app/private/engine-output/' . $plan->scanJob->id . '/nuclei');
+        $outputDirectory = rtrim((string) config('secsys.engine_output_root', storage_path('app/private/engine-output')), DIRECTORY_SEPARATOR)
+            .DIRECTORY_SEPARATOR.$plan->scanJob->id
+            .DIRECTORY_SEPARATOR.$this->key();
         File::ensureDirectoryExists($outputDirectory);
+        @chmod($outputDirectory, 0777);
         $reportPath = $outputDirectory . DIRECTORY_SEPARATOR . 'nuclei-report.json';
 
         // Extract optional authenticated scan credentials (Form Login / Header / Cookie / Basic Auth)
@@ -99,7 +102,7 @@ class NucleiAdapter implements EngineAdapter
             $memoryLimit,
             '--security-opt=no-new-privileges',
             '-v',
-            'secsys-nuclei-templates:/root/nuclei-templates:ro',
+            'secsys-nuclei-templates:/root/nuclei-templates:rw',
             '-v',
             $this->dockerStorageMountSource($outputDirectory) . ":{$containerOutputPath}:rw",
             $image,
@@ -118,11 +121,17 @@ class NucleiAdapter implements EngineAdapter
         $command = array_merge($command, [
             '-as',
             '-tags',
-            'cve,vulnerabilities,misconfiguration,exposures,sqli,xss,ssrf,rce,lfi,idor,auth-bypass,default-login,ssl',
+            'misconfiguration,exposures,default-login,ssl',
+            '-etags',
+            'dos,fuzz',
             '-rate-limit',
-            '100',
+            '80',
+            '-c',
+            '15',
+            '-max-host-error',
+            '25',
             '-timeout',
-            '10',
+            '5',
             '-retries',
             '1',
             '-duc',
@@ -166,14 +175,27 @@ class NucleiAdapter implements EngineAdapter
                 normalizedFindings: $findings,
             );
         } catch (ProcessTimedOutException $e) {
+            $durationMs = (int) round((microtime(true) - $startTime) * 1000);
+            $reportContent = File::exists($reportPath) ? File::get($reportPath) : '';
+            $findings = ! empty($reportContent) ? $this->parseFindings($reportContent, $targetUrl) : [];
+
             return new EngineExecutionResult(
-                status: 'failed',
+                status: ! empty($findings) ? 'completed' : 'failed',
                 exitCode: null,
-                commandSpec: $commandSpec,
-                runtimeMetrics: ['duration_ms' => (int) config('secsys.engine_timeout_seconds') * 1000],
-                rawOutput: null,
-                failureReason: 'NUCLEI_PROCESS_TIMEOUT',
-                normalizedFindings: [],
+                commandSpec: [
+                    ...$commandSpec,
+                    'scanner_execution' => true,
+                    'container_image' => $image,
+                    'command' => $command,
+                ],
+                runtimeMetrics: [
+                    'duration_ms' => $durationMs,
+                    'finding_count' => count($findings),
+                    'timeout_seconds' => $timeout,
+                ],
+                rawOutput: $reportContent ?: null,
+                failureReason: empty($findings) ? 'NUCLEI_PROCESS_TIMEOUT' : null,
+                normalizedFindings: $findings,
             );
         } catch (\Throwable $e) {
             return new EngineExecutionResult(
@@ -253,7 +275,7 @@ class NucleiAdapter implements EngineAdapter
                 'severity_raw' => strtoupper($rawSeverity),
                 'severity' => $severity,
                 'confidence' => 0.85,
-                'asset_type' => 'web_app',
+                'asset_type' => 'web_target',
                 'asset_identifier' => $targetUrl,
                 'file_path' => null,
                 'line_start' => null,
@@ -296,16 +318,24 @@ class NucleiAdapter implements EngineAdapter
         return $process->isSuccessful();
     }
 
-    private function dockerStorageMountSource(string $path): string
+    private function dockerStorageMountSource(string $storagePath): string
     {
-        $hostStorageRoot = config('secsys.docker_host_storage_root');
+        $path = rtrim($storagePath, DIRECTORY_SEPARATOR);
+        $containerRoot = rtrim(storage_path('app/private'), DIRECTORY_SEPARATOR);
+        $hostRoot = config('secsys.docker_host_storage_root');
 
-        if ($hostStorageRoot) {
-            $relative = Str::after($path, storage_path());
-
-            return rtrim($hostStorageRoot, '/\\').DIRECTORY_SEPARATOR.ltrim($relative, '/\\');
+        if (! is_string($hostRoot) || $hostRoot === '') {
+            return $path;
         }
 
-        return $path;
+        $hostRoot = rtrim($hostRoot, '/\\');
+
+        if ($path === $containerRoot) {
+            return $hostRoot;
+        }
+
+        $relativePath = ltrim(substr($path, strlen($containerRoot)), '/\\');
+
+        return $hostRoot.DIRECTORY_SEPARATOR.$relativePath;
     }
 }

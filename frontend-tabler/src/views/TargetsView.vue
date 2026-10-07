@@ -556,7 +556,7 @@ watch(() => route.query.project_id, (newVal) => {
               </svg>
             </div>
             <div class="flex-grow-1 pe-2">
-              <div class="fw-bold fs-5 mb-1">{{ alertMessage.type === 'success' ? 'Berhasil!' : 'Terjadi Kesalahan' }}</div>
+              <div class="fw-bold fs-5 mb-1">{{ alertMessage.type === 'success' ? 'Berhasil!' : (alertMessage.type === 'info' ? 'Informasi' : 'Terjadi Kesalahan') }}</div>
               <div class="text-secondary small lh-sm">{{ alertMessage.text }}</div>
               <div v-if="alertMessage.scanJobCode" class="mt-2">
                 <router-link

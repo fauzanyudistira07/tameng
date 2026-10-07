@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { apiFetch } from '../services/api'
+import { getFailureExplanation } from '../services/failureExplainer'
 
 interface Project {
   id: number
@@ -1220,8 +1221,13 @@ onUnmounted(() => {
                                   <span class="badge" :class="getEngineRunStatusClass(run.status)">
                                     {{ run.status.toUpperCase() }}
                                   </span>
-                                  <span v-if="run.failure_reason" class="text-danger small ms-2">
-                                    ({{ run.failure_reason }})
+                                  <span
+                                    v-if="run.failure_reason"
+                                    class="badge font-monospace ms-2"
+                                    :class="run.status === 'skipped' ? 'bg-secondary-lt text-secondary' : 'bg-danger-lt text-danger'"
+                                    :title="getFailureExplanation(run.failure_reason, run.engine_key).cause"
+                                  >
+                                    {{ getFailureExplanation(run.failure_reason, run.engine_key).title }}
                                   </span>
                                 </td>
                                 <td>
@@ -1254,8 +1260,23 @@ onUnmounted(() => {
                       </div>
 
                       <!-- Footer Log Failure Warning if any -->
-                      <div v-if="job.failure_reason" class="card-footer bg-danger-lt py-2 text-danger small">
-                        <strong>Catatan Kegagalan:</strong> {{ job.failure_reason }}
+                      <div v-if="job.failure_reason" class="card-footer bg-danger-lt py-3 text-secondary small border-top border-danger-subtle">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+                          <strong class="text-danger-emphasis d-flex align-items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-danger" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                            {{ getFailureExplanation(job.failure_reason).title }}
+                          </strong>
+                          <code class="text-danger small bg-surface px-2 py-0 rounded border border-danger-subtle">{{ job.failure_reason }}</code>
+                        </div>
+                        <div class="mb-2" style="line-height: 1.5;">
+                          <strong class="text-danger-emphasis">Penyebab:</strong> {{ getFailureExplanation(job.failure_reason).cause }}
+                        </div>
+                        <div class="bg-surface p-2 rounded small text-secondary border border-danger-subtle d-flex align-items-start gap-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-primary mt-1 flex-shrink-0" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
+                          <div>
+                            <strong class="text-primary-emphasis">Rekomendasi Solusi:</strong> {{ getFailureExplanation(job.failure_reason).remediation }}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -1506,6 +1527,9 @@ onUnmounted(() => {
                       </div>
                       <div v-if="resolvedAuthorization.valid_until" class="small text-secondary">
                         Berlaku s.d. <span class="fw-bold text-azure">{{ formatShortDate(resolvedAuthorization.valid_until) }}</span>
+                      </div>
+                      <div v-else class="small text-success">
+                        <span class="badge bg-success-lt text-success">Tanpa Batas Masa Berlaku (Admin)</span>
                       </div>
                     </div>
                   </div>

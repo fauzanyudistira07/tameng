@@ -11,6 +11,7 @@ use App\Models\ScanJob;
 use App\Models\ScanProfile;
 use App\Models\Scope;
 use App\Models\Target;
+use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\AuthorizationGateway;
 use Illuminate\Http\JsonResponse;
@@ -25,20 +26,47 @@ class MyScanRequestController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $requests = ScanJob::query()
+        $user = $request->user();
+        $user->loadMissing('role');
+        $isAdminOrAnalyst = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+
+        $query = ScanJob::query()
             ->with([
                 'project:id,name,code',
                 'repository:id,name,url,default_branch,metadata',
                 'target:id,name,type,base_url,hostname',
                 'scanProfile:id,key,name',
-                'authorization:id,code,status',
-                'scanRuns:id,scan_job_id,engine_key,status,exit_code,started_at,finished_at,failure_reason',
+                'authorization:id,code,status,valid_from,valid_until',
+                'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
                 'reports:id,scan_job_id,status,format,generated_at',
-            ])
-            ->where('created_by', $request->user()->id)
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (ScanJob $job) => $this->sanitizeJob($job));
+            ]);
+
+        if (! $isAdminOrAnalyst) {
+            $assignedProjectIds = $user->projects()->pluck('projects.id');
+            $userId = $user->id;
+            $query->where(function ($q) use ($assignedProjectIds, $userId) {
+                $q->where('created_by', $userId)
+                  ->orWhereIn('project_id', $assignedProjectIds);
+            });
+        }
+
+        $jobs = $query->orderByDesc('id')->get();
+        $userIds = $jobs->pluck('created_by')->filter()->unique();
+        $users = User::query()->whereIn('id', $userIds)->with('role:id,name')->get(['id', 'name', 'email', 'role_id'])->keyBy('id');
+
+        $requests = $jobs->map(function (ScanJob $job) use ($users) {
+            $sanitized = $this->sanitizeJob($job);
+            if ($job->created_by && isset($users[$job->created_by])) {
+                $user = $users[$job->created_by];
+                $sanitized->creator_name = $user->name;
+                $sanitized->creator_email = $user->email;
+                $roleName = $user->role?->name;
+                $sanitized->creator_role = $roleName;
+                $sanitized->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin'], true);
+            }
+
+            return $sanitized;
+        });
 
         return response()->json([
             'scan_requests' => $requests,
@@ -117,7 +145,55 @@ class MyScanRequestController extends Controller
 
         $user = $request->user();
         $user->loadMissing('role');
-        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin'], true);
+        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+
+        if (! $isAdmin) {
+            // Validasi: Cegah permohonan scan baru pada repositori/target yang sama jika scan sebelumnya masih menunggu persetujuan Admin SOC
+            $rawAssetUrl = trim($data['asset_url'] ?? '');
+            $normalizedUrl = rtrim(strtolower($rawAssetUrl), '/');
+            $normalizedWithoutGit = Str::endsWith($normalizedUrl, '.git') ? substr($normalizedUrl, 0, -4) : $normalizedUrl;
+            $repoIdentifier = Str::contains($rawAssetUrl, 'github.com') ? $this->repositoryName($rawAssetUrl) : null;
+            $uploadedFileName = $uploadedFile ? $uploadedFile->getClientOriginalName() : null;
+
+            $existingPendingJob = ScanJob::query()
+                ->where('status', 'pending_approval')
+                ->where(function ($query) use ($rawAssetUrl, $normalizedUrl, $normalizedWithoutGit, $repoIdentifier, $uploadedFileName) {
+                    $query->whereHas('repository', function ($repoQuery) use ($rawAssetUrl, $normalizedUrl, $normalizedWithoutGit, $repoIdentifier, $uploadedFileName) {
+                        $repoQuery->where(function ($sub) use ($rawAssetUrl, $normalizedUrl, $normalizedWithoutGit, $repoIdentifier, $uploadedFileName) {
+                            if ($rawAssetUrl !== '') {
+                                $sub->where('url', $rawAssetUrl)
+                                    ->orWhere('url', $normalizedUrl)
+                                    ->orWhere('url', $normalizedWithoutGit)
+                                    ->orWhere('url', $normalizedWithoutGit . '.git');
+
+                                if ($repoIdentifier) {
+                                    $sub->orWhere('name', $repoIdentifier);
+                                }
+                            }
+
+                            if ($uploadedFileName) {
+                                $sub->orWhere('name', $uploadedFileName);
+                            }
+                        });
+                    })->orWhereHas('target', function ($targetQuery) use ($rawAssetUrl, $normalizedUrl) {
+                        if ($rawAssetUrl !== '') {
+                            $targetQuery->where('base_url', $rawAssetUrl)
+                                ->orWhere('base_url', $normalizedUrl);
+                        }
+                    });
+                })
+                ->latest('id')
+                ->first();
+
+            if ($existingPendingJob) {
+                $existingTargetName = $repoIdentifier ?: ($uploadedFileName ?: $rawAssetUrl);
+                throw ValidationException::withMessages([
+                    'asset_url' => [
+                        "Repositori '{$existingTargetName}' masih memiliki permohonan scan ({$existingPendingJob->code}) yang menunggu persetujuan Admin SOC. Harap tunggu hingga permohonan pertama disetujui terlebih dahulu sebelum mengajukan pemindaian ulang."
+                    ],
+                ]);
+            }
+        }
 
         $scanJob = DB::transaction(function () use ($data, $user, $gateway, $auditLogger, $uploadedFile, $isAdmin): ScanJob {
             $profile = ScanProfile::query()
@@ -147,10 +223,10 @@ class MyScanRequestController extends Controller
                 'target_id' => $target?->id,
                 'scan_profile_id' => $profile->id,
                 'requested_by' => $user->id,
-                'approved_by' => $user->id,
+                'approved_by' => $isAdmin ? $user->id : null,
                 'status' => $authStatus,
                 'valid_from' => now(),
-                'valid_until' => now()->addDays(7),
+                'valid_until' => $isAdmin ? null : now()->addDays(7),
                 'max_concurrency' => 1,
                 'rate_limit_per_minute' => 30,
                 'allowed_engines' => $profile->engine_keys,
@@ -168,24 +244,48 @@ class MyScanRequestController extends Controller
                 'notes' => $authNotes,
             ]);
 
-            $decision = $gateway->decide([
-                'project_id' => $project->id,
-                'repository_id' => $repository?->id,
-                'target_id' => $target?->id,
-                'scan_profile_id' => $profile->id,
-                'authorization_id' => $authorization->id,
-                'requested_by' => $user->id,
-                'requested_at' => now()->toISOString(),
-                'source' => 'user_scan_request',
-            ]);
-
-            if ($decision['decision'] !== 'allow') {
-                throw ValidationException::withMessages([
-                    'asset_url' => ["Authorization Gateway menolak permintaan: {$decision['reason_code']}"],
-                ]);
-            }
-
             $jobStatus = $isAdmin ? 'queued' : 'pending_approval';
+
+            if ($isAdmin) {
+                $decision = $gateway->decide([
+                    'project_id' => $project->id,
+                    'repository_id' => $repository?->id,
+                    'target_id' => $target?->id,
+                    'scan_profile_id' => $profile->id,
+                    'authorization_id' => $authorization->id,
+                    'requested_by' => $user->id,
+                    'requested_at' => now()->toISOString(),
+                    'source' => 'user_scan_request',
+                ]);
+
+                if ($decision['decision'] !== 'allow') {
+                    throw ValidationException::withMessages([
+                        'asset_url' => ["Authorization Gateway menolak permintaan: {$decision['reason_code']}"],
+                    ]);
+                }
+
+                $enginePlan = $decision['engine_plan'];
+                $executionPolicySnapshot = [
+                    'authorization_decision_id' => $decision['policy_decision']->id,
+                    'authorization_reason_code' => $decision['reason_code'],
+                    'authorization_policy_snapshot' => $decision['policy_snapshot'],
+                    'requires_admin_approval' => false,
+                ];
+                $policyDecision = $decision['policy_decision'];
+            } else {
+                $enginePlan = collect($profile->engine_keys)->map(fn (string $engine): array => [
+                    'engine_key' => $engine,
+                    'status' => 'planned',
+                ])->values()->all();
+
+                $executionPolicySnapshot = [
+                    'authorization_decision_id' => null,
+                    'authorization_reason_code' => 'PENDING_ADMIN_APPROVAL',
+                    'authorization_policy_snapshot' => $authorization->policy_snapshot,
+                    'requires_admin_approval' => true,
+                ];
+                $policyDecision = null;
+            }
 
             $scanJob = ScanJob::query()->create([
                 'code' => 'SCAN-'.now()->format('YmdHis').'-USER-'.Str::upper(Str::random(4)),
@@ -199,16 +299,13 @@ class MyScanRequestController extends Controller
                 'progress' => 0,
                 'attempt' => 0,
                 'queued_at' => $isAdmin ? now() : null,
-                'engine_plan' => $decision['engine_plan'],
-                'execution_policy_snapshot' => [
-                    'authorization_decision_id' => $decision['policy_decision']->id,
-                    'authorization_reason_code' => $decision['reason_code'],
-                    'authorization_policy_snapshot' => $decision['policy_snapshot'],
-                    'requires_admin_approval' => ! $isAdmin,
-                ],
+                'engine_plan' => $enginePlan,
+                'execution_policy_snapshot' => $executionPolicySnapshot,
             ]);
 
-            $decision['policy_decision']->forceFill(['scan_job_id' => $scanJob->id])->save();
+            if ($policyDecision) {
+                $policyDecision->forceFill(['scan_job_id' => $scanJob->id])->save();
+            }
 
             $auditLogger->recordSystem('scan_request.create', 'success', [
                 'user_id' => $user->id,
@@ -239,10 +336,13 @@ class MyScanRequestController extends Controller
             'repository:id,name,url,default_branch,metadata',
             'target:id,name,type,base_url,hostname',
             'scanProfile:id,key,name',
-            'authorization:id,code,status',
+            'authorization:id,code,status,valid_from,valid_until',
             'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
             'reports:id,scan_job_id,status,format,generated_at,metadata',
         ]);
+
+        $loaded->creator_name = $user->name;
+        $loaded->creator_email = $user->email;
 
         return response()->json([
             'message' => $isAdmin
@@ -252,7 +352,7 @@ class MyScanRequestController extends Controller
         ], 201);
     }
 
-    public function approve(Request $request, ScanJob $scanJob, AuditLogger $auditLogger): JsonResponse
+    public function approve(Request $request, ScanJob $scanJob, AuditLogger $auditLogger, AuthorizationGateway $gateway): JsonResponse
     {
         $user = $request->user();
 
@@ -262,7 +362,7 @@ class MyScanRequestController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($scanJob, $user, $auditLogger, $request): void {
+        DB::transaction(function () use ($scanJob, $user, $auditLogger, $request, $gateway): void {
             if ($scanJob->authorization) {
                 $scanJob->authorization->update([
                     'status' => 'active',
@@ -272,10 +372,37 @@ class MyScanRequestController extends Controller
                 ]);
             }
 
+            $decision = $gateway->decide([
+                'project_id' => $scanJob->project_id,
+                'repository_id' => $scanJob->repository_id,
+                'target_id' => $scanJob->target_id,
+                'scan_profile_id' => $scanJob->scan_profile_id,
+                'authorization_id' => $scanJob->authorization_id,
+                'requested_by' => $scanJob->created_by,
+                'requested_at' => now()->toISOString(),
+                'source' => 'user_scan_request_approved',
+            ]);
+
+            if ($decision['decision'] !== 'allow') {
+                throw ValidationException::withMessages([
+                    'scan_job' => ["Authorization Gateway menolak aktivasi scan: {$decision['reason_code']}"],
+                ]);
+            }
+
             $scanJob->update([
                 'status' => 'queued',
                 'queued_at' => now(),
+                'engine_plan' => $decision['engine_plan'],
+                'execution_policy_snapshot' => [
+                    'authorization_decision_id' => $decision['policy_decision']->id,
+                    'authorization_reason_code' => $decision['reason_code'],
+                    'authorization_policy_snapshot' => $decision['policy_snapshot'],
+                    'requires_admin_approval' => false,
+                    'approved_by_admin' => $user->name,
+                ],
             ]);
+
+            $decision['policy_decision']->forceFill(['scan_job_id' => $scanJob->id])->save();
 
             $auditLogger->record($request, 'scan_job.approve', 'success', [
                 'project_id' => $scanJob->project_id,
@@ -297,10 +424,16 @@ class MyScanRequestController extends Controller
             'repository:id,name,url,default_branch,metadata',
             'target:id,name,type,base_url,hostname',
             'scanProfile:id,key,name',
-            'authorization:id,code,status',
+            'authorization:id,code,status,valid_from,valid_until',
             'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
             'reports:id,scan_job_id,status,format,generated_at,metadata',
         ]);
+
+        $creator = User::query()->find($scanJob->created_by);
+        if ($creator) {
+            $loaded->creator_name = $creator->name;
+            $loaded->creator_email = $creator->email;
+        }
 
         return response()->json([
             'message' => 'Permintaan scan berhasil disetujui dan telah dimasukkan ke antrean runner pemindaian.',
@@ -354,10 +487,16 @@ class MyScanRequestController extends Controller
             'repository:id,name,url,default_branch,metadata',
             'target:id,name,type,base_url,hostname',
             'scanProfile:id,key,name',
-            'authorization:id,code,status',
+            'authorization:id,code,status,valid_from,valid_until',
             'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
             'reports:id,scan_job_id,status,format,generated_at,metadata',
         ]);
+
+        $creator = User::query()->find($scanJob->created_by);
+        if ($creator) {
+            $loaded->creator_name = $creator->name;
+            $loaded->creator_email = $creator->email;
+        }
 
         return response()->json([
             'message' => 'Permintaan scan telah ditolak.',
@@ -367,8 +506,38 @@ class MyScanRequestController extends Controller
 
     public function rerun(Request $request, ScanJob $scanJob, AuditLogger $auditLogger): JsonResponse
     {
-        if ($scanJob->created_by !== $request->user()->id && ! in_array($request->user()->role?->name, ['super_admin', 'security_admin'], true)) {
+        $user = $request->user();
+        $user->loadMissing('role');
+        $isAdminOrAnalyst = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+
+        $isRelated = $user->projects()->where('projects.id', $scanJob->project_id)->exists();
+
+        if ($scanJob->created_by !== $user->id && ! $isAdminOrAnalyst && ! $isRelated) {
             abort(403, 'Anda tidak memiliki izin untuk mengulang pemindaian ini.');
+        }
+
+        // Kebijakan Masa Berlaku:
+        // Jika Admin: hilangkan masa berlaku (valid_until = null / unlimited)
+        // Jika Pengguna Biasa: terapkan masa berlaku 7 hari jika sudah kedaluwarsa
+        if ($scanJob->authorization) {
+            $auth = $scanJob->authorization;
+            if ($isAdminOrAnalyst) {
+                $auth->update([
+                    'status' => 'active',
+                    'valid_from' => now()->subMinute(),
+                    'valid_until' => null, // Admin = Tanpa Masa Berlaku
+                    'notes' => trim(($auth->notes ?? '') . "\n[Diperbarui oleh Administrator: Tanpa Masa Berlaku pada " . now()->format('Y-m-d H:i') . "]"),
+                ]);
+            } else {
+                if ($auth->status !== 'active' || ($auth->valid_until && \Carbon\Carbon::parse($auth->valid_until)->isPast())) {
+                    $auth->update([
+                        'status' => 'active',
+                        'valid_from' => now()->subMinute(),
+                        'valid_until' => now()->addDays(7),
+                        'notes' => trim(($auth->notes ?? '') . "\n[Diperpanjang untuk Pengguna Biasa (7 hari) pada " . now()->format('Y-m-d H:i') . "]"),
+                    ]);
+                }
+            }
         }
 
         $newScanJob = ScanJob::query()->create([
@@ -407,7 +576,7 @@ class MyScanRequestController extends Controller
             'repository:id,name,url,default_branch,metadata',
             'target:id,name,type,base_url,hostname',
             'scanProfile:id,key,name',
-            'authorization:id,code,status',
+            'authorization:id,code,status,valid_from,valid_until',
             'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
             'reports:id,scan_job_id,status,format,generated_at,metadata',
         ]);
@@ -435,6 +604,17 @@ class MyScanRequestController extends Controller
                 unset($meta['auth']);
             }
             $job->target->metadata = $meta;
+        }
+
+        if ($job->created_by && ! isset($job->creator_name)) {
+            $user = User::with('role:id,name')->find($job->created_by);
+            if ($user) {
+                $job->creator_name = $user->name;
+                $job->creator_email = $user->email;
+                $roleName = $user->role?->name;
+                $job->creator_role = $roleName;
+                $job->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin'], true);
+            }
         }
 
         return $job;

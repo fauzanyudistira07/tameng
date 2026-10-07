@@ -177,10 +177,41 @@ function resetFilters() {
 }
 
 // Modal Detail / AI Remediation state
+export interface AiRemediationData {
+  finding_id?: number;
+  finding_code?: string;
+  rule_id?: string;
+  title?: string;
+  severity?: string;
+  category?: string;
+  summary?: string;
+  cause?: string;
+  attack_vector?: string;
+  business_impact?: string;
+  vulnerable_code?: string;
+  secure_code?: string;
+  code_diff?: string;
+  mitigation_checklist?: string[];
+  verification_command?: string;
+  defense_in_depth?: string;
+  ai_model?: string;
+  compliance?: {
+    cwe?: string;
+    owasp?: string;
+    cvss_score?: string | number;
+  };
+  cwe?: string;
+  owasp?: string;
+  cvss_score?: string | number;
+  disclaimer?: string;
+}
+
 const isModalOpen = ref(false);
 const modalTab = ref<"details" | "ai" | "triage">("details");
 const activeFinding = ref<FindingItem | null>(null);
-const aiRemediationText = ref<string | null>(null);
+const aiRemediationData = ref<AiRemediationData | null>(null);
+const aiSubTab = ref<"solution" | "diff" | "analysis" | "checklist" | "all">("solution");
+const copiedType = ref<string | null>(null);
 const isLoadingAi = ref(false);
 
 // Triage form state
@@ -264,13 +295,85 @@ const filteredFindings = computed(() => {
   });
 });
 
+function parseAiRemediation(data: any): AiRemediationData {
+  if (!data) {
+    return { summary: "Panduan perbaikan AI berhasil digenerate." };
+  }
+
+  let obj: any = data;
+  if (typeof data === "string") {
+    const trimmed = data.trim();
+    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      try {
+        obj = JSON.parse(trimmed);
+      } catch {
+        return { summary: data };
+      }
+    } else {
+      return { summary: data };
+    }
+  }
+
+  if (typeof obj === "object" && obj !== null) {
+    if (obj.remediation && typeof obj.remediation === "object") {
+      obj = obj.remediation;
+    }
+
+    const cweVal = obj.compliance?.cwe || obj.cwe || activeFinding.value?.cwe || null;
+    const owaspVal = obj.compliance?.owasp || obj.owasp || (activeFinding.value as any)?.owasp || null;
+    const cvssVal = obj.compliance?.cvss_score || obj.cvss_score || (activeFinding.value as any)?.cvss || null;
+
+    let codeDiffVal = obj.code_diff || obj.patch || null;
+    if (!codeDiffVal && (obj.vulnerable_code || obj.secure_code)) {
+      codeDiffVal = `--- SEBELUM (Kondisi Rentan):\n${obj.vulnerable_code || ''}\n\n+++ SESUDAH (Solusi Perbaikan Direkomendasikan):\n${obj.secure_code || ''}`;
+    }
+
+    return {
+      ...obj,
+      category: obj.category || activeFinding.value?.title || "Kerentanan Keamanan",
+      summary: obj.summary || obj.guidance || "Rekomendasi perbaikan AI berhasil digenerate.",
+      cause: obj.cause || null,
+      attack_vector: obj.attack_vector || null,
+      business_impact: obj.business_impact || null,
+      code_diff: codeDiffVal,
+      vulnerable_code: obj.vulnerable_code || null,
+      secure_code: obj.secure_code || null,
+      cwe: cweVal,
+      owasp: owaspVal,
+      cvss_score: cvssVal,
+      mitigation_checklist: Array.isArray(obj.mitigation_checklist)
+        ? obj.mitigation_checklist
+        : (typeof obj.mitigation_checklist === "string" ? [obj.mitigation_checklist] : []),
+      verification_command: obj.verification_command || null,
+      defense_in_depth: obj.defense_in_depth || null,
+      ai_model: obj.ai_model || "TAMENG AI Remediation Copilot",
+      disclaimer: obj.disclaimer || "Rekomendasi perbaikan disusun secara otomatis berdasarkan standar keamanan NIST & OWASP."
+    };
+  }
+
+  return { summary: String(data) };
+}
+
+function copyToClipboard(text?: string, type = "code") {
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  copiedType.value = type;
+  setTimeout(() => {
+    if (copiedType.value === type) {
+      copiedType.value = null;
+    }
+  }, 2000);
+}
+
 async function openFindingModal(
   finding: FindingItem,
   defaultTab: "details" | "ai" | "triage" = "details",
 ) {
   activeFinding.value = finding;
   modalTab.value = defaultTab;
-  aiRemediationText.value = null;
+  aiRemediationData.value = null;
+  aiSubTab.value = "solution";
+  copiedType.value = null;
   triageStatus.value = finding.status;
   triageNotes.value = finding.normalization_metadata?.triage_notes || "";
   triageMessage.value = null;
@@ -298,23 +401,33 @@ async function openFindingModal(
 function closeModal() {
   isModalOpen.value = false;
   activeFinding.value = null;
-  aiRemediationText.value = null;
+  aiRemediationData.value = null;
+  copiedType.value = null;
   triageMessage.value = null;
 }
 
-async function fetchAiRemediation(findingId: number) {
-  if (aiRemediationText.value) return;
+async function fetchAiRemediation(findingId: number, force = false) {
+  if (aiRemediationData.value && !force) return;
   isLoadingAi.value = true;
+  copiedType.value = null;
   try {
     const res = await apiFetch(`/api/findings/${findingId}/ai-remediation`);
-    aiRemediationText.value =
-      res?.remediation?.guidance ||
-      res?.remediation ||
-      "Rekomendasi perbaikan AI berhasil digenerate.";
+    aiRemediationData.value = parseAiRemediation(res?.remediation || res);
   } catch (err: any) {
     console.error("Gagal mengambil rekomendasi AI:", err);
-    aiRemediationText.value =
-      "Rekomendasi AI otomatis: Validasi input pengguna di sisi server, terapkan prepared statement/parameterized queries, dan lakukan escaping sebelum menampilkan data ke browser.";
+    aiRemediationData.value = {
+      summary:
+        "Rekomendasi AI otomatis: Validasi input pengguna di sisi server, terapkan prepared statement/parameterized queries, dan lakukan escaping sebelum menampilkan data ke browser.",
+      cause:
+        "Kurangnya kontrol sanitasi, konfigurasi TLS usang, atau token kredensial terekspos pada sistem target.",
+      business_impact:
+        "Potensi kompromi kerahasiaan data, serangan man-in-the-middle, dan kegagalan audit kepatuhan keamanan.",
+      mitigation_checklist: [
+        "Audit dan perbarui dependensi serta pustaka pihak ketiga ke versi terbaru.",
+        "Terapkan validasi input ketat dan parameterized queries pada setiap interaksi data.",
+        "Konfigurasikan security headers dan protokol kriptografi modern (TLS 1.2 / TLS 1.3)."
+      ]
+    };
   } finally {
     isLoadingAi.value = false;
   }
@@ -322,7 +435,7 @@ async function fetchAiRemediation(findingId: number) {
 
 function switchModalTab(tab: "details" | "ai" | "triage") {
   modalTab.value = tab;
-  if (tab === "ai" && activeFinding.value && !aiRemediationText.value) {
+  if (tab === "ai" && activeFinding.value && !aiRemediationData.value) {
     fetchAiRemediation(activeFinding.value.id);
   }
 }
@@ -1664,7 +1777,7 @@ onMounted(async () => {
       tabindex="-1"
       style="background-color: rgba(0, 0, 0, 0.5)"
     >
-      <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
         <div class="modal-content">
           <div
             class="modal-header d-flex align-items-center justify-content-between"
@@ -1867,72 +1980,298 @@ onMounted(async () => {
 
             <!-- TAB 2: AI REMEDIATION -->
             <div v-else-if="modalTab === 'ai'">
-              <div class="card bg-indigo-lt border-0 mb-3">
-                <div
-                  class="card-body py-2 px-3 d-flex align-items-center gap-2"
-                >
-                  <span class="avatar avatar-xs bg-indigo text-indigo-fg">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="icon icon-xs"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      stroke-width="2"
-                      stroke="currentColor"
-                      fill="none"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                      <path
-                        d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3"
-                      />
-                      <path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" />
-                    </svg>
-                  </span>
-                  <div class="small">
-                    <strong>TAMENG AI Remediation Copilot:</strong> Rekomendasi
-                    perbaikan kontekstual berdasarkan tipe kelemahan dan standar
-                    secure coding OWASP/NIST.
+              <!-- AI Header Banner -->
+              <div class="card bg-indigo-lt border-0 mb-3 shadow-none">
+                <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="avatar avatar-xs bg-indigo text-indigo-fg">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                        <path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" />
+                        <path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" />
+                      </svg>
+                    </span>
+                    <div class="small">
+                      <strong>TAMENG AI Remediation Copilot:</strong> Rekomendasi perbaikan kontekstual berdasarkan tipe kelemahan dan standar secure coding OWASP/NIST.
+                    </div>
                   </div>
+                  <button
+                    v-if="aiRemediationData"
+                    type="button"
+                    class="btn btn-xs btn-outline-indigo d-inline-flex align-items-center gap-1"
+                    :disabled="isLoadingAi"
+                    @click="fetchAiRemediation(activeFinding.id, true)"
+                    title="Analisis ulang temuan dengan AI"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -5v5h5" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 5v-5h-5" /></svg>
+                    <span>Regenerate AI</span>
+                  </button>
                 </div>
               </div>
 
+              <!-- Loading State -->
               <div v-if="isLoadingAi" class="text-center py-5">
                 <div class="spinner-border text-indigo" role="status"></div>
-                <div class="text-secondary mt-2">
-                  Menghasilkan panduan perbaikan berbasis AI...
+                <div class="text-secondary mt-2 fw-medium">
+                  Menganalisis temuan & menyusun solusi remediasi kontekstual...
                 </div>
               </div>
 
-              <div
-                v-else-if="aiRemediationText"
-                class="bg-body-secondary p-3 rounded"
-                style="max-height: 380px; overflow-y: auto"
-              >
-                <div
-                  class="text-wrap"
-                  style="
-                    white-space: pre-wrap;
-                    font-family: inherit;
-                    font-size: 0.925rem;
-                    line-height: 1.6;
-                  "
-                >
-                  {{ aiRemediationText }}
+              <!-- Loaded Content -->
+              <div v-else-if="aiRemediationData" class="d-flex flex-column gap-3">
+                <!-- Category & Summary Banner -->
+                <div class="card border-start border-4 border-start-primary bg-surface shadow-sm">
+                  <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                      <span class="badge bg-primary-lt text-primary text-uppercase font-monospace" style="font-size: 0.72rem;">
+                        {{ aiRemediationData.category || 'Kerentanan Keamanan Aplikasi' }}
+                      </span>
+                      <div class="d-flex align-items-center gap-1 flex-wrap">
+                        <span v-if="aiRemediationData.cwe" class="badge bg-secondary-lt font-monospace">{{ aiRemediationData.cwe }}</span>
+                        <span v-if="aiRemediationData.owasp" class="badge bg-secondary-lt font-monospace">{{ aiRemediationData.owasp }}</span>
+                        <span v-if="aiRemediationData.cvss_score" class="badge bg-danger-lt font-monospace">CVSS {{ aiRemediationData.cvss_score }}</span>
+                        <span v-if="aiRemediationData.ai_model" class="badge bg-indigo-lt font-monospace">{{ aiRemediationData.ai_model }}</span>
+                      </div>
+                    </div>
+                    <p class="mb-0 text-reset" style="line-height: 1.6; font-size: 0.925rem;">
+                      {{ aiRemediationData.summary }}
+                    </p>
+                  </div>
+                </div>
+
+                <!-- Remediation Tabs -->
+                <div>
+                  <ul class="nav nav-pills gap-1" role="tablist">
+                    <li class="nav-item">
+                      <button
+                        class="nav-link btn-sm"
+                        :class="{ active: aiSubTab === 'solution' }"
+                        type="button"
+                        @click="aiSubTab = 'solution'"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 8l-4 4l4 4" /><path d="M17 8l4 4l-4 4" /><path d="M14 4l-4 16" /></svg>
+                        Solusi Perbaikan Kode
+                      </button>
+                    </li>
+                    <li class="nav-item">
+                      <button
+                        class="nav-link btn-sm"
+                        :class="{ active: aiSubTab === 'diff' }"
+                        type="button"
+                        @click="aiSubTab = 'diff'"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M16 3l0 4" /><path d="M8 3l0 4" /><path d="M4 11l16 0" /><path d="M11 15l1 0" /><path d="M12 15l0 3" /></svg>
+                        Perbandingan Diff
+                      </button>
+                    </li>
+                    <li class="nav-item">
+                      <button
+                        class="nav-link btn-sm"
+                        :class="{ active: aiSubTab === 'analysis' }"
+                        type="button"
+                        @click="aiSubTab = 'analysis'"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                        Akar Masalah & Vektor Serangan
+                      </button>
+                    </li>
+                    <li class="nav-item">
+                      <button
+                        class="nav-link btn-sm"
+                        :class="{ active: aiSubTab === 'checklist' }"
+                        type="button"
+                        @click="aiSubTab = 'checklist'"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
+                        Langkah Mitigasi & Verifikasi
+                      </button>
+                    </li>
+                    <li class="nav-item">
+                      <button
+                        class="nav-link btn-sm"
+                        :class="{ active: aiSubTab === 'all' }"
+                        type="button"
+                        @click="aiSubTab = 'all'"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg>
+                        Tampilan Utuh
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- SUBTAB 1: Solusi Perbaikan Kode -->
+                <div v-if="aiSubTab === 'solution' || aiSubTab === 'all'" class="d-flex flex-column gap-3">
+                  <!-- Kode Rentan (Sebelum) jika ada -->
+                  <div v-if="aiRemediationData.vulnerable_code" class="card border border-danger-subtle shadow-none">
+                    <div class="card-header py-2 px-3 bg-danger-lt d-flex align-items-center justify-content-between">
+                      <span class="small fw-bold text-danger d-flex align-items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                        KONDISI RENTAN (KODE SEBELUM PERBAIKAN)
+                      </span>
+                    </div>
+                    <div class="card-body p-0">
+                      <pre class="m-0 p-3 bg-dark text-danger-lt font-monospace small" style="white-space: pre-wrap; line-height: 1.5;"><code>{{ aiRemediationData.vulnerable_code }}</code></pre>
+                    </div>
+                  </div>
+
+                  <!-- Rekomendasi Solusi Aman (Sesudah) -->
+                  <div class="card border border-success-subtle shadow-none">
+                    <div class="card-header py-2 px-3 bg-success-lt d-flex align-items-center justify-content-between">
+                      <span class="small fw-bold text-success d-flex align-items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                        REKOMENDASI SOLUSI AMAN (SIAP DITERAPKAN)
+                      </span>
+                      <button
+                        type="button"
+                        class="btn btn-xs btn-outline-success d-inline-flex align-items-center gap-1"
+                        @click="copyToClipboard(aiRemediationData.secure_code || aiRemediationData.code_diff, 'secure')"
+                      >
+                        <svg v-if="copiedType !== 'secure'" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 8m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                        <span>{{ copiedType === 'secure' ? 'Tersalin!' : 'Salin Solusi Kode' }}</span>
+                      </button>
+                    </div>
+                    <div class="card-body p-0">
+                      <pre class="m-0 p-3 bg-dark text-success-lt font-monospace small" style="white-space: pre-wrap; line-height: 1.5;"><code>{{ aiRemediationData.secure_code || aiRemediationData.code_diff || 'Terapkan konfigurasi aman dan sanitasi input sesuai rekomendasi.' }}</code></pre>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SUBTAB 2: Perbandingan Diff -->
+                <div v-if="aiSubTab === 'diff' || (aiSubTab === 'all' && aiRemediationData.code_diff)" class="card border-0 shadow-none">
+                  <div class="card-header py-2 px-3 bg-surface border-bottom d-flex align-items-center justify-content-between">
+                    <span class="small fw-bold font-monospace">Unified Code Patch (Diff)</span>
+                    <button
+                      type="button"
+                      class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1"
+                      @click="copyToClipboard(aiRemediationData.code_diff, 'diff')"
+                    >
+                      <svg v-if="copiedType !== 'diff'" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 8m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                      <span>{{ copiedType === 'diff' ? 'Tersalin!' : 'Salin Patch' }}</span>
+                    </button>
+                  </div>
+                  <div class="card-body p-0">
+                    <pre class="m-0 p-3 bg-dark text-light font-monospace small" style="white-space: pre-wrap; line-height: 1.5; max-height: 350px; overflow-y: auto;"><code>{{ aiRemediationData.code_diff || 'Tidak ada unified diff khusus untuk temuan ini.' }}</code></pre>
+                  </div>
+                </div>
+
+                <!-- SUBTAB 3: Akar Masalah & Vektor Serangan -->
+                <div v-if="aiSubTab === 'analysis' || aiSubTab === 'all'" class="row g-3">
+                  <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm bg-body-tertiary">
+                      <div class="card-body p-3">
+                        <div class="d-flex align-items-center gap-2 mb-2 text-warning">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M5 19h14a2 2 0 0 0 1.84 -2.75l-7.1 -12.25a2 2 0 0 0 -3.5 0l-7.1 12.25a2 2 0 0 0 1.75 2.75" /></svg>
+                          <h5 class="fw-bold mb-0">Akar Masalah (Cause)</h5>
+                        </div>
+                        <p class="small text-secondary mb-0" style="line-height: 1.6;">
+                          {{ aiRemediationData.cause || 'Kurangnya kontrol sanitasi dan pemisahan kredensial pada kode sumber.' }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <div class="card h-100 border-0 shadow-sm bg-body-tertiary">
+                      <div class="card-body p-3">
+                        <div class="d-flex align-items-center gap-2 mb-2 text-danger">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /></svg>
+                          <h5 class="fw-bold mb-0">Dampak Risiko (Impact)</h5>
+                        </div>
+                        <p class="small text-secondary mb-0" style="line-height: 1.6;">
+                          {{ aiRemediationData.business_impact || 'Potensi kebocoran data sensitif dan kompromi sistem produksi.' }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="aiRemediationData.attack_vector" class="col-12">
+                    <div class="card border-0 shadow-sm bg-body-tertiary">
+                      <div class="card-body p-3">
+                        <div class="d-flex align-items-center gap-2 mb-2 text-primary">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>
+                          <h5 class="fw-bold mb-0">Skenario Serangan (Attack Vector)</h5>
+                        </div>
+                        <p class="small text-secondary mb-0" style="white-space: pre-wrap; line-height: 1.6;">
+                          {{ aiRemediationData.attack_vector }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SUBTAB 4: Langkah Mitigasi & Verifikasi -->
+                <div v-if="aiSubTab === 'checklist' || aiSubTab === 'all'" class="d-flex flex-column gap-3">
+                  <div class="card border-0 shadow-sm">
+                    <div class="card-body p-3">
+                      <h5 class="fw-bold mb-3 d-flex align-items-center gap-2 text-teal">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
+                        Daftar Tindakan Mitigasi
+                      </h5>
+                      <div v-if="aiRemediationData.mitigation_checklist?.length" class="list-group list-group-flush">
+                        <div
+                          v-for="(step, sIdx) in aiRemediationData.mitigation_checklist"
+                          :key="sIdx"
+                          class="list-group-item px-0 py-2 d-flex align-items-start gap-2 border-0"
+                        >
+                          <span class="badge bg-teal-lt text-teal rounded-circle px-2 py-1 mt-1">{{ sIdx + 1 }}</span>
+                          <span class="text-reset" style="line-height: 1.5;">{{ step }}</span>
+                        </div>
+                      </div>
+                      <div v-else class="text-secondary small">
+                        Terapkan patch kode yang direkomendasikan pada tab Solusi Perbaikan Kode.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="aiRemediationData.verification_command" class="card border-0 shadow-sm">
+                    <div class="card-body p-3">
+                      <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h5 class="fw-bold mb-0 small text-uppercase text-secondary font-monospace">Metode / Perintah Pengujian Verifikasi</h5>
+                        <button
+                          type="button"
+                          class="btn btn-xs btn-outline-secondary d-inline-flex align-items-center gap-1"
+                          @click="copyToClipboard(aiRemediationData.verification_command, 'cmd')"
+                        >
+                          <svg v-if="copiedType !== 'cmd'" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8 8m0 2a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z" /><path d="M16 8v-2a2 2 0 0 0 -2 -2h-8a2 2 0 0 0 -2 2v8a2 2 0 0 0 2 2h2" /></svg>
+                          <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                          <span>{{ copiedType === 'cmd' ? 'Tersalin!' : 'Salin Perintah' }}</span>
+                        </button>
+                      </div>
+                      <pre class="m-0 p-2 bg-dark text-light rounded font-monospace small"><code>{{ aiRemediationData.verification_command }}</code></pre>
+                    </div>
+                  </div>
+
+                  <div v-if="aiRemediationData.defense_in_depth" class="card border-0 shadow-sm bg-body-tertiary">
+                    <div class="card-body p-3">
+                      <h5 class="fw-bold mb-1 small text-uppercase text-indigo font-monospace">Defense in Depth (Pertahanan Berlapis)</h5>
+                      <p class="small text-secondary mb-0" style="line-height: 1.6;">
+                        {{ aiRemediationData.defense_in_depth }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Compliance / Disclaimer Footer -->
+                <div v-if="aiRemediationData.disclaimer" class="text-muted small border-top pt-2" style="font-size: 0.78rem;">
+                  <span class="text-secondary fw-medium">Catatan AI:</span> {{ aiRemediationData.disclaimer }}
                 </div>
               </div>
 
-              <div v-else class="text-center py-4 text-muted">
-                Klik tombol di bawah untuk meminta AI menghasilkan solusi
-                perbaikan khusus untuk temuan ini.
-                <div class="mt-2">
+              <!-- Empty State -->
+              <div v-else class="text-center py-5 text-muted">
+                <p class="mb-3">
+                  Klik tombol di bawah untuk meminta AI TAMENG menganalisis temuan ini dan menghasilkan rekomendasi perbaikan presisi.
+                </p>
+                <div>
                   <button
-                    class="btn btn-indigo"
+                    class="btn btn-indigo d-inline-flex align-items-center gap-2"
                     @click="fetchAiRemediation(activeFinding.id)"
                   >
-                    Generate Rekomendasi AI
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 13a8 8 0 0 1 7 7a6 6 0 0 0 3 -5a9 9 0 0 0 6 -8a3 3 0 0 0 -3 -3a9 9 0 0 0 -8 6a6 6 0 0 0 -5 3" /><path d="M7 14a6 6 0 0 0 -3 6a6 6 0 0 0 6 -3" /></svg>
+                    <span>Generate Rekomendasi AI</span>
                   </button>
                 </div>
               </div>

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Project;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ProjectController extends Controller
@@ -67,6 +68,20 @@ class ProjectController extends Controller
 
     private function validateProject(Request $request, ?Project $project = null): array
     {
+        // Jika code tidak diisi atau kosong, generate kode otomatis dari nama proyek dan ID user assign
+        // Format: PRJ-SINGKATAN-USR-ID
+        if (! $request->filled('code') && $request->filled('name')) {
+            $userId = $request->input('owner_id') ?: ($request->user()?->id ?: 1);
+            $abbr = $this->getProjectAbbreviation((string) $request->input('name'));
+            $prefix = 'PRJ-'.$abbr.'-USR-'.$userId;
+
+            $candidate = $prefix;
+            while (Project::where('code', $candidate)->when($project, fn ($q) => $q->where('id', '!=', $project->id))->exists()) {
+                $candidate = $prefix.'-'.Str::upper(Str::random(4));
+            }
+            $request->merge(['code' => $candidate]);
+        }
+
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:80', Rule::unique('projects', 'code')->ignore($project?->id)],
@@ -75,5 +90,33 @@ class ProjectController extends Controller
             'status' => ['required', Rule::in(['active', 'inactive', 'archived'])],
             'owner_id' => ['nullable', 'exists:users,id'],
         ]);
+    }
+
+    private function getProjectAbbreviation(string $name): string
+    {
+        $trimmed = trim($name);
+        if ($trimmed === '') {
+            return 'APP';
+        }
+
+        if (preg_match('/\(([\w\d]+)\)/', $trimmed, $matches)) {
+            return Str::upper($matches[1]);
+        }
+
+        $words = preg_split('/[\s_\-]+/', $trimmed, -1, PREG_SPLIT_NO_EMPTY);
+        if (! empty($words) && count($words) >= 2) {
+            $initials = '';
+            foreach ($words as $w) {
+                $initials .= Str::upper(mb_substr($w, 0, 1));
+            }
+            return Str::limit($initials, 10, '');
+        }
+
+        if (! empty($words) && count($words) === 1) {
+            $clean = preg_replace('/[^\w\d]/', '', $words[0]);
+            return Str::upper(Str::limit($clean, 12, ''));
+        }
+
+        return 'APP';
     }
 }

@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from
 import { useRoute, useRouter } from 'vue-router'
 import { apiFetch } from '../services/api'
 import { useAuth } from '../composables/useAuth'
+import { getFailureExplanation } from '../services/failureExplainer'
 
 const route = useRoute()
 const router = useRouter()
@@ -74,6 +75,10 @@ interface ScanRequest {
   started_at?: string | null
   finished_at?: string | null
   failure_reason?: string | null
+  creator_name?: string | null
+  creator_email?: string | null
+  creator_role?: string | null
+  creator_is_admin?: boolean | null
   project?: {
     id: number
     name: string
@@ -97,6 +102,13 @@ interface ScanRequest {
     id: number
     key: string
     name: string
+  }
+  authorization?: {
+    id: number
+    code: string
+    status: string
+    valid_until?: string | null
+    valid_from?: string | null
   }
   engine_plan?: Array<{ engine_key: string }>
   scan_runs?: ScanRun[]
@@ -425,7 +437,8 @@ function selectPredefinedRepo(repo: any) {
     : (repo.name.includes('/') ? `https://github.com/${repo.name}.git` : repo.name)
   form.default_branch = repo.default_branch || 'main'
 
-  autoFilledBanner.value = `Target pemindaian untuk [${form.project_name}] berhasil dimuat otomatis. Silakan lengkapi deskripsi/alasan permohonan di bawah ini, lalu klik 'Ajukan Pemindaian ke Admin SOC'.`
+  const btnLabel = (isAdmin.value || isSecurityAnalyst.value) ? 'Jalankan Pemindaian Langsung' : 'Ajukan Pemindaian ke Admin SOC'
+  autoFilledBanner.value = `Target pemindaian untuk [${form.project_name}] berhasil dimuat otomatis. Silakan lengkapi deskripsi di bawah ini, lalu klik '${btnLabel}'.`
 
   nextTick(() => {
     if (notesInputRef.value) {
@@ -453,7 +466,8 @@ function applyQueryParams() {
       form.default_branch = String(q.branch)
     }
 
-    autoFilledBanner.value = `Target pemindaian untuk [${form.project_name || form.asset_url}] berhasil dimuat otomatis. Silakan lengkapi deskripsi/alasan permohonan di bawah ini, lalu klik 'Ajukan Pemindaian ke Admin SOC'.`
+    const btnLabel = (isAdmin.value || isSecurityAnalyst.value) ? 'Jalankan Pemindaian Langsung' : 'Ajukan Pemindaian ke Admin SOC'
+    autoFilledBanner.value = `Target pemindaian untuk [${form.project_name || form.asset_url}] berhasil dimuat otomatis. Silakan lengkapi deskripsi di bawah ini, lalu klik '${btnLabel}'.`
 
     nextTick(() => {
       if (notesInputRef.value) {
@@ -655,6 +669,39 @@ function getJobStatusBadgeClass(job: ScanRequest): string {
   }
 }
 
+function getValidityBadgeInfo(job: ScanRequest): { text: string; badgeClass: string; tooltip: string } {
+  if (job.creator_is_admin || !job.authorization?.valid_until) {
+    return {
+      text: 'Tanpa Batas (Admin)',
+      badgeClass: 'bg-success-lt text-success',
+      tooltip: 'Otorisasi pemindaian ini permanen tanpa batas masa berlaku (Akses Administrator SOC)'
+    }
+  }
+
+  const validUntilStr = job.authorization.valid_until
+  const validUntilDate = new Date(validUntilStr)
+  const isExpired = validUntilDate.getTime() < Date.now()
+  const formattedDate = validUntilDate.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  })
+
+  if (isExpired) {
+    return {
+      text: `Kedaluwarsa (${formattedDate})`,
+      badgeClass: 'bg-danger-lt text-danger',
+      tooltip: `Masa berlaku otorisasi 7 hari telah habis pada ${formattedDate}. Pemindaian ulang memerlukan permohonan baru atau persetujuan Admin.`
+    }
+  }
+
+  return {
+    text: `Berlaku s/d ${formattedDate}`,
+    badgeClass: 'bg-info-lt text-info',
+    tooltip: `Masa berlaku otorisasi pengguna aktif hingga ${formattedDate} (Sesuai batas 7 hari kepatuhan RoE)`
+  }
+}
+
 function getJobStatusLabel(job: ScanRequest): string {
   if (isJobPartialSuccess(job)) return 'Selesai Parsial'
   switch (job.status) {
@@ -711,6 +758,17 @@ function assetBadgeInfo(job: ScanRequest) {
     badgeClass: 'bg-secondary-lt',
     icon: 'cube'
   }
+}
+
+function shouldShowRequester(job: ScanRequest): boolean {
+  if (!job.creator_name) return false
+  if (job.creator_is_admin === true) return false
+  if (job.creator_role && ['super_admin', 'security_admin'].includes(job.creator_role)) return false
+  const name = (job.creator_name || '').toLowerCase()
+  if (name.includes('admin') || name.includes('administrator')) {
+    return false
+  }
+  return true
 }
 
 function getEngineRunStatusClass(status: string): string {
@@ -790,8 +848,8 @@ function promptRerun(req: ScanRequest) {
   rerunConfirmRequest.value = req
 }
 
-function closeRerunModal() {
-  if (isRerunningId.value !== null) return
+function closeRerunModal(force: boolean = false) {
+  if (!force && isRerunningId.value !== null) return
   rerunConfirmRequest.value = null
 }
 
@@ -806,13 +864,14 @@ async function confirmAndExecuteRerun() {
     })
     const newJob = res?.scan_request || res?.scan_job
     showAlert('success', `Pekerjaan #${req.code} berhasil di-rerun menjadi #${newJob?.code || 'baru'}.`)
-    closeRerunModal()
+    rerunConfirmRequest.value = null
     filterStatus.value = 'all'
     await loadMyScanRequests(false)
   } catch (err: any) {
     showAlert('danger', err?.message || 'Gagal menjalankan ulang pemindaian.')
   } finally {
     isRerunningId.value = null
+    rerunConfirmRequest.value = null
   }
 }
 
@@ -1221,10 +1280,15 @@ onUnmounted(() => {
                 <path d="M16 20h2a2 2 0 0 0 2 -2v-1" />
                 <path d="M5 12l14 0" />
               </svg>
-              <span>Pengajuan Pemindaian Keamanan</span>
+              <span>{{ (isAdmin || isSecurityAnalyst) ? 'Pemindaian Keamanan Mandiri' : 'Pengajuan Pemindaian Keamanan' }}</span>
             </h2>
             <div class="text-secondary small mt-1">
-              Pengajuan pemindaian keamanan memerlukan persetujuan Administrator Keamanan (SOC) sebelum antrean pemindaian dijalankan.
+              <template v-if="isAdmin || isSecurityAnalyst">
+                Pusat pengujian dan manajemen pemindaian keamanan aset digital. Sebagai Administrator SOC, pemindaian Anda dieksekusi langsung dan Anda dapat menyetujui permohonan dari developer.
+              </template>
+              <template v-else>
+                Pengajuan pemindaian keamanan memerlukan persetujuan Administrator Keamanan (SOC) sebelum antrean pemindaian dijalankan.
+              </template>
             </div>
           </div>
 
@@ -1279,6 +1343,26 @@ onUnmounted(() => {
       <!-- TAB 1: FORM BUAT PEMINDAIAN BARU                          -->
       <!-- ========================================================= -->
       <div v-if="activeTab === 'new_scan'" class="animate-fade-in">
+        <!-- Banner Kebijakan Masa Berlaku: Admin vs Pengguna Biasa -->
+        <div v-if="isAdmin || isSecurityAnalyst" class="alert alert-success d-flex align-items-start gap-3 py-3 px-3 mb-4 border-0 bg-success-lt rounded-3 shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="icon text-success mt-1 flex-shrink-0" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M12 11m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M12 12l0 2.5" /></svg>
+          <div>
+            <div class="fw-bold fs-3 text-success">Mode Administrator SOC: Otorisasi Permanen (Tanpa Masa Berlaku)</div>
+            <div class="small text-secondary mt-1">
+              Sebagai Administrator SOC, pemindaian Anda dieksekusi langsung dan otorisasi pemindaian bersifat <strong>permanen tanpa batas masa berlaku (unlimited)</strong>. Anda bebas dari siklus kedaluwarsa 7 hari dan dapat melakukan pemindaian atau pengulangan (rerun) kapan saja tanpa kendala penolakan window.
+            </div>
+          </div>
+        </div>
+        <div v-else class="alert alert-info d-flex align-items-start gap-3 py-3 px-3 mb-4 border-0 bg-info-lt rounded-3 shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="icon text-info mt-1 flex-shrink-0" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>
+          <div>
+            <div class="fw-bold fs-3 text-info">Ketentuan Masa Berlaku Otorisasi (7 Hari) untuk Pengguna:</div>
+            <div class="small text-secondary mt-1">
+              Setiap permohonan scan yang diajukan oleh pengguna biasa wajib diverifikasi terlebih dahulu oleh Administrator SOC. Setelah disetujui, izin otorisasi memiliki <strong>masa berlaku selama 7 hari kalender</strong> sesuai regulasi kepatuhan Rules of Engagement (RoE). Jika masa berlaku 7 hari habis, pemindaian ulang (rerun) memerlukan pengajuan baru atau persetujuan ulang dari Admin.
+            </div>
+          </div>
+        </div>
+
         <!-- 1. Asset Type Selector Cards -->
         <div class="row row-deck row-cards mb-4">
           <div class="col-12">
@@ -1570,10 +1654,30 @@ onUnmounted(() => {
                   v-model="form.notes"
                   class="form-control"
                   rows="3"
-                  placeholder="Tuliskan deskripsi ringkas tujuan pemindaian, perubahan kode/fitur yang baru dilakukan, atau konteks pengujian untuk Admin SOC..."
+                  :placeholder="(isAdmin || isSecurityAnalyst) ? 'Tuliskan deskripsi ringkas tujuan pemindaian atau konteks teknis pengujian...' : 'Tuliskan deskripsi ringkas tujuan pemindaian, perubahan kode/fitur yang baru dilakukan, atau konteks pengujian untuk Admin SOC...'"
                 ></textarea>
                 <div class="form-text text-secondary small">
-                  Deskripsi ini akan ditinjau oleh Administrator Keamanan (SOC) saat memverifikasi pengajuan pemindaian Anda.
+                  {{ (isAdmin || isSecurityAnalyst) ? 'Catatan teknis untuk riwayat pemindaian aset ini.' : 'Deskripsi ini akan ditinjau oleh Administrator Keamanan (SOC) saat memverifikasi pengajuan pemindaian Anda.' }}
+                </div>
+              </div>
+
+              <!-- Persetujuan Admin & Masa Berlaku Notice Banner -->
+              <div v-if="!isAdmin && !isSecurityAnalyst" class="alert alert-info d-flex align-items-start gap-3 py-3 px-3 mb-4 border-0 bg-info-lt rounded-3 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-info mt-1 flex-shrink-0" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>
+                <div>
+                  <div class="fw-bold">Persetujuan Administrator SOC &amp; Masa Berlaku 7 Hari:</div>
+                  <div class="small text-secondary">
+                    Setiap permohonan pemindaian keamanan akan diverifikasi terlebih dahulu oleh tim Administrator Keamanan (SOC). Setelah disetujui, otorisasi pemindaian aktif selama <strong>7 hari kalender</strong> sesuai regulasi Rules of Engagement (RoE). Jika masa berlaku habis, pemindaian ulang memerlukan permohonan baru.
+                  </div>
+                </div>
+              </div>
+              <div v-else class="alert alert-success d-flex align-items-start gap-3 py-3 px-3 mb-4 border-0 bg-success-lt rounded-3 shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-success mt-1 flex-shrink-0" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                <div>
+                  <div class="fw-bold">Akses Administrator SOC: Otorisasi Permanen (Tanpa Masa Berlaku)</div>
+                  <div class="small text-secondary">
+                    Pemindaian Anda dieksekusi secara instan dan otorisasi pemindaian bersifat permanen tanpa batas masa berlaku (unlimited).
+                  </div>
                 </div>
               </div>
 
@@ -1587,16 +1691,6 @@ onUnmounted(() => {
                 >
                   Atur Ulang Form
                 </button>
-                <!-- Persetujuan Admin Notice Banner -->
-                <div class="alert alert-info d-flex align-items-start gap-3 py-3 px-3 mb-3 border-0 bg-info-lt rounded-3 shadow-sm">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="icon text-info mt-1 flex-shrink-0" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9h.01" /><path d="M11 12h1v4h1" /><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9 -9 9s-9 -1.8 -9 -9s1.8 -9 9 -9z" /></svg>
-                  <div>
-                    <div class="fw-bold">Persetujuan Administrator SOC Diperlukan:</div>
-                    <div class="small text-secondary">
-                      Setiap permohonan pemindaian keamanan akan diverifikasi dan disetujui terlebih dahulu oleh tim Administrator Keamanan (SOC) sebelum antrean pemindaian dijalankan pada engine sandbox.
-                    </div>
-                  </div>
-                </div>
 
                 <button
                   type="submit"
@@ -1636,7 +1730,7 @@ onUnmounted(() => {
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                     <path d="M7 4v16l13 -8z" />
                   </svg>
-                  <span>{{ isSubmitting ? 'Mengirim Pengajuan...' : 'Ajukan Pemindaian ke Admin SOC' }}</span>
+                  <span>{{ isSubmitting ? ((isAdmin || isSecurityAnalyst) ? 'Memulai Pemindaian...' : 'Mengirim Pengajuan...') : ((isAdmin || isSecurityAnalyst) ? 'Jalankan Pemindaian Langsung' : 'Ajukan Pemindaian ke Admin SOC') }}</span>
                 </button>
               </div>
             </form>
@@ -1947,6 +2041,24 @@ onUnmounted(() => {
                             {{ assetBadgeInfo(job).label }}
                           </span>
                         </div>
+                        <div v-if="shouldShowRequester(job)" class="text-muted small mt-1 d-flex align-items-center gap-1" style="font-size: 0.72rem;">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-secondary" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="7" r="4" /><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" /></svg>
+                          <span>Pemohon: <strong class="text-body">{{ job.creator_name }}</strong></span>
+                        </div>
+                        <!-- Masa Berlaku Otorisasi Badge -->
+                        <div v-if="job.authorization || job.creator_is_admin" class="mt-1 d-flex align-items-center gap-1">
+                          <span
+                            class="badge"
+                            :class="getValidityBadgeInfo(job).badgeClass"
+                            :title="getValidityBadgeInfo(job).tooltip"
+                            style="font-size: 0.72rem; cursor: help;"
+                          >
+                            <svg v-if="getValidityBadgeInfo(job).badgeClass.includes('success')" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                            <svg v-else-if="getValidityBadgeInfo(job).badgeClass.includes('danger')" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 16h.01" /></svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 15" /></svg>
+                            {{ getValidityBadgeInfo(job).text }}
+                          </span>
+                        </div>
                       </div>
                     </td>
 
@@ -1998,27 +2110,37 @@ onUnmounted(() => {
 
                     <!-- 5. Status -->
                     <td>
-                      <span class="badge d-inline-flex align-items-center gap-1" :class="getJobStatusBadgeClass(job)">
-                        <svg
-                          v-if="isJobPartialSuccess(job)"
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="icon icon-xs"
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          stroke-width="2"
-                          stroke="currentColor"
-                          fill="none"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
+                      <div>
+                        <span class="badge d-inline-flex align-items-center gap-1" :class="getJobStatusBadgeClass(job)">
+                          <svg
+                            v-if="isJobPartialSuccess(job)"
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="icon icon-xs"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            stroke-width="2"
+                            stroke="currentColor"
+                            fill="none"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                            <path d="M12 9v4" />
+                            <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />
+                            <path d="M12 16h.01" />
+                          </svg>
+                          {{ getJobStatusLabel(job) }}
+                        </span>
+                        <div
+                          v-if="job.failure_reason"
+                          class="small text-danger text-truncate mt-1"
+                          style="max-width: 140px; cursor: help;"
+                          :title="getFailureExplanation(job.failure_reason).title + ' - ' + getFailureExplanation(job.failure_reason).cause"
                         >
-                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                          <path d="M12 9v4" />
-                          <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />
-                          <path d="M12 16h.01" />
-                        </svg>
-                        {{ getJobStatusLabel(job) }}
-                      </span>
+                          {{ getFailureExplanation(job.failure_reason).title }}
+                        </div>
+                      </div>
                     </td>
 
                     <!-- 6. Aksi -->
@@ -2151,8 +2273,13 @@ onUnmounted(() => {
                                     <span class="badge" :class="getEngineRunStatusClass(run.status)">
                                       {{ run.status.toUpperCase() }}
                                     </span>
-                                    <span v-if="run.failure_reason" class="text-danger small ms-2">
-                                      ({{ run.failure_reason }})
+                                    <span
+                                      v-if="run.failure_reason"
+                                      class="badge font-monospace ms-2"
+                                      :class="run.status === 'skipped' ? 'bg-secondary-lt text-secondary' : 'bg-danger-lt text-danger'"
+                                      :title="getFailureExplanation(run.failure_reason, run.engine_key).cause"
+                                    >
+                                      {{ getFailureExplanation(run.failure_reason, run.engine_key).title }}
                                     </span>
                                   </td>
                                   <td>
@@ -2185,8 +2312,23 @@ onUnmounted(() => {
                         </div>
 
                         <!-- Footer Log Failure Warning if any -->
-                        <div v-if="job.failure_reason" class="card-footer bg-danger-lt py-2 text-danger small">
-                          <strong>Catatan Kegagalan:</strong> {{ job.failure_reason }}
+                        <div v-if="job.failure_reason" class="card-footer bg-danger-lt py-3 text-secondary small border-top border-danger-subtle">
+                          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-1">
+                            <strong class="text-danger-emphasis d-flex align-items-center gap-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-danger" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                              {{ getFailureExplanation(job.failure_reason).title }}
+                            </strong>
+                            <code class="text-danger small bg-surface px-2 py-0 rounded border border-danger-subtle">{{ job.failure_reason }}</code>
+                          </div>
+                          <div class="mb-2" style="line-height: 1.5;">
+                            <strong class="text-danger-emphasis">Penyebab:</strong> {{ getFailureExplanation(job.failure_reason).cause }}
+                          </div>
+                          <div class="bg-surface p-2 rounded small text-secondary border border-danger-subtle d-flex align-items-start gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-primary mt-1 flex-shrink-0" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
+                            <div>
+                              <strong class="text-primary-emphasis">Rekomendasi Solusi:</strong> {{ getFailureExplanation(job.failure_reason).remediation }}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -2225,6 +2367,22 @@ onUnmounted(() => {
                 <span class="badge bg-blue-lt font-monospace">{{ job.project?.code || 'PRJ' }}</span>
                 <span class="text-truncate">{{ job.project?.name || '-' }}</span>
               </div>
+              <div v-if="shouldShowRequester(job)" class="text-muted small mb-2 d-flex align-items-center gap-1" style="font-size: 0.72rem;">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-secondary" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="7" r="4" /><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" /></svg>
+                <span>Pemohon: <strong class="text-body">{{ job.creator_name }}</strong></span>
+              </div>
+
+              <!-- Masa Berlaku Otorisasi Badge Mobile -->
+              <div v-if="job.authorization || job.creator_is_admin" class="mb-2">
+                <span
+                  class="badge"
+                  :class="getValidityBadgeInfo(job).badgeClass"
+                  :title="getValidityBadgeInfo(job).tooltip"
+                  style="font-size: 0.72rem;"
+                >
+                  {{ getValidityBadgeInfo(job).text }}
+                </span>
+              </div>
 
               <!-- Profile, Engine, and Execution Time -->
               <div class="d-flex align-items-center justify-content-between text-secondary small mb-2">
@@ -2259,33 +2417,66 @@ onUnmounted(() => {
 
               <!-- Action Buttons -->
               <div class="d-flex align-items-center gap-2 pt-2 border-top">
-                <button
-                  type="button"
-                  class="btn btn-sm flex-fill"
-                  :class="expandedJobId === job.id ? 'btn-secondary' : 'btn-primary'"
-                  @click.stop="toggleExpandRow(job.id)"
-                >
-                  {{ expandedJobId === job.id ? 'Tutup Rincian' : 'Log Mesin' }}
-                </button>
+                <!-- Mobile Admin Approval Buttons on pending_approval -->
+                <template v-if="job.status === 'pending_approval' && (isAdmin || isSecurityAnalyst)">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-success flex-fill d-inline-flex align-items-center justify-content-center gap-1 shadow-sm"
+                    :disabled="isApprovingId === job.id"
+                    @click.stop="approveScanRequest(job)"
+                  >
+                    <span v-if="isApprovingId === job.id" class="spinner-border spinner-border-sm"></span>
+                    <template v-else>
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                      <span>Setujui</span>
+                    </template>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-danger flex-fill d-inline-flex align-items-center justify-content-center gap-1"
+                    :disabled="isRejectingId === job.id"
+                    @click.stop="openRejectModal(job)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                    <span>Tolak</span>
+                  </button>
+                </template>
 
-                <button
-                  type="button"
-                  class="btn btn-sm btn-info flex-fill"
-                  @click.stop="openDetailModal(job)"
-                  title="Buka rincian kerentanan temuan"
-                >
-                  Temuan
-                </button>
+                <div v-else-if="job.status === 'pending_approval'" class="w-100 text-center py-1">
+                  <span class="badge bg-warning-lt text-warning d-inline-flex align-items-center gap-1">
+                    ⏳ Menunggu Review Admin
+                  </span>
+                </div>
 
-                <button
-                  type="button"
-                  class="btn btn-sm btn-secondary flex-fill d-flex align-items-center justify-content-center gap-1"
-                  @click.stop="openRerunModal(job)"
-                  title="Jalankan ulang scan"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
-                  <span>Rerun</span>
-                </button>
+                <template v-else>
+                  <button
+                    type="button"
+                    class="btn btn-sm flex-fill"
+                    :class="expandedJobId === job.id ? 'btn-secondary' : 'btn-primary'"
+                    @click.stop="toggleExpandRow(job.id)"
+                  >
+                    {{ expandedJobId === job.id ? 'Tutup Rincian' : 'Log Mesin' }}
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-info flex-fill"
+                    @click.stop="openDetailModal(job)"
+                    title="Buka rincian kerentanan temuan"
+                  >
+                    Temuan
+                  </button>
+
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-secondary flex-fill d-flex align-items-center justify-content-center gap-1"
+                    @click.stop="openRerunModal(job)"
+                    title="Jalankan ulang scan"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+                    <span>Rerun</span>
+                  </button>
+                </template>
               </div>
 
               <!-- Mobile Expanded Log Section -->
@@ -2577,17 +2768,30 @@ onUnmounted(() => {
                     v-if="activeAiFindingKey === getFindingKey(finding, fIndex)"
                     class="mt-3 card border-primary shadow-sm"
                   >
-                    <div class="card-header bg-primary-lt py-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
-                      <div class="fw-bold text-primary small d-flex align-items-center gap-2 flex-wrap">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-primary" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l1.5 5.5l5.5 1.5l-5.5 1.5l-1.5 5.5l-1.5 -5.5l-5.5 -1.5l5.5 -1.5z" /></svg>
-                        <span>Panduan Remediasi AI Siber</span>
-                        <span v-if="aiRemediationData?.ai_model" class="badge bg-purple-lt text-purple font-monospace">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c1.918 0 3.52 1.35 3.91 3.151a4 4 0 0 1 2.09 7.723l0 7.126h-12v-7.126a4 4 0 0 1 2.09 -7.723a4.01 4.01 0 0 1 3.91 -3.151z" /><path d="M6.16 13.84a4 4 0 0 0 5.84 0" /></svg>
+                    <div class="card-header bg-primary-lt py-2 d-flex align-items-center justify-content-between gap-2 flex-nowrap">
+                      <div class="fw-bold text-primary small d-flex align-items-center gap-2 flex-wrap flex-grow-1" style="min-width: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-primary flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3l1.5 5.5l5.5 1.5l-5.5 1.5l-1.5 5.5l-1.5 -5.5l-5.5 -1.5l5.5 -1.5z" /></svg>
+                        <span class="flex-shrink-0">Panduan Remediasi AI Siber</span>
+                        <span v-if="aiRemediationData?.ai_model" class="badge bg-purple-lt text-purple font-monospace text-truncate" style="max-width: 280px;">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1 flex-shrink-0" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c1.918 0 3.52 1.35 3.91 3.151a4 4 0 0 1 2.09 7.723l0 7.126h-12v-7.126a4 4 0 0 1 2.09 -7.723a4.01 4.01 0 0 1 3.91 -3.151z" /><path d="M6.16 13.84a4 4 0 0 0 5.84 0" /></svg>
                           {{ aiRemediationData.ai_model }}
                         </span>
-                        <span v-if="aiRemediationData?.category" class="badge bg-primary text-primary-fg font-monospace">{{ aiRemediationData.category }}</span>
+                        <span v-if="aiRemediationData?.category" class="badge bg-primary text-primary-fg font-monospace text-truncate" style="max-width: 300px;">{{ aiRemediationData.category }}</span>
                       </div>
-                      <button type="button" class="btn-close" aria-label="Close" @click="activeAiFindingKey = null"></button>
+                      <button
+                        type="button"
+                        class="btn btn-icon btn-sm btn-ghost-secondary border-0 p-0 text-reset flex-shrink-0 ms-2 d-inline-flex align-items-center justify-content-center"
+                        style="width: 24px; height: 24px; min-width: 24px;"
+                        aria-label="Tutup Panduan Remediasi AI"
+                        title="Tutup Panduan"
+                        @click="activeAiFindingKey = null"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M18 6l-12 12" />
+                          <path d="M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
 
                     <div class="card-body p-3">
@@ -2953,5 +3157,14 @@ onUnmounted(() => {
 .scan-job-row td:first-child .btn svg {
   color: #ffffff !important;
   stroke: #ffffff !important;
+}
+
+/* Prevent Tabler modal-content .btn-close override from breaking inner close buttons */
+.modal-body .btn-close {
+  position: static !important;
+  width: 1em !important;
+  height: 1em !important;
+  margin: 0 !important;
+  padding: 0.25em !important;
 }
 </style>

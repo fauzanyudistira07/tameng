@@ -83,6 +83,31 @@ class ReportController extends Controller
         ]);
     }
 
+    public function sync(Request $request, Report $report, ReportGenerator $generator, AuditLogger $auditLogger): JsonResponse
+    {
+        $this->authorizeReportAccess($report);
+
+        $report = $generator
+            ->syncReport($report, $request->user())
+            ->load(['scanJob:id,code,status', 'generator:id,name']);
+
+        $auditLogger->record($request, 'report.sync', 'success', [
+            'project_id' => $report->scanJob?->project_id,
+            'scan_job_id' => $report->scan_job_id,
+            'target_type' => 'report',
+            'target_id' => $report->id,
+            'metadata' => [
+                'report_id' => $report->id,
+                'finding_count' => $report->metadata['finding_count'] ?? 0,
+            ],
+        ]);
+
+        return response()->json([
+            'report' => $report,
+            'message' => 'Laporan berhasil diperbarui dengan data scan terbaru.',
+        ]);
+    }
+
     public function downloadPdf(Report $report, ReportPdfGenerator $pdfGenerator)
     {
         $this->authorizeReportAccess($report);

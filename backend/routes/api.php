@@ -94,6 +94,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role:super_admin,security_admin');
     Route::delete('/repositories/{repository}/workspace', [RepositoryController::class, 'clearWorkspace'])
         ->middleware('role:super_admin,security_admin');
+    Route::delete('/repositories/{repository}', [RepositoryController::class, 'destroy'])
+        ->middleware('role:super_admin,security_admin');
     Route::post('/repositories/{repository}/scan', [RepositoryController::class, 'scan'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer');
 
@@ -153,6 +155,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role:super_admin,security_admin,security_analyst');
     Route::get('/reports/{report}', [ReportController::class, 'show'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+    Route::post('/reports/{report}/sync', [ReportController::class, 'sync'])
+        ->middleware('role:super_admin,security_admin,security_analyst,developer');
     Route::get('/reports/{report}/download-pdf', [ReportController::class, 'downloadPdf'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
 });

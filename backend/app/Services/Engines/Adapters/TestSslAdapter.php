@@ -217,7 +217,40 @@ class TestSslAdapter implements EngineAdapter
                 continue;
             }
 
+            $section = $item['_section'] ?? 'general';
+            $id = $item['id'] ?? 'ssl_check';
+            // Browser simulations and rating benchmarks are never security vulnerabilities
+            if ($section === 'browserSimulations' || $section === 'rating' || str_starts_with($id, 'clientsimulation-')) {
+                continue;
+            }
+
             $severityStr = strtoupper($item['severity'] ?? 'INFO');
+            $findingText = trim((string) ($item['finding'] ?? ''));
+            $findingLower = strtolower($findingText);
+
+            // 1. Skip if testssl explicitly marked this check as OK (passing / healthy test)
+            if ($severityStr === 'OK' || $findingLower === 'ok') {
+                continue;
+            }
+
+            // 2. Skip benign non-vulnerable / safe informational findings
+            if (
+                str_contains($findingLower, 'not vulnerable') ||
+                str_contains($findingLower, 'no vulnerability') ||
+                str_starts_with($findingLower, 'not offered') ||
+                in_array($findingLower, ['supported', 'matches', 'yes', 'no', 'none', '--', ''], true)
+            ) {
+                continue;
+            }
+
+            // 3. Skip modern secure protocols or features being offered
+            if (in_array($id, ['TLS1_2', 'TLS1_3', 'ALPN', 'HTTP2', 'banner_reverseproxy', 'cert_trust', 'sessionresumption_ticket'], true) && (
+                in_array($findingLower, ['offered', 'supported', 'yes', 'ok via san wildcard', 'ok via san wildcard (same w/o sni)'], true) ||
+                str_starts_with($findingLower, 'ok')
+            )) {
+                continue;
+            }
+
             $severity = match ($severityStr) {
                 'CRITICAL', 'FATAL' => 'critical',
                 'HIGH', 'ERROR' => 'high',
@@ -226,26 +259,41 @@ class TestSslAdapter implements EngineAdapter
                 default => 'informational',
             };
 
-            $findingText = trim((string) ($item['finding'] ?? ''));
-            $id = $item['id'] ?? 'ssl_check';
-
-            // Filter out benign informational status messages
-            if ($severity === 'informational' && in_array(strtolower($findingText), [
-                'ok', 'not vulnerable', 'not offered', 'supported', 'matches', 'yes', 'no', 'none', '',
-            ], true)) {
+            // Filter out purely informational status checks that are not actual security findings
+            if ($severity === 'informational') {
                 continue;
             }
 
             $cve = $item['cve'] ?? null;
-            $cwe = $item['cwe'] ?? 'CWE-310';
-            $section = $item['_section'] ?? 'general';
+            $cwe = match ($id) {
+                'cert_chain_of_trust', 'cert_trust', 'cert_expiration', 'cert_signatureAlgorithm' => 'CWE-295',
+                'BREACH', 'CRIME' => 'CWE-200',
+                default => $item['cwe'] ?? 'CWE-310',
+            };
+
+            $owasp = match ($id) {
+                'cert_chain_of_trust', 'cert_trust', 'cert_expiration' => 'A05:2021-Security Misconfiguration',
+                default => 'A02:2021-Cryptographic Failures',
+            };
 
             $readableId = str_replace('_', ' ', $id);
             if (! ctype_upper(str_replace([' ', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], '', $readableId))) {
                 $readableId = ucwords($readableId);
             }
 
-            $title = 'TLS/SSL: '.$readableId;
+            $title = match ($id) {
+                'cert_chain_of_trust' => 'TLS/SSL: Certificate Chain of Trust (Incomplete Chain)',
+                'cert_trust' => 'TLS/SSL: Certificate Untrusted',
+                'cert_expiration' => 'TLS/SSL: Certificate Expired or Expiring Soon',
+                'BREACH' => 'TLS/SSL: BREACH Attack Vulnerability',
+                'CRIME' => 'TLS/SSL: CRIME Attack Vulnerability',
+                'POODLE_SSL' => 'TLS/SSL: POODLE Vulnerability (SSLv3)',
+                'DROWN' => 'TLS/SSL: DROWN Attack Vulnerability',
+                'LOGJAM' => 'TLS/SSL: LOGJAM Attack Vulnerability',
+                'ROBOT' => 'TLS/SSL: ROBOT Attack Vulnerability',
+                default => 'TLS/SSL: '.$readableId,
+            };
+
             if ($cve) {
                 $title .= " ({$cve})";
             }
@@ -262,7 +310,7 @@ class TestSslAdapter implements EngineAdapter
                 'line_end' => 1,
                 'cve' => $cve,
                 'cwe' => $cwe,
-                'owasp' => 'A02:2021-Cryptographic Failures',
+                'owasp' => $owasp,
                 'evidence_summary' => [
                     'check_id' => $id,
                     'section' => $section,

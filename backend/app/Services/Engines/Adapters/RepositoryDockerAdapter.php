@@ -13,7 +13,7 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
 {
     abstract protected function imageConfigKey(): string;
 
-    abstract protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath): array;
+    abstract protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath, ?string $imageTag = null): array;
 
     abstract protected function reportFilename(): string;
 
@@ -138,7 +138,7 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
                 '-v',
                 '[REDACTED_OUTPUT]:'.$containerOutputPath.':rw',
                 $image,
-                ...$this->containerCommand($containerWorkspacePath, $containerOutputPath),
+                ...$this->containerCommand($containerWorkspacePath, $containerOutputPath, $imageTag),
             ],
         ], $reportPath);
     }
@@ -271,6 +271,7 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
             .DIRECTORY_SEPARATOR.$this->key();
 
         File::ensureDirectoryExists($directory);
+        @chmod($directory, 0777);
 
         return $directory.DIRECTORY_SEPARATOR.$this->reportFilename();
     }

@@ -43,8 +43,23 @@ class ExecutionGateway
             return $this->deny('AUTHORIZATION_NOT_ACTIVE', $requestSnapshot, $policySnapshot, $scanJob);
         }
 
-        if (Carbon::parse($authorization->valid_from)->isFuture() || Carbon::parse($authorization->valid_until)->isPast()) {
-            return $this->deny('AUTHORIZATION_NOT_IN_VALID_WINDOW', $requestSnapshot, $policySnapshot, $scanJob);
+        $scanJob->loadMissing(['creator.role', 'authorization.requester.role', 'authorization.approver.role']);
+        $creator = $scanJob->creator;
+        $isCreatorAdmin = ($creator?->isAdmin() ?? false)
+            || ($scanJob->authorization?->requester?->isAdmin() ?? false)
+            || ($scanJob->authorization?->approver?->isAdmin() ?? false)
+            || empty($authorization->valid_until);
+
+        // Pengecekan masa berlaku (valid_from & valid_until) HANYA berlaku untuk Pengguna Biasa.
+        // Administrator bebas permanen tanpa batasan jendela waktu.
+        if (! $isCreatorAdmin) {
+            if ($authorization->valid_from && Carbon::parse($authorization->valid_from)->isFuture()) {
+                return $this->deny('AUTHORIZATION_NOT_IN_VALID_WINDOW', $requestSnapshot, $policySnapshot, $scanJob);
+            }
+
+            if (! empty($authorization->valid_until) && Carbon::parse($authorization->valid_until)->isPast()) {
+                return $this->deny('AUTHORIZATION_NOT_IN_VALID_WINDOW', $requestSnapshot, $policySnapshot, $scanJob);
+            }
         }
 
         if (! in_array($engineKey, $authorization->allowed_engines ?? [], true)) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, onMounted, onUnmounted } from "vue"
 import { useTheme } from "../../composables/useTheme"
 import { useSearch } from "../../composables/useSearch"
 import { useNotifications } from "../../composables/useNotifications"
@@ -41,8 +41,27 @@ const {
   markAllAsRead,
   toggleStar,
   removeNotification,
-  handleNotificationClick
+  handleNotificationClick,
+  resetFilterOnOpen
 } = useNotifications()
+
+const notifDropdownRef = ref<HTMLElement | null>(null)
+
+function onBellClick() {
+  resetFilterOnOpen()
+}
+
+onMounted(() => {
+  if (notifDropdownRef.value) {
+    notifDropdownRef.value.addEventListener('show.bs.dropdown', onBellClick)
+  }
+})
+
+onUnmounted(() => {
+  if (notifDropdownRef.value) {
+    notifDropdownRef.value.removeEventListener('show.bs.dropdown', onBellClick)
+  }
+})
 
 function handleSelect(url?: string) {
   if (url) {
@@ -56,7 +75,7 @@ function handleSelect(url?: string) {
         <div class="container-fluid px-2 px-md-3 py-2">
           <!-- Tombol Hamburger Navigasi Mobile (< 992px) -->
           <button
-            class="btn btn-icon btn-ghost-secondary d-lg-none me-2 p-1"
+            class="btn btn-icon btn-ghost-secondary mobile-sidebar-toggle d-lg-none me-2 p-1"
             type="button"
             aria-label="Buka Menu Navigasi"
             @click="toggleMobileSidebar"
@@ -72,7 +91,7 @@ function handleSelect(url?: string) {
           <!-- Brand Logo TAMENG di Mobile (< 992px) -->
           <router-link
             to="/"
-            class="d-lg-none d-flex align-items-center text-decoration-none me-auto me-sm-2 flex-shrink-0"
+            class="mobile-brand-logo d-lg-none d-flex align-items-center text-decoration-none me-auto me-sm-2 flex-shrink-0"
           >
             <img
               :src="isDark ? '/static/Icon_Dark.png' : '/static/Icon_Light.png'"
@@ -104,7 +123,7 @@ function handleSelect(url?: string) {
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>
               </a>
             </div>
-            <div class="nav-item dropdown d-flex me-1 me-sm-3">
+            <div class="nav-item dropdown d-flex me-1 me-sm-3" ref="notifDropdownRef">
               <a
                 href="#"
                 class="nav-link px-1 px-sm-2 position-relative"
@@ -112,10 +131,17 @@ function handleSelect(url?: string) {
                 data-bs-auto-close="outside"
                 tabindex="-1"
                 aria-label="Notifikasi Keamanan"
+                @click="onBellClick"
               >
                 <!-- Download SVG icon from http://tabler-icons.io/i/bell -->
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6" /><path d="M9 17v1a3 3 0 0 0 6 0v-1" /></svg>
-                <span v-if="unreadCount > 0" class="badge bg-red"></span>
+                <span
+                  v-if="unreadCount > 0"
+                  class="notification-badge-count"
+                  :title="unreadCount + ' notifikasi belum dibaca'"
+                >
+                  {{ unreadCount > 99 ? '99+' : unreadCount }}
+                </span>
               </a>
 
               <div class="dropdown-menu dropdown-menu-arrow dropdown-menu-end dropdown-menu-card" style="min-width: min(380px, calc(100vw - 1rem)); max-width: min(440px, calc(100vw - 1rem));">
@@ -242,14 +268,18 @@ function handleSelect(url?: string) {
                 </div>
               </div>
             <div class="nav-item dropdown">
-              <a href="#" class="nav-link d-flex lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-label="Buka menu profil">
+              <a href="#" class="nav-link d-flex align-items-center lh-1 text-reset p-0" data-bs-toggle="dropdown" aria-label="Buka menu profil">
                 <span class="avatar avatar-sm bg-primary-lt text-primary fw-bold">
                   {{ userInitials }}
                 </span>
-                <div class="d-none d-xl-block ps-2">
-                  <div class="fw-semibold text-truncate" style="max-width: 140px;">{{ currentUser?.name || 'User TAMENG' }}</div>
-                  <div class="mt-1">
-                    <span class="badge py-0 px-1" :class="roleBadgeClass" style="font-size: 0.68rem;">{{ roleDisplayName }}</span>
+                <div class="d-none d-xl-flex flex-column justify-content-center ps-2 text-start user-profile-meta">
+                  <div class="fw-semibold text-truncate text-body" style="max-width: 140px; font-size: 0.85rem; line-height: 1.2;">
+                    {{ currentUser?.name || 'User TAMENG' }}
+                  </div>
+                  <div class="mt-1 d-flex align-items-center">
+                    <span class="user-role-badge" :class="roleBadgeClass">
+                      {{ roleDisplayName }}
+                    </span>
                   </div>
                 </div>
               </a>
@@ -460,6 +490,53 @@ function handleSelect(url?: string) {
 </template>
 
 <style scoped>
+.notification-badge-count {
+  position: absolute !important;
+  top: 0.25rem !important;
+  right: 0.25rem !important;
+  transform: translate(30%, -30%) !important;
+  min-width: 1.15rem !important;
+  height: 1.15rem !important;
+  padding: 0 0.3rem !important;
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 9999px !important;
+  background-color: var(--tblr-danger, #d63939) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px var(--tblr-bg-surface, #182433) !important;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.user-role-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0.1rem 0.45rem !important;
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  border-radius: var(--tblr-border-radius, 4px) !important;
+  white-space: nowrap !important;
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
+@media (min-width: 992px) {
+  .mobile-sidebar-toggle,
+  .mobile-brand-logo {
+    display: none !important;
+  }
+}
+
 @media (max-width: 767.98px) {
   #navbar-menu {
     display: none !important;

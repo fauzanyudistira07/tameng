@@ -41,7 +41,7 @@ class AuthorizationController extends Controller
             'target_id' => ['nullable', 'exists:targets,id'],
             'scan_profile_id' => ['required', 'exists:scan_profiles,id'],
             'valid_from' => ['required', 'date'],
-            'valid_until' => ['required', 'date', 'after:valid_from'],
+            'valid_until' => ['nullable', 'date', 'after:valid_from'],
             'max_concurrency' => ['required', 'integer', 'min:1', 'max:10'],
             'rate_limit_per_minute' => ['required', 'integer', 'min:1', 'max:600'],
             'status' => ['required', Rule::in(['active', 'inactive'])],

@@ -304,6 +304,7 @@ class GitleaksAdapter implements EngineAdapter
             .DIRECTORY_SEPARATOR.'gitleaks';
 
         File::ensureDirectoryExists($directory);
+        @chmod($directory, 0777);
 
         return $directory.DIRECTORY_SEPARATOR.'gitleaks-report.json';
     }

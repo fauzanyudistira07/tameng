@@ -38,7 +38,7 @@ interface AuthorizationItem {
   target_id: number | null
   scan_profile_id: number
   valid_from: string
-  valid_until: string
+  valid_until: string | null
   max_concurrency: number
   rate_limit_per_minute: number
   status: 'active' | 'inactive'
@@ -128,6 +128,8 @@ const authForm = reactive({
   notes: ''
 })
 
+const isUnlimitedValidUntil = ref(false)
+
 const canManage = computed(() => {
   const role = currentUser.value?.role?.name || ''
   return ['super_admin', 'security_admin'].includes(role)
@@ -208,6 +210,7 @@ function openCreateModal() {
 
   authForm.valid_from = now.toISOString().slice(0, 16)
   authForm.valid_until = later.toISOString().slice(0, 16)
+  isUnlimitedValidUntil.value = false
   authForm.max_concurrency = 2
   authForm.rate_limit_per_minute = 60
   authForm.status = 'active'
@@ -263,11 +266,11 @@ async function saveAuthorization() {
     formError.value = 'Repositori terverifikasi wajib dipilih.'
     return
   }
-  if (!authForm.valid_from || !authForm.valid_until) {
-    formError.value = 'Rentang waktu masa berlaku (valid from & until) wajib diisi.'
+  if (!authForm.valid_from || (!isUnlimitedValidUntil.value && !authForm.valid_until)) {
+    formError.value = 'Waktu mulai masa berlaku (valid from) wajib diisi.'
     return
   }
-  if (new Date(authForm.valid_until) <= new Date(authForm.valid_from)) {
+  if (!isUnlimitedValidUntil.value && new Date(authForm.valid_until) <= new Date(authForm.valid_from)) {
     formError.value = 'Waktu berakhir (Valid Until) harus lebih besar dari waktu mulai.'
     return
   }
@@ -281,7 +284,7 @@ async function saveAuthorization() {
       project_id: Number(authForm.project_id),
       scan_profile_id: Number(authForm.scan_profile_id),
       valid_from: new Date(authForm.valid_from).toISOString(),
-      valid_until: new Date(authForm.valid_until).toISOString(),
+      valid_until: isUnlimitedValidUntil.value ? null : new Date(authForm.valid_until).toISOString(),
       max_concurrency: Number(authForm.max_concurrency),
       rate_limit_per_minute: Number(authForm.rate_limit_per_minute),
       status: authForm.status,
@@ -578,7 +581,11 @@ onMounted(() => {
                 <td>
                   <div class="small text-secondary">
                     <div><strong>Dari:</strong> {{ formatDate(auth.valid_from) }}</div>
-                    <div><strong>Hingga:</strong> {{ formatDate(auth.valid_until) }}</div>
+                    <div>
+                      <strong>Hingga:</strong>
+                      <span v-if="!auth.valid_until" class="badge bg-success-lt text-success ms-1">Tanpa Batas (Admin)</span>
+                      <span v-else>{{ formatDate(auth.valid_until) }}</span>
+                    </div>
                   </div>
                 </td>
                 <td>
@@ -652,7 +659,10 @@ onMounted(() => {
               </span>
             </div>
             <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
-              <span style="font-size: 0.75rem;">Sampai: {{ formatDate(auth.valid_until) }}</span>
+              <span v-if="!auth.valid_until" class="badge bg-success-lt text-success" style="font-size: 0.75rem;">
+                Masa Berlaku: Tanpa Batas (Admin)
+              </span>
+              <span v-else style="font-size: 0.75rem;">Sampai: {{ formatDate(auth.valid_until) }}</span>
             </div>
             <div class="pt-2">
               <button
@@ -816,13 +826,30 @@ onMounted(() => {
                   />
                 </div>
                 <div class="col-sm-6">
-                  <label class="form-label required">Berlaku Hingga (Valid Until)</label>
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="form-label mb-0" :class="{ required: !isUnlimitedValidUntil }">
+                      Berlaku Hingga (Valid Until)
+                    </label>
+                    <label class="form-check form-check-inline mb-0 small cursor-pointer">
+                      <input
+                        v-model="isUnlimitedValidUntil"
+                        type="checkbox"
+                        class="form-check-input"
+                      />
+                      <span class="form-check-label fw-semibold text-success">Tanpa Batas (Admin)</span>
+                    </label>
+                  </div>
                   <input
+                    v-if="!isUnlimitedValidUntil"
                     v-model="authForm.valid_until"
                     type="datetime-local"
                     class="form-control"
                     required
                   />
+                  <div v-else class="form-control text-success fw-bold bg-success-lt border-success d-flex align-items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-success" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                    Permanen (Tanpa Masa Berlaku)
+                  </div>
                 </div>
               </div>
 
@@ -922,7 +949,11 @@ onMounted(() => {
                     <div><strong>Profil Scan:</strong> {{ inspectingAuth.scanProfile?.name || inspectingAuth.scan_profile?.name || '-' }}</div>
                   </div>
                   <div class="col-sm-6">
-                    <div><strong>Masa Berlaku:</strong> {{ formatDate(inspectingAuth.valid_from) }} s/d {{ formatDate(inspectingAuth.valid_until) }}</div>
+                    <div>
+                      <strong>Masa Berlaku:</strong> {{ formatDate(inspectingAuth.valid_from) }} s/d 
+                      <span v-if="!inspectingAuth.valid_until" class="badge bg-success-lt text-success ms-1">Tanpa Batas (Admin)</span>
+                      <span v-else>{{ formatDate(inspectingAuth.valid_until) }}</span>
+                    </div>
                     <div><strong>Status:</strong> <span class="badge bg-success-lt">{{ inspectingAuth.status }}</span></div>
                   </div>
                 </div>

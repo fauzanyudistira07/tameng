@@ -53,6 +53,12 @@ class RepositoryWorkspaceManager
     public function clear(Repository $repository): Repository
     {
         $metadata = $repository->metadata ?? [];
+        $localPath = $metadata['local_path'] ?? null;
+
+        if (is_string($localPath) && $localPath !== '' && File::isDirectory($localPath) && $this->isInsideRoot($localPath, $this->root())) {
+            File::deleteDirectory($localPath);
+        }
+
         unset($metadata['local_path']);
 
         $metadata['workspace_status'] = 'detached';

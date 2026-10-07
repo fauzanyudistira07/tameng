@@ -56,7 +56,7 @@ class UniversalFindingNormalizer
         $severity = self::normalizeSeverity($data['severity'] ?? $data['severity_raw'] ?? null);
         $assetType = $data['asset_type'] ?? 'repository';
         $location = $data['file_path'] ?? $data['endpoint'] ?? $data['location'] ?? null;
-        $rule = $data['cwe'] ?? $data['cve'] ?? $data['rule_id'] ?? 'secsys.finding';
+        $rule = $data['rule_id'] ?? $data['cve'] ?? $data['cwe'] ?? 'secsys.finding';
         $lineStart = isset($data['line_start']) ? (int) $data['line_start'] : null;
 
         $fingerprint = self::computeFingerprint(

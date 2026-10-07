@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { apiFetch } from '../services/api'
 
 interface Role {
@@ -53,6 +53,7 @@ const isLoading = ref(true)
 const searchQuery = ref('')
 const filterRole = ref('')
 const filterStatus = ref('')
+const showModalPassword = ref(false)
 const alertMessage = ref<{ type: 'success' | 'danger'; text: string } | null>(null)
 
 // Modal state
@@ -80,6 +81,89 @@ const formData = ref({
   telegram_chat_id: '',
   alert_min_severity: 'high'
 })
+
+const attemptedStep1 = ref(false)
+
+const isNameValid = computed(() => {
+  return !!formData.value.name && formData.value.name.trim().length > 0
+})
+
+const isEmailValid = computed(() => {
+  if (!formData.value.email) return false
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(formData.value.email.trim())
+})
+
+const isRoleValid = computed(() => {
+  return Number(formData.value.role_id) > 0
+})
+
+const isStatusValid = computed(() => {
+  return formData.value.status === 'active' || formData.value.status === 'inactive'
+})
+
+const isPasswordValid = computed(() => {
+  if (modalMode.value === 'create') {
+    return !!formData.value.password && formData.value.password.length >= 10
+  }
+  // In edit mode, password is optional, but if entered it must be >= 10 chars
+  return !formData.value.password || formData.value.password.length >= 10
+})
+
+const isStep1Valid = computed(() => {
+  return isNameValid.value && isEmailValid.value && isRoleValid.value && isStatusValid.value && isPasswordValid.value
+})
+
+function switchTab(tab: 'identity' | 'projects' | 'alerts') {
+  if (tab !== 'identity' && !isStep1Valid.value) {
+    attemptedStep1.value = true
+    formError.value = 'Lengkapi seluruh data wajib pada Profil & Akun terlebih dahulu (Nama Lengkap, Email valid, Role, dan Kata Sandi min. 10 karakter).'
+    return
+  }
+  formError.value = null
+  activeTab.value = tab
+}
+
+const selectedRole = computed(() => {
+  return roles.value.find(r => r.id === Number(formData.value.role_id))
+})
+
+function getAccessLevelFromRole(roleName?: string): 'lead' | 'analyst' | 'developer' | 'viewer' {
+  switch (roleName) {
+    case 'super_admin':
+    case 'security_admin':
+      return 'lead'
+    case 'security_analyst':
+      return 'analyst'
+    case 'developer':
+      return 'developer'
+    case 'auditor':
+    case 'viewer':
+    default:
+      return 'viewer'
+  }
+}
+
+function getAccessLevelLabel(level?: string): string {
+  switch (level) {
+    case 'lead':
+      return 'Project Lead (Akses Penuh & Otorisasi Proyek)'
+    case 'analyst':
+      return 'Security Analyst (Review Temuan & Scan)'
+    case 'developer':
+      return 'Developer (Remediasi & Verifikasi)'
+    case 'viewer':
+      return 'Viewer (Read-Only Temuan)'
+    default:
+      return 'Viewer (Read-Only Temuan)'
+  }
+}
+
+// Otomatis sinkronkan tingkat akses proyek mengikuti Peran SOC dari Halaman 1
+watch(() => formData.value.role_id, (newRoleId) => {
+  const role = roles.value.find(r => r.id === Number(newRoleId))
+  formData.value.project_access_level = getAccessLevelFromRole(role?.name)
+}, { immediate: true })
 
 function showAlert(text: string, type: 'success' | 'danger' = 'success') {
   alertMessage.value = { type, text }
@@ -189,9 +273,12 @@ function getRoleBadgeClass(roleName?: string): string {
 function openCreateModal() {
   modalMode.value = 'create'
   activeTab.value = 'identity'
+  showModalPassword.value = false
+  attemptedStep1.value = false
+  const defaultRole = roles.value[0]
   formData.value = {
     id: 0,
-    role_id: roles.value[0]?.id || 1,
+    role_id: defaultRole?.id || 1,
     name: '',
     username: '',
     email: '',
@@ -201,7 +288,7 @@ function openCreateModal() {
     password: '',
     status: 'active',
     project_ids: [],
-    project_access_level: 'analyst',
+    project_access_level: getAccessLevelFromRole(defaultRole?.name),
     alert_email: true,
     alert_telegram: false,
     telegram_chat_id: '',
@@ -214,6 +301,8 @@ function openCreateModal() {
 function openEditModal(user: UserItem) {
   modalMode.value = 'edit'
   activeTab.value = 'identity'
+  showModalPassword.value = false
+  attemptedStep1.value = false
   formData.value = {
     id: user.id,
     role_id: user.role_id,
@@ -222,11 +311,11 @@ function openEditModal(user: UserItem) {
     email: user.email,
     phone: user.phone || '',
     department: user.department || '',
-    auth_provider: user.auth_provider || 'local',
+    auth_provider: 'local',
     password: '',
     status: user.status,
     project_ids: (user.projects || []).map(p => p.id),
-    project_access_level: user.projects?.[0]?.access_level || 'analyst',
+    project_access_level: getAccessLevelFromRole(user.role?.name),
     alert_email: user.preference?.alert_email ?? true,
     alert_telegram: user.preference?.alert_telegram ?? false,
     telegram_chat_id: user.preference?.telegram_chat_id || '',
@@ -248,10 +337,31 @@ function toggleProjectSelection(projectId: number) {
 function closeModal() {
   isModalOpen.value = false
   formError.value = null
+  attemptedStep1.value = false
+  showModalPassword.value = false
 }
 
 async function handleSave() {
   formError.value = null
+  attemptedStep1.value = true
+
+  if (!isStep1Valid.value) {
+    activeTab.value = 'identity'
+    formError.value = 'Mohon lengkapi seluruh kolom wajib pada Profil & Akun terlebih dahulu.'
+    return
+  }
+
+  // Jika form disubmit (misal via tombol Enter) saat masih di halaman 1 atau 2, lanjutkan ke langkah berikutnya
+  if (activeTab.value === 'identity') {
+    switchTab('projects')
+    return
+  }
+
+  if (activeTab.value === 'projects') {
+    switchTab('alerts')
+    return
+  }
+
   isSubmitting.value = true
 
   try {
@@ -262,7 +372,7 @@ async function handleSave() {
       email: formData.value.email.trim(),
       phone: formData.value.phone.trim() || null,
       department: formData.value.department.trim() || null,
-      auth_provider: formData.value.auth_provider,
+      auth_provider: 'local',
       status: formData.value.status,
       project_ids: formData.value.project_ids,
       project_access_level: formData.value.project_access_level,
@@ -317,16 +427,33 @@ async function confirmUnlock(user: UserItem) {
   }
 }
 
-async function handleDeactivate(user: UserItem) {
-  if (!confirm(`Apakah Anda yakin ingin menonaktifkan akun ${user.name}?`)) return
+const deactivateModalUser = ref<UserItem | null>(null)
+const isDeactivating = ref(false)
+
+function handleDeactivate(user: UserItem) {
+  deactivateModalUser.value = user
+}
+
+function closeDeactivateModal() {
+  deactivateModalUser.value = null
+  isDeactivating.value = false
+}
+
+async function confirmDeactivateUser() {
+  if (!deactivateModalUser.value) return
+  const user = deactivateModalUser.value
+  isDeactivating.value = true
   try {
     const res = await apiFetch(`/api/users/${user.id}`, {
       method: 'DELETE'
     })
     showAlert(res.message || `Akun ${user.name} telah dinonaktifkan.`)
+    closeDeactivateModal()
     await loadData()
   } catch (err: any) {
     showAlert(err.message || 'Gagal menonaktifkan pengguna.', 'danger')
+  } finally {
+    isDeactivating.value = false
   }
 }
 
@@ -589,13 +716,6 @@ onMounted(() => {
                   <div class="d-flex flex-column text-truncate">
                     <div class="d-flex align-items-center gap-2">
                       <span class="fw-bold text-body text-truncate">{{ u.name }}</span>
-                      <span
-                        class="badge"
-                        :class="u.auth_provider === 'keycloak' ? 'bg-teal-lt' : 'bg-secondary-subtle text-secondary'"
-                        style="font-size: 0.65rem;"
-                      >
-                        {{ (u.auth_provider || 'local').toUpperCase() }}
-                      </span>
                     </div>
                     <div class="d-flex align-items-center gap-2">
                       <span v-if="u.username" class="badge bg-secondary-subtle text-secondary small px-1">
@@ -752,16 +872,13 @@ onMounted(() => {
             <span v-else class="badge bg-secondary-lt flex-shrink-0">NONAKTIF</span>
           </div>
 
-          <!-- Metadata Badges: Role, Department & Auth -->
+          <!-- Metadata Badges: Role & Department -->
           <div class="d-flex flex-wrap align-items-center gap-1 mb-2">
             <span class="badge" :class="getRoleBadgeClass(u.role?.name)">
               {{ u.role?.display_name || 'User' }}
             </span>
             <span v-if="u.department" class="badge bg-secondary-lt">
               {{ u.department }}
-            </span>
-            <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.65rem;">
-              {{ (u.auth_provider || 'local').toUpperCase() }}
             </span>
             <span v-if="u.two_factor_enabled" class="badge bg-info-lt">2FA</span>
           </div>
@@ -836,29 +953,44 @@ onMounted(() => {
           <ul class="nav nav-tabs nav-fill border-bottom px-3 pt-2" role="tablist">
             <li class="nav-item">
               <a
-                class="nav-link cursor-pointer"
+                class="nav-link cursor-pointer d-flex align-items-center justify-content-center gap-1"
                 :class="{ active: activeTab === 'identity' }"
-                @click="activeTab = 'identity'"
+                @click="switchTab('identity')"
               >
-                1. Profil & Akun
+                <svg v-if="isStep1Valid" xmlns="http://www.w3.org/2000/svg" class="icon text-success me-1" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                <span>1. Profil & Akun</span>
               </a>
             </li>
             <li class="nav-item">
               <a
-                class="nav-link cursor-pointer"
-                :class="{ active: activeTab === 'projects' }"
-                @click="activeTab = 'projects'"
+                class="nav-link d-flex align-items-center justify-content-center gap-1"
+                :class="{
+                  active: activeTab === 'projects',
+                  'cursor-pointer': isStep1Valid,
+                  'disabled text-muted opacity-50': !isStep1Valid
+                }"
+                :style="!isStep1Valid ? 'cursor: not-allowed;' : ''"
+                :title="!isStep1Valid ? 'Lengkapi kolom wajib Profil & Akun terlebih dahulu' : ''"
+                @click="switchTab('projects')"
               >
-                2. Scope Proyek (Fase 2)
+                <svg v-if="!isStep1Valid" xmlns="http://www.w3.org/2000/svg" class="icon text-muted me-1" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><rect x="5" y="11" width="14" height="10" rx="2" /><circle cx="12" cy="16" r="1" /><path d="M8 11v-4a4 4 0 0 1 8 0v4" /></svg>
+                <span>2. Scope Proyek (Fase 2)</span>
               </a>
             </li>
             <li class="nav-item">
               <a
-                class="nav-link cursor-pointer"
-                :class="{ active: activeTab === 'alerts' }"
-                @click="activeTab = 'alerts'"
+                class="nav-link d-flex align-items-center justify-content-center gap-1"
+                :class="{
+                  active: activeTab === 'alerts',
+                  'cursor-pointer': isStep1Valid,
+                  'disabled text-muted opacity-50': !isStep1Valid
+                }"
+                :style="!isStep1Valid ? 'cursor: not-allowed;' : ''"
+                :title="!isStep1Valid ? 'Lengkapi kolom wajib Profil & Akun terlebih dahulu' : ''"
+                @click="switchTab('alerts')"
               >
-                3. Notifikasi Alert (Fase 3)
+                <svg v-if="!isStep1Valid" xmlns="http://www.w3.org/2000/svg" class="icon text-muted me-1" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><rect x="5" y="11" width="14" height="10" rx="2" /><circle cx="12" cy="16" r="1" /><path d="M8 11v-4a4 4 0 0 1 8 0v4" /></svg>
+                <span>3. Notifikasi Alert (Fase 3)</span>
               </a>
             </li>
           </ul>
@@ -878,9 +1010,12 @@ onMounted(() => {
                     type="text"
                     v-model="formData.name"
                     class="form-control"
-                    required
+                    :class="{ 'is-invalid': attemptedStep1 && !isNameValid }"
                     placeholder="Contoh: Ahmad Fauzi"
                   />
+                  <div v-if="attemptedStep1 && !isNameValid" class="invalid-feedback">
+                    Nama lengkap wajib diisi.
+                  </div>
                 </div>
                 <div class="col-md-5">
                   <label class="form-label">Username</label>
@@ -898,9 +1033,15 @@ onMounted(() => {
                     type="email"
                     v-model="formData.email"
                     class="form-control"
-                    required
+                    :class="{ 'is-invalid': (attemptedStep1 && !formData.email) || (formData.email && !isEmailValid) }"
                     placeholder="nama@instansi.go.id"
                   />
+                  <div v-if="attemptedStep1 && !formData.email" class="invalid-feedback">
+                    Alamat email wajib diisi.
+                  </div>
+                  <div v-else-if="formData.email && !isEmailValid" class="invalid-feedback">
+                    Format email tidak valid (contoh: user@instansi.go.id).
+                  </div>
                 </div>
                 <div class="col-md-5">
                   <label class="form-label">Nomor Telepon</label>
@@ -912,7 +1053,7 @@ onMounted(() => {
                   />
                 </div>
 
-                <div class="col-md-7">
+                <div class="col-12">
                   <label class="form-label">Unit Kerja / Departemen</label>
                   <input
                     type="text"
@@ -921,19 +1062,14 @@ onMounted(() => {
                     placeholder="Contoh: Puslitbang / Tim Insiden Siber"
                   />
                 </div>
-                <div class="col-md-5">
-                  <label class="form-label required">Metode Autentikasi</label>
-                  <select v-model="formData.auth_provider" class="form-select" required>
-                    <option value="local">Local Database</option>
-                    <option value="keycloak">SSO Keycloak</option>
-                    <option value="google">Google Workspace</option>
-                    <option value="active_directory">Active Directory / Entra</option>
-                  </select>
-                </div>
 
                 <div class="col-md-6">
                   <label class="form-label required">Peran (Role SOC)</label>
-                  <select v-model="formData.role_id" class="form-select" required>
+                  <select
+                    v-model="formData.role_id"
+                    class="form-select"
+                    :class="{ 'is-invalid': attemptedStep1 && !isRoleValid }"
+                  >
                     <option v-for="r in roles" :key="r.id" :value="r.id">
                       {{ r.display_name }}
                     </option>
@@ -941,7 +1077,11 @@ onMounted(() => {
                 </div>
                 <div class="col-md-6">
                   <label class="form-label required">Status Akun</label>
-                  <select v-model="formData.status" class="form-select" required>
+                  <select
+                    v-model="formData.status"
+                    class="form-select"
+                    :class="{ 'is-invalid': attemptedStep1 && !isStatusValid }"
+                  >
                     <option value="active">Aktif</option>
                     <option value="inactive">Nonaktif</option>
                   </select>
@@ -951,14 +1091,45 @@ onMounted(() => {
                   <label class="form-label" :class="{ required: modalMode === 'create' }">
                     {{ modalMode === 'create' ? 'Kata Sandi Akun' : 'Ganti Kata Sandi (Kosongkan jika tetap)' }}
                   </label>
-                  <input
-                    type="password"
-                    v-model="formData.password"
-                    class="form-control"
-                    :required="modalMode === 'create'"
-                    placeholder="Minimal 10 karakter"
-                  />
-                  <small class="form-hint">
+                  <div
+                    class="input-group input-group-flat"
+                    :class="{ 'is-invalid': (attemptedStep1 && modalMode === 'create' && !formData.password) || (formData.password && formData.password.length < 10) }"
+                  >
+                    <input
+                      :type="showModalPassword ? 'text' : 'password'"
+                      v-model="formData.password"
+                      class="form-control"
+                      :class="{ 'is-invalid': (attemptedStep1 && modalMode === 'create' && !formData.password) || (formData.password && formData.password.length < 10) }"
+                      placeholder="Minimal 10 karakter"
+                    />
+                    <span class="input-group-text">
+                      <a
+                        href="#"
+                        class="link-secondary"
+                        :title="showModalPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'"
+                        @click.prevent="showModalPassword = !showModalPassword"
+                      >
+                        <svg v-if="!showModalPassword" xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+                          <path d="M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6" />
+                        </svg>
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                          <path d="M10.585 10.587a2 2 0 0 0 2.829 2.828" />
+                          <path d="M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87" />
+                          <path d="M3 3l18 18" />
+                        </svg>
+                      </a>
+                    </span>
+                  </div>
+                  <div v-if="attemptedStep1 && modalMode === 'create' && !formData.password" class="text-danger small mt-1">
+                    Kata sandi akun wajib diisi.
+                  </div>
+                  <div v-else-if="formData.password && formData.password.length < 10" class="text-danger small mt-1">
+                    Kata sandi minimal 10 karakter (saat ini: {{ formData.password.length }} karakter).
+                  </div>
+                  <small v-else class="form-hint">
                     Kebijakan Keamanan: Minimal 10 karakter dan tidak boleh menggunakan salah satu dari 3 kata sandi terakhir yang pernah digunakan.
                   </small>
                 </div>
@@ -966,16 +1137,35 @@ onMounted(() => {
 
               <!-- TAB 2: Project Scoping (Fase 2) -->
               <div v-show="activeTab === 'projects'" class="space-y">
+                <!-- Banner info khusus Super Admin -->
+                <div v-if="selectedRole?.name === 'super_admin'" class="alert alert-info py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon text-info" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12.01" y2="8" /><polyline points="11 12 12 12 12 16 13 16" /></svg>
+                  <div>
+                    <strong>Akses Global Penuh:</strong> Sebagai Super Admin, personel ini otomatis memiliki otorisasi penuh pada seluruh proyek di sistem.
+                  </div>
+                </div>
+
                 <div class="mb-3">
-                  <label class="form-label">Tingkat Akses Proyek Terpilih</label>
-                  <select v-model="formData.project_access_level" class="form-select">
-                    <option value="lead">Project Lead (Akses Penuh & Otorisasi)</option>
-                    <option value="analyst">Security Analyst (Review Temuan & Scan)</option>
-                    <option value="developer">Developer (Remediasi & Verifikasi)</option>
-                    <option value="viewer">Viewer (Read-Only Temuan)</option>
-                  </select>
+                  <div class="d-flex align-items-center justify-content-between mb-1">
+                    <label class="form-label m-0">Tingkat Akses Proyek</label>
+                    <span class="badge bg-green-lt small d-inline-flex align-items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-inline" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                      Otomatis Selaras Peran SOC
+                    </span>
+                  </div>
+                  <div class="form-control d-flex align-items-center justify-content-between bg-dark-subtle" style="cursor: default;">
+                    <div class="d-flex align-items-center gap-2">
+                      <span class="badge" :class="getRoleBadgeClass(selectedRole?.name)">
+                        {{ selectedRole?.display_name || 'User' }}
+                      </span>
+                      <span class="text-body font-weight-medium">
+                        {{ getAccessLevelLabel(formData.project_access_level) }}
+                      </span>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" title="Terkunci selaras dengan Peran SOC"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><rect x="5" y="11" width="14" height="10" rx="2" /><circle cx="12" cy="16" r="1" /><path d="M8 11v-4a4 4 0 0 1 8 0v4" /></svg>
+                  </div>
                   <small class="form-hint">
-                    Tingkat hak akses personel untuk proyek-proyek yang dicentang di bawah ini.
+                    Hak akses pada setiap proyek yang didelegasikan otomatis mengikuti Peran SOC (<strong>{{ selectedRole?.display_name }}</strong>) agar tidak terjadi perbedaan hak akses.
                   </small>
                 </div>
 
@@ -1086,16 +1276,131 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="modal-footer border-top py-3 px-4 d-flex flex-column-reverse flex-sm-row align-items-stretch align-items-sm-center justify-content-sm-between gap-2">
-              <button type="button" class="btn btn-secondary w-100 w-sm-auto justify-content-center" @click="closeModal">
+            <div class="modal-footer border-top py-3 px-4 d-flex align-items-center justify-content-between gap-2">
+              <button type="button" class="btn btn-secondary" @click="closeModal">
                 Batal
               </button>
-              <button type="submit" class="btn btn-primary d-flex align-items-center justify-content-center gap-2 w-100 w-sm-auto py-2" :disabled="isSubmitting">
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                <span>{{ modalMode === 'create' ? 'Simpan Personel & Akses' : 'Perbarui Data & Scope' }}</span>
-              </button>
+
+              <div class="d-flex align-items-center gap-2">
+                <!-- Navigasi Wizard: Tombol Kembali (hanya jika di halaman 2 atau 3) -->
+                <button
+                  v-if="activeTab === 'projects'"
+                  type="button"
+                  class="btn btn-ghost-secondary d-flex align-items-center gap-1"
+                  @click="switchTab('identity')"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 6l-6 6l6 6" /></svg>
+                  Kembali
+                </button>
+                <button
+                  v-else-if="activeTab === 'alerts'"
+                  type="button"
+                  class="btn btn-ghost-secondary d-flex align-items-center gap-1"
+                  @click="switchTab('projects')"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M15 6l-6 6l6 6" /></svg>
+                  Kembali
+                </button>
+
+                <!-- 1 Tombol Utama: Lanjut (Halaman 1 & 2) ATAU Simpan (Halaman 3 Terakhir) -->
+                <button
+                  v-if="activeTab === 'identity'"
+                  type="button"
+                  class="btn btn-primary d-flex align-items-center gap-1"
+                  :disabled="!isStep1Valid"
+                  :style="!isStep1Valid ? 'cursor: not-allowed;' : ''"
+                  @click="switchTab('projects')"
+                  :title="!isStep1Valid ? 'Lengkapi kolom wajib Profil & Akun untuk lanjut' : 'Lanjut ke Scope Proyek'"
+                >
+                  <span>Lanjut ke Scope Proyek</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon ms-1" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 6l6 6l-6 6" /></svg>
+                </button>
+
+                <button
+                  v-else-if="activeTab === 'projects'"
+                  type="button"
+                  class="btn btn-primary d-flex align-items-center gap-1"
+                  @click="switchTab('alerts')"
+                  title="Lanjut ke konfigurasi Notifikasi Alert"
+                >
+                  <span>Lanjut ke Notifikasi</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon ms-1" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 6l6 6l-6 6" /></svg>
+                </button>
+
+                <button
+                  v-else-if="activeTab === 'alerts'"
+                  type="submit"
+                  class="btn btn-primary d-flex align-items-center justify-content-center gap-2"
+                  :disabled="!isStep1Valid || isSubmitting"
+                  :style="!isStep1Valid ? 'cursor: not-allowed;' : ''"
+                  :title="!isStep1Valid ? 'Lengkapi kolom wajib Profil & Akun untuk menyimpan' : ''"
+                >
+                  <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status"></span>
+                  <span>{{ modalMode === 'create' ? 'Simpan Personel & Akses' : 'Perbarui Data & Scope' }}</span>
+                </button>
+              </div>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL KONFIRMASI NONAKTIFKAN PENGGUNA -->
+    <div
+      v-if="deactivateModalUser"
+      class="modal modal-blur fade show d-block"
+      tabindex="-1"
+      style="background-color: rgba(0, 0, 0, 0.65); z-index: 1060;"
+      @click.self="closeDeactivateModal"
+    >
+      <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg border-0">
+          <button type="button" class="btn-close" aria-label="Close" @click="closeDeactivateModal"></button>
+          
+          <!-- Status Danger Bar -->
+          <div class="modal-status bg-danger"></div>
+
+          <div class="modal-body text-center py-4">
+            <div class="avatar avatar-lg bg-danger-lt rounded-circle mx-auto mb-3 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg text-danger" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
+                <path d="M5.7 5.7l12.6 12.6" />
+              </svg>
+            </div>
+            <h3 class="modal-title mb-1 text-body fw-bold">Nonaktifkan Akun?</h3>
+            <div class="text-secondary small mb-3">
+              Apakah Anda yakin ingin menonaktifkan akun personel <strong>{{ deactivateModalUser.name }}</strong>? Akun ini tidak akan dapat login lagi ke sistem.
+            </div>
+
+            <div class="card card-sm bg-body text-start border p-3 mb-2">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-secondary small">Email:</span>
+                <span class="small font-monospace text-truncate" style="max-width: 150px;">{{ deactivateModalUser.email }}</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="text-secondary small">Peran SOC:</span>
+                <span class="badge" :class="getRoleBadgeClass(deactivateModalUser.role?.name)">
+                  {{ deactivateModalUser.role?.display_name || 'User' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer py-2 d-flex align-items-center justify-content-between">
+            <button type="button" class="btn btn-secondary" :disabled="isDeactivating" @click="closeDeactivateModal">
+              Batal
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger d-flex align-items-center gap-1"
+              :disabled="isDeactivating"
+              @click="confirmDeactivateUser"
+            >
+              <span v-if="isDeactivating" class="spinner-border spinner-border-sm me-1" role="status"></span>
+              <span>Nonaktifkan Akun</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

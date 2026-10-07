@@ -28,7 +28,7 @@ class CheckovAdapter extends RepositoryDockerAdapter
         return [0, 1, 2];
     }
 
-    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath): array
+    protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath, ?string $imageTag = null): array
     {
         return [
             '-d',

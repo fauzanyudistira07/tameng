@@ -33,8 +33,21 @@ class AuthorizationGateway
             return $this->deny('AUTHORIZATION_NOT_ACTIVE', $requestSnapshot, $authorization, $policySnapshot);
         }
 
-        if (Carbon::parse($authorization->valid_from)->isFuture() || Carbon::parse($authorization->valid_until)->isPast()) {
-            return $this->deny('AUTHORIZATION_NOT_IN_VALID_WINDOW', $requestSnapshot, $authorization, $policySnapshot);
+        $requestedBy = $authorization->requester ?? \App\Models\User::find($requestSnapshot['requested_by'] ?? $authorization->requested_by);
+        $approver = $authorization->approver;
+        $isAdmin = ($requestedBy?->isAdmin() ?? false)
+            || ($approver?->isAdmin() ?? false)
+            || empty($authorization->valid_until);
+
+        // Pengecekan masa berlaku (valid_from & valid_until) HANYA berlaku untuk Pengguna Biasa.
+        if (! $isAdmin) {
+            if ($authorization->valid_from && Carbon::parse($authorization->valid_from)->isFuture()) {
+                return $this->deny('AUTHORIZATION_NOT_IN_VALID_WINDOW', $requestSnapshot, $authorization, $policySnapshot);
+            }
+
+            if (! empty($authorization->valid_until) && Carbon::parse($authorization->valid_until)->isPast()) {
+                return $this->deny('AUTHORIZATION_NOT_IN_VALID_WINDOW', $requestSnapshot, $authorization, $policySnapshot);
+            }
         }
 
         if ((int) $requestSnapshot['project_id'] !== (int) $authorization->project_id) {

@@ -177,6 +177,19 @@ td.col-index,
   }
 }
 
+/* Proteksi Badge Role Profil User di Header (mencegah absolute positioning bawaan Tabler .nav-link .badge) */
+.navbar .navbar-nav .nav-link .user-role-badge,
+.navbar .navbar-nav .nav-link .user-profile-meta .badge,
+.user-profile-meta .user-role-badge,
+.user-profile-meta .badge {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+}
+
 /* Proteksi Responsif Global Mobile */
 @media (max-width: 575.98px) {
   .modal-dialog {
@@ -207,7 +220,7 @@ button:active {
 
 /* Normalisasi Margin & Ukuran Icon di Seluruh Tombol */
 .btn {
-  display: inline-flex !important;
+  display: inline-flex;
   align-items: center !important;
   justify-content: center !important;
   gap: 0.375rem !important;
