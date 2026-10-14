@@ -110,7 +110,6 @@ const targetForm = reactive({
 const mobileFile = ref<File | null>(null)
 const isDragging = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const useManualIdentifier = ref(false)
 
 function handleFileInput(e: Event) {
   const files = (e.target as HTMLInputElement).files
@@ -307,7 +306,6 @@ function openCreateModal() {
   targetForm.base_url = ''
   targetForm.hostname = ''
   mobileFile.value = null
-  useManualIdentifier.value = false
   formError.value = null
   isModalOpen.value = true
 }
@@ -320,7 +318,6 @@ function openEditModal(target: Target) {
   targetForm.base_url = target.base_url || ''
   targetForm.hostname = target.hostname || ''
   mobileFile.value = null
-  useManualIdentifier.value = !!target.base_url && !target.base_url.startsWith('file://')
   formError.value = null
   isModalOpen.value = true
 }
@@ -329,7 +326,6 @@ function closeModal() {
   isModalOpen.value = false
   editingTargetId.value = null
   mobileFile.value = null
-  useManualIdentifier.value = false
   formError.value = null
 }
 
@@ -340,8 +336,8 @@ async function saveTarget() {
   }
 
   if (targetForm.type === 'mobile') {
-    if (!mobileFile.value && !targetForm.base_url.trim() && !targetForm.hostname.trim()) {
-      formError.value = 'Silakan unggah berkas binary aplikasi (.apk, .ipa, .aab, .zip) atau masukkan identifier/tautan aplikasi.'
+    if (!mobileFile.value && !editingTargetId.value) {
+      formError.value = 'Silakan unggah berkas binary aplikasi (.apk, .ipa, .aab, atau .zip).'
       return
     }
   } else {
@@ -1220,7 +1216,7 @@ watch(() => route.query.project_id, (newVal) => {
                     type="text"
                     class="form-control"
                     :placeholder="targetForm.type === 'container' ? 'Contoh: Nginx Ingress Image' : targetForm.type === 'mobile' ? 'Contoh: Mobile Banking Android / iOS' : 'Contoh: Portal Web Nasabah'"
-                    required
+                    :required="targetForm.type !== 'mobile' && !mobileFile"
                   />
                 </div>
               </div>
@@ -1296,47 +1292,36 @@ watch(() => route.query.project_id, (newVal) => {
                   </div>
                 </div>
 
-                <div class="mt-2 text-end">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-secondary py-1 px-2"
-                    style="font-size: 0.75rem;"
-                    @click="useManualIdentifier = !useManualIdentifier"
-                  >
-                    <span v-if="!useManualIdentifier">+ Opsi Package ID / Store URL manual</span>
-                    <span v-else>- Sembunyikan opsi ID / URL manual</span>
-                  </button>
-                </div>
               </div>
 
-              <!-- Base URL / Container URI / Mobile Package (Jika bukan mobile atau jika manual identifier aktif atau tidak ada file) -->
-              <div v-if="targetForm.type !== 'mobile' || useManualIdentifier || !mobileFile" class="mb-3">
-                <label class="form-label small fw-bold" :class="{ required: targetForm.type !== 'mobile' && !mobileFile }">
-                  {{ targetForm.type === 'container' ? 'Container Image URI / Tag' : targetForm.type === 'mobile' ? 'Package Name / App URL (Opsional jika ada file)' : 'Base URL (Protokol Lengkap)' }}
+              <!-- Base URL / Container URI (Hanya untuk target non-mobile: web, api, container) -->
+              <div v-if="targetForm.type !== 'mobile'" class="mb-3">
+                <label class="form-label required small fw-bold">
+                  {{ targetForm.type === 'container' ? 'Container Image URI / Tag' : 'Base URL (Protokol Lengkap)' }}
                 </label>
                 <input
                   v-model="targetForm.base_url"
-                  :type="targetForm.type === 'container' || targetForm.type === 'mobile' ? 'text' : 'url'"
+                  :type="targetForm.type === 'container' ? 'text' : 'url'"
                   class="form-control font-monospace"
-                  :placeholder="targetForm.type === 'container' ? 'docker.io/library/nginx:alpine atau registry.gitlab.com/app:v1' : targetForm.type === 'mobile' ? 'com.perusahaan.banking atau https://play.google.com/...' : 'https://app.perusahaan.com'"
-                  :required="targetForm.type !== 'mobile' && !mobileFile"
+                  :placeholder="targetForm.type === 'container' ? 'docker.io/library/nginx:alpine atau registry.gitlab.com/app:v1' : 'https://app.perusahaan.com'"
+                  :required="targetForm.type !== 'mobile'"
                   @input="onBaseUrlInput"
                 />
                 <div class="form-text small">
-                  {{ targetForm.type === 'container' ? 'Format Docker / OCI Image (contoh: nginx:alpine atau redis:7-alpine)' : targetForm.type === 'mobile' ? 'Package name Android (com.domain.app), Bundle ID iOS, atau tautan binary aplikasi' : 'Harus diawali dengan https:// atau http://' }}
+                  {{ targetForm.type === 'container' ? 'Format Docker / OCI Image (contoh: nginx:alpine atau redis:7-alpine)' : 'Harus diawali dengan https:// atau http://' }}
                 </div>
               </div>
 
-              <!-- Hostname / Registry Host / Package ID -->
-              <div v-if="targetForm.type !== 'mobile' || useManualIdentifier || !mobileFile" class="mb-2">
+              <!-- Hostname / Registry Host (Hanya untuk target non-mobile: web, api, container) -->
+              <div v-if="targetForm.type !== 'mobile'" class="mb-2">
                 <label class="form-label small fw-bold">
-                  {{ targetForm.type === 'container' ? 'Registry Host / Image Name' : targetForm.type === 'mobile' ? 'App Identifier / Package Name' : 'Hostname / Domain' }}
+                  {{ targetForm.type === 'container' ? 'Registry Host / Image Name' : 'Hostname / Domain' }}
                 </label>
                 <input
                   v-model="targetForm.hostname"
                   type="text"
                   class="form-control font-monospace"
-                  :placeholder="targetForm.type === 'container' ? 'docker.io atau nama repositori' : targetForm.type === 'mobile' ? 'com.perusahaan.banking' : 'app.perusahaan.com'"
+                  :placeholder="targetForm.type === 'container' ? 'docker.io atau nama repositori' : 'app.perusahaan.com'"
                 />
               </div>
             </div>
