@@ -1161,8 +1161,8 @@ watch(() => route.query.project_id, (newVal) => {
                   class="form-control font-monospace form-control-sm"
                   :placeholder="editingRepoId ? 'Kosongkan jika tidak ingin mengubah token' : 'ghp_xxxxxxxxxxxxxxxxxxxx'"
                 />
-                <div class="form-text small" style="font-size: 0.72rem;">
-                  Token akan disimpan dengan enkripsi standar AES-256 pada server TAMENG.
+                <div class="form-text small mt-1" style="font-size: 0.72rem;">
+                  <span class="text-warning fw-bold">Penting:</span> Pastikan saat membuat PAT di GitHub Anda mencentang scope <strong><code>repo</code></strong> (Full control of private repositories) agar TAMENG dapat meng-clone kode sumber. Token disimpan dengan enkripsi AES-256.
                 </div>
               </div>
             </div>

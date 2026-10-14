@@ -240,6 +240,10 @@ class RepositoryWorkspaceSyncer
      */
     private function parseGitError(string $rawError, Repository $repository): string
     {
+        if (preg_match('/Write access to repository not granted|returned error: 403/i', $rawError)) {
+            return 'Akses ditolak oleh GitHub (403 Forbidden). Token PAT tidak memiliki izin akses (scope) ke repositori ini. Pastikan saat membuat Personal Access Token di GitHub, Anda mencentang scope "repo" (Full control of private repositories).';
+        }
+
         if (preg_match('/could not read Username|Authentication failed|Repository not found|Invalid username or password/i', $rawError)) {
             return 'Akses ditolak atau repositori GitHub bersifat privat. Pastikan URL benar dan sertakan GitHub Personal Access Token (PAT) yang valid.';
         }
