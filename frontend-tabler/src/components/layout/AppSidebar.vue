@@ -8,21 +8,7 @@ import { useSidebar } from "../../composables/useSidebar";
 const route = useRoute();
 const { isMobileSidebarOpen, closeMobileSidebar } = useSidebar();
 const { toggleTheme } = useTheme();
-const {
-  currentUser,
-  userInitials,
-  roleName,
-  roleDisplayName,
-  roleBadgeClass,
-  isAdmin,
-  isSuperAdmin,
-  isSecurityAdmin,
-  isSecurityAnalyst,
-  isAnalystOrAdmin,
-  isDeveloper,
-  isViewer,
-  isNonAdmin
-} = useAuth();
+const { currentUser, userInitials, roleDisplayName, isAdmin, isAnalystOrAdmin, isDeveloper } = useAuth();
 
 // Tutup drawer secara otomatis jika rute berpindah
 watch(() => route.path, () => {
@@ -43,7 +29,7 @@ watch(() => route.path, () => {
     :class="{ show: isMobileSidebarOpen }"
     data-bs-theme="dark"
   >
-    <div class="container-fluid px-2 d-flex flex-column h-100">
+    <div class="container-fluid px-2">
       <!-- Mobile Drawer Header dengan Tombol Tutup (X) -->
       <div class="d-flex align-items-center justify-content-between w-100 d-lg-none px-3 py-2 border-bottom border-dark">
         <router-link
@@ -80,19 +66,12 @@ watch(() => route.path, () => {
       </h1>
 
       <div
-        class="collapse navbar-collapse flex-grow-1"
+        class="collapse navbar-collapse"
         :class="{ show: isMobileSidebarOpen }"
         id="sidebar-menu"
       >
-        <!-- ========================================================================= -->
-        <!-- 1. NAVIGASI KHUSUS DEVELOPER (Perekayasa / Pemrogram Perangkat Lunak) -->
-        <!-- ========================================================================= -->
+        <!-- Navigasi Khusus DEVELOPER: Fokus Tiket Perbaikan & Scan Mandiri (Tanpa Dasbor Telemetri) -->
         <ul v-if="isDeveloper" class="navbar-nav pt-lg-2">
-          <!-- Section Divider Header -->
-          <li class="sidebar-section-header px-3 pt-2 pb-1 text-uppercase text-muted fw-bold" style="font-size: 0.68rem; letter-spacing: 0.06em;">
-            Portal Pengembang
-          </li>
-
           <!-- 1. Tiket Perbaikan Celah -->
           <li class="nav-item">
             <router-link
@@ -165,113 +144,11 @@ watch(() => route.path, () => {
               <span class="nav-link-title"> Laporan Keamanan </span>
             </router-link>
           </li>
-
-          <!-- 5. Ruang Kerja Personal -->
-          <li class="nav-item">
-            <router-link
-              class="nav-link"
-              :class="{ active: route.path.startsWith('/workspace') }"
-              to="/workspace"
-            >
-              <span class="nav-link-icon d-md-none d-lg-inline-block">
-                <!-- icon: home / dashboard -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-cyan" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" /><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" /></svg>
-              </span>
-              <span class="nav-link-title"> Ruang Kerja (Workspace) </span>
-            </router-link>
-          </li>
         </ul>
 
-        <!-- ========================================================================= -->
-        <!-- 2. NAVIGASI KHUSUS VIEWER (Pemangku Kepentingan / Auditor Unit / Read-Only) -->
-        <!-- ========================================================================= -->
-        <ul v-else-if="isViewer" class="navbar-nav pt-lg-2">
-          <!-- Section Divider Header -->
-          <li class="sidebar-section-header px-3 pt-2 pb-1 text-uppercase text-muted fw-bold" style="font-size: 0.68rem; letter-spacing: 0.06em;">
-            Pemantauan & Audit Unit
-          </li>
-
-          <!-- 1. Aset & Proyek Unit -->
-          <li class="nav-item dropdown" :class="{ active: ['/projects', '/repositories', '/targets'].includes(route.path) }">
-            <a
-              class="nav-link dropdown-toggle"
-              :class="{ active: ['/projects', '/repositories', '/targets'].includes(route.path) }"
-              href="#navbar-assets-viewer"
-              data-bs-toggle="dropdown"
-              data-bs-auto-close="false"
-              role="button"
-              :aria-expanded="['/projects', '/repositories', '/targets'].includes(route.path) ? 'true' : 'false'"
-            >
-              <span class="nav-link-icon d-md-none d-lg-inline-block">
-                <!-- icon: folder -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-azure" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 4h4l3 3h7a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2" /></svg>
-              </span>
-              <span class="nav-link-title"> Aset & Proyek Unit </span>
-            </a>
-            <div class="dropdown-menu" :class="{ show: ['/projects', '/repositories', '/targets'].includes(route.path) }">
-              <div class="dropdown-menu-columns">
-                <div class="dropdown-menu-column">
-                  <router-link class="dropdown-item" :class="{ active: route.path === '/projects' }" to="/projects">Ringkasan Proyek</router-link>
-                  <router-link class="dropdown-item" :class="{ active: route.path === '/repositories' }" to="/repositories">Repositori Kode</router-link>
-                  <router-link class="dropdown-item" :class="{ active: route.path === '/targets' }" to="/targets">Target Web & API</router-link>
-                </div>
-              </div>
-            </div>
-          </li>
-
-          <!-- 2. Analisis & Laporan Kepatuhan -->
-          <li class="nav-item dropdown" :class="{ active: ['/findings', '/reports'].includes(route.path) }">
-            <a
-              class="nav-link dropdown-toggle"
-              :class="{ active: ['/findings', '/reports'].includes(route.path) }"
-              href="#navbar-reports-viewer"
-              data-bs-toggle="dropdown"
-              data-bs-auto-close="false"
-              role="button"
-              :aria-expanded="['/findings', '/reports'].includes(route.path) ? 'true' : 'false'"
-            >
-              <span class="nav-link-icon d-md-none d-lg-inline-block">
-                <!-- icon: file-analytics -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-yellow" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /><path d="M9 17l0 -5" /><path d="M12 17l0 -1" /><path d="M15 17l0 -3" /></svg>
-              </span>
-              <span class="nav-link-title"> Analisis & Kepatuhan </span>
-            </a>
-            <div class="dropdown-menu" :class="{ show: ['/findings', '/reports'].includes(route.path) }">
-              <div class="dropdown-menu-columns">
-                <div class="dropdown-menu-column">
-                  <router-link class="dropdown-item" :class="{ active: route.path === '/findings' }" to="/findings">Temuan Kerentanan</router-link>
-                  <router-link class="dropdown-item" :class="{ active: route.path === '/reports' }" to="/reports">Laporan Keamanan</router-link>
-                </div>
-              </div>
-            </div>
-          </li>
-
-          <!-- 3. Ruang Kerja Personal -->
-          <li class="nav-item">
-            <router-link
-              class="nav-link"
-              :class="{ active: route.path.startsWith('/workspace') }"
-              to="/workspace"
-            >
-              <span class="nav-link-icon d-md-none d-lg-inline-block">
-                <!-- icon: home -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-cyan" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" /><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" /></svg>
-              </span>
-              <span class="nav-link-title"> Ruang Kerja (Workspace) </span>
-            </router-link>
-          </li>
-        </ul>
-
-        <!-- ========================================================================= -->
-        <!-- 3. NAVIGASI TIM SOC (Super Admin, Security Admin, Security Analyst) -->
-        <!-- ========================================================================= -->
+        <!-- Navigasi Standar SOC (Super Admin, Security Admin, Security Analyst, Viewer) -->
         <ul v-else class="navbar-nav pt-lg-2">
-          <!-- Section Divider Header -->
-          <li class="sidebar-section-header px-3 pt-2 pb-1 text-uppercase text-muted fw-bold" style="font-size: 0.68rem; letter-spacing: 0.06em;">
-            Operasional SOC
-          </li>
-
-          <!-- 1. Dasbor Keamanan -->
+          <!-- 1. Operasional Scan -->
           <li class="nav-item">
             <router-link
               class="nav-link"
@@ -282,7 +159,7 @@ watch(() => route.path, () => {
                 <!-- icon: layout-dashboard -->
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  class="icon text-primary"
+                  class="icon"
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
@@ -302,9 +179,8 @@ watch(() => route.path, () => {
               <span class="nav-link-title"> Dasbor Keamanan </span>
             </router-link>
           </li>
-
-          <!-- 2. Pekerjaan Scan -->
-          <li class="nav-item">
+          <!-- Pekerjaan Scan (khusus SOC Admin & Analyst) -->
+          <li v-if="isAnalystOrAdmin" class="nav-item">
             <router-link
               class="nav-link"
               :class="{ active: route.path === '/scan-jobs' }"
@@ -314,7 +190,7 @@ watch(() => route.path, () => {
                 <!-- icon: activity -->
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  class="icon text-indigo"
+                  class="icon"
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
@@ -331,8 +207,6 @@ watch(() => route.path, () => {
               <span class="nav-link-title"> Pekerjaan Scan </span>
             </router-link>
           </li>
-
-          <!-- 3. Scan Mandiri -->
           <li class="nav-item">
             <router-link
               class="nav-link"
@@ -343,7 +217,7 @@ watch(() => route.path, () => {
                 <!-- icon: scan -->
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  class="icon text-cyan"
+                  class="icon"
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
@@ -365,7 +239,7 @@ watch(() => route.path, () => {
             </router-link>
           </li>
 
-          <!-- 4. Inventaris & Aset -->
+          <!-- 2. Inventaris & Aset -->
           <li class="nav-item dropdown" :class="{ active: ['/projects', '/repositories', '/targets'].includes(route.path) }">
             <a
               class="nav-link dropdown-toggle"
@@ -380,7 +254,7 @@ watch(() => route.path, () => {
                 <!-- icon: folder -->
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  class="icon text-azure"
+                  class="icon"
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
@@ -427,8 +301,9 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 5. Tata Kelola & Mesin -->
+          <!-- 3. Tata Kelola & Mesin (khusus SOC Admin & Analyst) -->
           <li
+            v-if="isAnalystOrAdmin"
             class="nav-item dropdown"
             :class="{ active: ['/scopes', '/authorizations', '/engines'].includes(route.path) }"
           >
@@ -445,7 +320,7 @@ watch(() => route.path, () => {
                 <!-- icon: shield-check -->
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  class="icon text-green"
+                  class="icon"
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
@@ -496,7 +371,7 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 6. Analisis & Laporan -->
+          <!-- 4. Analisis & Laporan -->
           <li
             class="nav-item dropdown"
             :class="{ active: ['/findings', '/reports'].includes(route.path) }"
@@ -514,7 +389,7 @@ watch(() => route.path, () => {
                 <!-- icon: file-analytics -->
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  class="icon text-yellow"
+                  class="icon"
                   width="24"
                   height="24"
                   viewBox="0 0 24 24"
@@ -547,7 +422,7 @@ watch(() => route.path, () => {
                     :class="{ active: route.path === '/findings' }"
                     to="/findings"
                   >
-                    Temuan Kerentanan
+                    {{ isAnalystOrAdmin ? 'Temuan Kerentanan' : 'Tiket Perbaikan Celah' }}
                   </router-link>
                   <router-link
                     class="dropdown-item"
@@ -561,7 +436,7 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 7. Administrasi & Audit (khusus Super Admin & Security Admin) -->
+          <!-- 5. Administrasi & Audit (khusus Super Admin & Security Admin) -->
           <li
             v-if="isAdmin"
             class="nav-item dropdown"
@@ -588,7 +463,7 @@ watch(() => route.path, () => {
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  class="icon text-danger"
+                  class="icon icon-tabler icons-tabler-outline icon-tabler-users"
                 >
                   <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                   <path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />
@@ -624,39 +499,7 @@ watch(() => route.path, () => {
               </div>
             </div>
           </li>
-
-          <!-- 8. Ruang Kerja Personal -->
-          <li class="nav-item">
-            <router-link
-              class="nav-link"
-              :class="{ active: route.path.startsWith('/workspace') }"
-              to="/workspace"
-            >
-              <span class="nav-link-icon d-md-none d-lg-inline-block">
-                <!-- icon: home -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon text-muted" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l-2 0l9 -9l9 9l-2 0" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7" /><path d="M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6" /></svg>
-              </span>
-              <span class="nav-link-title"> Ruang Kerja (Workspace) </span>
-            </router-link>
-          </li>
         </ul>
-      </div>
-
-      <!-- User Profile Card at Sidebar Bottom -->
-      <div class="sidebar-user-card border-top border-dark py-2 px-2 mt-auto w-100">
-        <div class="d-flex align-items-center gap-2">
-          <span class="avatar avatar-sm rounded-circle bg-primary-lt fw-bold">
-            {{ userInitials }}
-          </span>
-          <div class="d-flex flex-column text-truncate" style="line-height: 1.2;">
-            <span class="fw-semibold text-reset text-truncate small" :title="currentUser?.name">
-              {{ currentUser?.name || 'TAMENG User' }}
-            </span>
-            <span class="badge py-0 px-1 mt-1 text-uppercase" :class="roleBadgeClass" style="font-size: 0.65rem; width: fit-content;">
-              {{ roleDisplayName }}
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   </aside>
@@ -707,12 +550,6 @@ watch(() => route.path, () => {
   backdrop-filter: blur(4px);
   z-index: 1055;
   transition: opacity 0.2s ease;
-}
-
-/* Section Divider Header di Sidebar */
-.sidebar-section-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  margin-bottom: 0.35rem;
 }
 
 /* Penataan Nav Link agar fleksibel dan rapi */
@@ -779,12 +616,5 @@ watch(() => route.path, () => {
 :deep(.navbar-nav .nav-item.dropdown:has(.dropdown-menu.show) > .nav-link.dropdown-toggle::after) {
   transform: rotate(135deg) !important;
   opacity: 1 !important;
-}
-
-/* Card user di bagian bawah sidebar */
-.sidebar-user-card {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  margin-bottom: 0.5rem;
 }
 </style>

@@ -195,6 +195,18 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
+  // Jika developer mengakses rute admin findings/projects/repositori lama, alihkan ke workspace counterpart
+  if (userRole === 'developer' || userRole === 'viewer') {
+    if (to.path === '/findings') {
+      return next({ name: 'workspace-tickets' })
+    }
+    if (to.path === '/projects' || to.path === '/repositories' || to.path === '/targets') {
+      return next({ name: 'workspace-files' })
+    }
+    if (to.path === '/scan-mandiri') {
+      return next({ name: 'workspace-scans' })
+    }
+  }
 
   // Cek otorisasi rute berdasarkan meta.roles
   const allowedRoles = to.meta?.roles as string[] | undefined
