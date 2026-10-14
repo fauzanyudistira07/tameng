@@ -22,10 +22,13 @@ class FindingController extends Controller
             ->orderByRaw("FIELD(severity, 'critical', 'high', 'medium', 'low', 'informational')")
             ->orderByDesc('id');
 
-        // Scoping untuk developer dan viewer: hanya tampilkan temuan dari proyek yang ditugaskan
+        // Scoping keamanan: Hanya developer dan viewer yang dibatasi pada proyek yang ditugaskan/dimiliki.
+        // Tim SOC (super_admin, security_admin, security_analyst) memiliki akses penuh ke seluruh temuan sistem.
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            $assignedProjectIds = $user->projects()->pluck('projects.id');
-            $query->whereIn('project_id', $assignedProjectIds);
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            $query->whereIn('project_id', $allowedProjectIds);
         }
 
         $findings = $query->get();
@@ -49,8 +52,10 @@ class FindingController extends Controller
         $userRole = $user?->role?->name;
 
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            $isAssigned = $user->projects()->where('projects.id', $finding->project_id)->exists();
-            if (! $isAssigned) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($finding->project_id)) {
                 return response()->json([
                     'message' => 'Akses ditolak: Anda tidak memiliki akses ke proyek temuan ini.',
                 ], 403);
@@ -73,8 +78,10 @@ class FindingController extends Controller
         $userRole = $user?->role?->name;
 
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            $isAssigned = $user->projects()->where('projects.id', $finding->project_id)->exists();
-            if (! $isAssigned) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($finding->project_id)) {
                 return response()->json([
                     'message' => 'Akses ditolak: Anda tidak memiliki akses ke proyek temuan ini.',
                 ], 403);
@@ -93,8 +100,8 @@ class FindingController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        // Auditor dan Viewer hanya memiliki hak baca
-        if (in_array($userRole, ['auditor', 'viewer'], true)) {
+        // Viewer hanya memiliki hak baca
+        if ($userRole === 'viewer') {
             return response()->json([
                 'message' => 'Peran Anda tidak memiliki izin untuk mengubah status temuan.',
             ], 403);
@@ -102,14 +109,15 @@ class FindingController extends Controller
 
         // Jika developer, pastikan proyek temuan ditugaskan kepadanya dan batasi status tiket
         if ($userRole === 'developer') {
-            $isAssigned = $user->projects()->where('projects.id', $finding->project_id)->exists();
-            if (! $isAssigned) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($finding->project_id)) {
                 return response()->json([
                     'message' => 'Akses ditolak: Temuan ini bukan bagian dari proyek yang ditugaskan kepada Anda.',
                 ], 403);
             }
 
-            // Developer hanya boleh mengubah status pengerjaan, bukan menyetujui false positive / risk accepted
             $data = $request->validate([
                 'status' => ['required', Rule::in(['open', 'in_progress', 'fixed'])],
                 'resolution_notes' => ['nullable', 'string', 'max:1500'],

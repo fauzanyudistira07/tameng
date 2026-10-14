@@ -22,7 +22,6 @@ class DatabaseSeeder extends Seeder
             ['name' => 'security_admin', 'display_name' => 'Security Admin', 'description' => 'Manage projects, targets, scopes, authorization, and scans.'],
             ['name' => 'security_analyst', 'display_name' => 'Security Analyst', 'description' => 'Review findings, AI analysis, and reports.'],
             ['name' => 'developer', 'display_name' => 'Developer', 'description' => 'View assigned project findings and remediation guidance.'],
-            ['name' => 'auditor', 'display_name' => 'Auditor', 'description' => 'Read-only access to reports and audit logs.'],
             ['name' => 'viewer', 'display_name' => 'Viewer', 'description' => 'Read-only dashboard access.'],
         ];
 

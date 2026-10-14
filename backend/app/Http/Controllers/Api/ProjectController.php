@@ -17,16 +17,34 @@ class ProjectController extends Controller
         $userRole = $user?->role?->name;
 
         $query = Project::query()
-            ->with('owner:id,name,email')
+            ->with([
+                'owner:id,name,email,role_id',
+                'owner.role:id,name,display_name',
+                'authorizations' => function ($q) {
+                    $q->select('id', 'project_id', 'code', 'status', 'valid_from', 'valid_until', 'requested_by')
+                      ->with('requester.role:id,name')
+                      ->orderByDesc('id');
+                }
+            ])
             ->orderByDesc('id');
 
-        // Scoping untuk developer dan viewer: hanya tampilkan proyek yang ditugaskan
+        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses global ke seluruh proyek.
+        // Role klien/tenant (developer, viewer) hanya boleh melihat proyek miliknya atau yang ditugaskan.
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            $query->whereIn('id', $user->projects()->pluck('projects.id'));
+            $assignedIds = $user->projects()->pluck('projects.id');
+            $query->where(function ($q) use ($assignedIds, $user) {
+                $q->whereIn('id', $assignedIds)
+                  ->orWhere('owner_id', $user->id);
+            });
         }
 
+        $projects = $query->get()->map(function ($project) {
+            $project->active_authorization = $project->authorizations->first();
+            return $project;
+        });
+
         return response()->json([
-            'projects' => $query->get(),
+            'projects' => $projects,
         ]);
     }
 
@@ -45,7 +63,9 @@ class ProjectController extends Controller
         $userRole = $user?->role?->name;
 
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            if (! $user->projects()->where('projects.id', $project->id)->exists()) {
+            $isAssigned = $user->projects()->where('projects.id', $project->id)->exists();
+            $isOwner = $project->owner_id === $user->id;
+            if (! $isAssigned && ! $isOwner) {
                 return response()->json([
                     'message' => 'Akses ditolak: Anda tidak memiliki izin untuk melihat proyek ini.',
                 ], 403);

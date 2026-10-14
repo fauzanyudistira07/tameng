@@ -54,6 +54,10 @@ interface ScanRequest {
   project?: {
     name: string
   }
+  authorization?: {
+    valid_until?: string | null
+  }
+  creator_is_admin?: boolean
   created_at: string
 }
 
@@ -288,7 +292,37 @@ function formatDate(d?: string) {
     return d
   }
 }
+
+function getScanValidityBadge(scan: ScanRequest) {
+  if (scan.creator_is_admin || !scan.authorization?.valid_until) {
+    return {
+      text: 'Tanpa Batas',
+      badgeClass: 'bg-success-lt text-success'
+    }
+  }
+
+  const validUntilDate = new Date(scan.authorization.valid_until)
+  const isExpired = validUntilDate.getTime() < Date.now()
+  const formattedDate = validUntilDate.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  })
+
+  if (isExpired) {
+    return {
+      text: `Kedaluwarsa (${formattedDate})`,
+      badgeClass: 'bg-danger-lt text-danger'
+    }
+  }
+
+  return {
+    text: `Berlaku s/d ${formattedDate}`,
+    badgeClass: 'bg-info-lt text-info'
+  }
+}
 </script>
+
 
 <template>
   <div class="user-workspace-home">
@@ -589,6 +623,12 @@ function formatDate(d?: string) {
                   <div class="fw-semibold">{{ scan.code }}</div>
                   <div class="small text-muted">
                     {{ scan.scan_profile?.name || 'Full Scan' }} &bull; {{ formatDate(scan.created_at) }}
+                  </div>
+                  <!-- Masa Berlaku Otorisasi Badge -->
+                  <div v-if="scan.authorization || scan.creator_is_admin" class="mt-1">
+                    <span class="badge" :class="getScanValidityBadge(scan).badgeClass" style="font-size: 0.7rem;">
+                      {{ getScanValidityBadge(scan).text }}
+                    </span>
                   </div>
                 </div>
 

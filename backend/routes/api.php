@@ -45,22 +45,22 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // Dynamic 20 Security Engines Registry & Profiles
     Route::get('/security/engines', [SecurityEngineController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::get('/security/engines/{engine}', [SecurityEngineController::class, 'show'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::post('/security/engines/{engine}/toggle', [SecurityEngineController::class, 'toggle'])
         ->middleware('role:super_admin,security_admin');
     Route::post('/security/engines/{engine}/health-check', [SecurityEngineController::class, 'healthCheck'])
         ->middleware('role:super_admin,security_admin,security_analyst');
     Route::get('/security/scan-profiles', [SecurityEngineController::class, 'scanProfiles'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
 
     Route::get('/engines', [SecurityEngineController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,viewer');
     Route::get('/engines/{engineKey}', [EngineController::class, 'show'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,viewer');
     Route::get('/audit-logs', [AuditLogController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,auditor');
+        ->middleware('role:super_admin,security_admin');
 
     Route::get('/roles', [RoleController::class, 'index'])->middleware('role:super_admin,security_admin');
 
@@ -72,16 +72,16 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])->middleware('role:super_admin');
 
     Route::get('/projects', [ProjectController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::get('/projects/{project}', [ProjectController::class, 'show'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::post('/projects', [ProjectController::class, 'store'])
         ->middleware('role:super_admin,security_admin');
     Route::put('/projects/{project}', [ProjectController::class, 'update'])
         ->middleware('role:super_admin,security_admin');
 
     Route::get('/repositories', [RepositoryController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::post('/repositories', [RepositoryController::class, 'store'])
         ->middleware('role:super_admin,security_admin');
     Route::put('/repositories/{repository}', [RepositoryController::class, 'update'])
@@ -100,9 +100,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role:super_admin,security_admin,security_analyst,developer');
 
     Route::get('/targets', [TargetController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::get('/targets/{target}', [TargetController::class, 'show'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::post('/targets', [TargetController::class, 'store'])
         ->middleware('role:super_admin,security_admin');
     Route::put('/targets/{target}', [TargetController::class, 'update'])
@@ -115,22 +115,22 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role:super_admin,security_admin,security_analyst,developer');
 
     Route::get('/scopes', [ScopeController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,viewer');
     Route::post('/scopes', [ScopeController::class, 'store'])
         ->middleware('role:super_admin,security_admin');
     Route::put('/scopes/{scope}', [ScopeController::class, 'update'])
         ->middleware('role:super_admin,security_admin');
 
     Route::get('/scan-profiles', [ScanProfileController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,viewer');
 
     Route::get('/authorizations', [AuthorizationController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,viewer');
     Route::post('/authorizations', [AuthorizationController::class, 'store'])
         ->middleware('role:super_admin,security_admin');
 
     Route::get('/scan-jobs', [ScanJobController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,viewer');
     Route::post('/scan-jobs', [ScanJobController::class, 'store'])
         ->middleware('role:super_admin,security_admin');
     Route::post('/scan-jobs/{scanJob}/rerun', [ScanJobController::class, 'rerun'])
@@ -141,22 +141,22 @@ Route::middleware('auth:sanctum')->group(function (): void {
         ->middleware('role:super_admin,security_admin');
 
     Route::get('/findings', [FindingController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::get('/findings/{finding}', [FindingController::class, 'show'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::get('/findings/{finding}/ai-remediation', [FindingController::class, 'aiRemediation'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::put('/findings/{finding}', [FindingController::class, 'update'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer');
 
     Route::get('/reports', [ReportController::class, 'index'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::post('/reports', [ReportController::class, 'store'])
         ->middleware('role:super_admin,security_admin,security_analyst');
     Route::get('/reports/{report}', [ReportController::class, 'show'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::post('/reports/{report}/sync', [ReportController::class, 'sync'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer');
     Route::get('/reports/{report}/download-pdf', [ReportController::class, 'downloadPdf'])
-        ->middleware('role:super_admin,security_admin,security_analyst,developer,auditor,viewer');
+        ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
 });

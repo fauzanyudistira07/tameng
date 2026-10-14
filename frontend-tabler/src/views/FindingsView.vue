@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { apiFetch } from "../services/api";
 import { useAuth } from "../composables/useAuth";
 
-const { currentUser, loadUser } = useAuth();
+const { currentUser, roleName, isAnalystOrAdmin, loadUser } = useAuth();
 
 interface FindingProject {
   id: number;
@@ -74,8 +74,24 @@ const summary = ref<FindingSummary>({
 });
 const isLoading = ref(true);
 
-// View Mode: 'task' (Developer Issue Tracker) or 'table' (SOC Table)
-const viewMode = ref<"task" | "table">("task");
+const canTriage = computed(() => {
+  const role = roleName.value || currentUser.value?.role?.name || "";
+  return ["super_admin", "security_admin", "security_analyst"].includes(role);
+});
+
+// View Mode: 'table' (SOC Table) default untuk personel SOC, 'task' (Issue Tracker) untuk developer
+const hasUserToggledMode = ref(false);
+const viewMode = ref<"task" | "table">(canTriage.value ? "table" : "task");
+
+watch(
+  canTriage,
+  (can) => {
+    if (!hasUserToggledMode.value) {
+      viewMode.value = can ? "table" : "task";
+    }
+  },
+  { immediate: true }
+);
 
 // Task pipeline status filter for developer view
 const taskStatusFilter = ref<"open_pending" | "in_progress" | "completed" | "all">("open_pending");
@@ -222,10 +238,6 @@ const triageMessage = ref<{ type: "success" | "danger"; text: string } | null>(
   null,
 );
 
-const canTriage = computed(() => {
-  const role = currentUser.value?.role?.name || "";
-  return ["super_admin", "security_admin", "security_analyst"].includes(role);
-});
 
 async function loadData() {
   isLoading.value = true;
@@ -564,8 +576,10 @@ onMounted(async () => {
   if (!currentUser.value) {
     await loadUser();
   }
-  viewMode.value = canTriage.value ? "table" : "task";
-  loadData();
+  if (!hasUserToggledMode.value) {
+    viewMode.value = canTriage.value ? "table" : "task";
+  }
+  await loadData();
 });
 </script>
 
@@ -628,7 +642,7 @@ onMounted(async () => {
                 type="button"
                 class="btn"
                 :class="viewMode === 'task' ? 'btn-primary' : 'btn-secondary'"
-                @click="viewMode = 'task'"
+                @click="viewMode = 'task'; hasUserToggledMode = true"
                 title="Tampilan mode tiket perbaikan developer"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" /></svg>
@@ -638,7 +652,7 @@ onMounted(async () => {
                 type="button"
                 class="btn"
                 :class="viewMode === 'table' ? 'btn-primary' : 'btn-secondary'"
-                @click="viewMode = 'table'"
+                @click="viewMode = 'table'; hasUserToggledMode = true"
                 title="Tampilan tabel audit & triage SOC"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14z" /><path d="M3 10h18" /><path d="M10 3v18" /></svg>

@@ -955,7 +955,7 @@ onMounted(() => {
                             <td class="text-reset">{{ formatDate(previewingReport.created_at) }}</td>
                           </tr>
                           <tr>
-                            <td class="text-secondary ps-0">Auditor / Pembuat:</td>
+                            <td class="text-secondary ps-0">Penyusun Laporan:</td>
                             <td class="text-reset">{{ previewingReport.generator?.name || previewContent.generated_by?.name || 'Admin TAMENG' }}</td>
                           </tr>
                           <tr>

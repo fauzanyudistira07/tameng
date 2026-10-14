@@ -165,16 +165,12 @@ export function useAuth() {
     return roleName.value === 'developer'
   })
 
-  const isAuditor = computed(() => {
-    return roleName.value === 'auditor'
-  })
-
   const isViewer = computed(() => {
     return roleName.value === 'viewer'
   })
 
   const isNonAdmin = computed(() => {
-    return !['super_admin', 'security_admin'].includes(roleName.value)
+    return !['super_admin', 'security_admin', 'security_analyst'].includes(roleName.value)
   })
 
   const roleBadgeClass = computed(() => {
@@ -187,8 +183,6 @@ export function useAuth() {
         return 'bg-cyan-lt text-cyan border border-cyan-subtle'
       case 'developer':
         return 'bg-teal-lt text-teal border border-teal-subtle'
-      case 'auditor':
-        return 'bg-orange-lt text-orange border border-orange-subtle'
       case 'viewer':
         return 'bg-secondary-lt text-secondary border border-secondary-subtle'
       default:
@@ -229,7 +223,6 @@ export function useAuth() {
     isSecurityAnalyst,
     isAnalystOrAdmin,
     isDeveloper,
-    isAuditor,
     isViewer,
     isNonAdmin,
     roleBadgeClass,

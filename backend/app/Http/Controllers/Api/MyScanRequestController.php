@@ -27,8 +27,7 @@ class MyScanRequestController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $user->loadMissing('role');
-        $isAdminOrAnalyst = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
 
         $query = ScanJob::query()
             ->with([
@@ -41,12 +40,14 @@ class MyScanRequestController extends Controller
                 'reports:id,scan_job_id,status,format,generated_at',
             ]);
 
-        if (! $isAdminOrAnalyst) {
-            $assignedProjectIds = $user->projects()->pluck('projects.id');
+        if (! $isAdmin) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
             $userId = $user->id;
-            $query->where(function ($q) use ($assignedProjectIds, $userId) {
+            $query->where(function ($q) use ($allowedProjectIds, $userId) {
                 $q->where('created_by', $userId)
-                  ->orWhereIn('project_id', $assignedProjectIds);
+                  ->orWhereIn('project_id', $allowedProjectIds);
             });
         }
 
@@ -62,7 +63,7 @@ class MyScanRequestController extends Controller
                 $sanitized->creator_email = $user->email;
                 $roleName = $user->role?->name;
                 $sanitized->creator_role = $roleName;
-                $sanitized->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin'], true);
+                $sanitized->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin', 'security_analyst'], true);
             }
 
             return $sanitized;
@@ -517,16 +518,19 @@ class MyScanRequestController extends Controller
         }
 
         // Kebijakan Masa Berlaku:
-        // Jika Admin: hilangkan masa berlaku (valid_until = null / unlimited)
-        // Jika Pengguna Biasa: terapkan masa berlaku 7 hari jika sudah kedaluwarsa
+        // Jika Pemohon adalah Admin: otorisasi permanen (valid_until = null / unlimited)
+        // Jika Pemohon adalah Pengguna Biasa: terapkan masa berlaku 7 hari jika kedaluwarsa
         if ($scanJob->authorization) {
             $auth = $scanJob->authorization;
-            if ($isAdminOrAnalyst) {
+            $auth->loadMissing('requester.role');
+            $isRequesterAdmin = $auth->requester?->isAdmin() ?? false;
+
+            if ($isRequesterAdmin) {
                 $auth->update([
                     'status' => 'active',
                     'valid_from' => now()->subMinute(),
                     'valid_until' => null, // Admin = Tanpa Masa Berlaku
-                    'notes' => trim(($auth->notes ?? '') . "\n[Diperbarui oleh Administrator: Tanpa Masa Berlaku pada " . now()->format('Y-m-d H:i') . "]"),
+                    'notes' => trim(($auth->notes ?? '') . "\n[Diperbarui untuk Administrator: Tanpa Masa Berlaku pada " . now()->format('Y-m-d H:i') . "]"),
                 ]);
             } else {
                 if ($auth->status !== 'active' || ($auth->valid_until && \Carbon\Carbon::parse($auth->valid_until)->isPast())) {
@@ -613,7 +617,7 @@ class MyScanRequestController extends Controller
                 $job->creator_email = $user->email;
                 $roleName = $user->role?->name;
                 $job->creator_role = $roleName;
-                $job->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin'], true);
+                $job->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin', 'security_analyst'], true);
             }
         }
 

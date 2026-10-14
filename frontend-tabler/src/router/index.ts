@@ -63,13 +63,13 @@ const routes = [
     path: '/workspace/reports',
     name: 'workspace-reports',
     component: ReportsView,
-    meta: { layout: 'user', roles: ['developer', 'viewer', 'auditor', 'super_admin', 'security_admin', 'security_analyst'] }
+    meta: { layout: 'user', roles: ['developer', 'viewer', 'super_admin', 'security_admin', 'security_analyst'] }
   },
   {
     path: '/workspace/profile',
     name: 'workspace-profile',
     component: UserProfileView,
-    meta: { layout: 'user', roles: ['developer', 'viewer', 'auditor', 'super_admin', 'security_admin', 'security_analyst'] }
+    meta: { layout: 'user', roles: ['developer', 'viewer', 'super_admin', 'security_admin', 'security_analyst'] }
   },
   // Admin SOC Routes (Preserved 100%)
   {
@@ -98,55 +98,55 @@ const routes = [
     path: '/projects',
     name: 'projects',
     component: ProjectsView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'auditor', 'viewer'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'viewer'] }
   },
   {
     path: '/repositories',
     name: 'repositories',
     component: RepositoriesView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'auditor', 'viewer'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'viewer'] }
   },
   {
     path: '/targets',
     name: 'targets',
     component: TargetsView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'auditor', 'viewer'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'viewer'] }
   },
   {
     path: '/scopes',
     name: 'scopes',
     component: ScopesView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'auditor'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst'] }
   },
   {
     path: '/authorizations',
     name: 'authorizations',
     component: AuthorizationsView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'auditor'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst'] }
   },
   {
     path: '/engines',
     name: 'engines',
     component: EnginesView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'auditor'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst'] }
   },
   {
     path: '/findings',
     name: 'findings',
     component: FindingsView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'auditor', 'viewer'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'viewer'] }
   },
   {
     path: '/reports',
     name: 'reports',
     component: ReportsView,
-    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'auditor', 'viewer'] }
+    meta: { roles: ['super_admin', 'security_admin', 'security_analyst', 'developer', 'viewer'] }
   },
   {
     path: '/audit-logs',
     name: 'audit-logs',
     component: AuditLogsView,
-    meta: { roles: ['super_admin', 'security_admin', 'auditor'] }
+    meta: { roles: ['super_admin', 'security_admin'] }
   },
   {
     path: '/users',
@@ -174,7 +174,6 @@ router.beforeEach(async (to, from, next) => {
       const user = await loadUser()
       const role = user?.role?.name || ''
       if (role === 'developer' || role === 'viewer') return next({ name: 'workspace' })
-      if (role === 'auditor') return next({ name: 'reports' })
       return next({ name: 'dashboard' })
     }
     return next()
@@ -193,9 +192,6 @@ router.beforeEach(async (to, from, next) => {
   if (to.path === '/') {
     if (userRole === 'developer' || userRole === 'viewer') {
       return next({ name: 'workspace' })
-    }
-    if (userRole === 'auditor') {
-      return next({ name: 'reports' })
     }
   }
 

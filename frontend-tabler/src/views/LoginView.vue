@@ -72,8 +72,6 @@ async function handleSubmit() {
     const role = user?.role?.name || ''
     if (role === 'developer' || role === 'viewer') {
       router.push({ name: 'workspace' })
-    } else if (role === 'auditor') {
-      router.push({ name: 'reports' })
     } else {
       router.push({ name: 'dashboard' })
     }

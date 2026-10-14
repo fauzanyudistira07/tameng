@@ -23,12 +23,15 @@ class ReportController extends Controller
             ->with(['scanJob:id,code,status,project_id,repository_id,target_id,created_by', 'scanJob.project:id,name,code', 'generator:id,name'])
             ->orderByDesc('id');
 
-        // Scoping untuk developer dan viewer: hanya laporan dari proyek ditugaskan atau scan yang dibuat sendiri
+        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
+        // Role klien/tenant (developer, viewer) hanya boleh melihat laporan scan proyek miliknya.
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            $assignedProjectIds = $user->projects()->pluck('projects.id');
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
             $userId = $user->id;
-            $query->whereHas('scanJob', function ($q) use ($assignedProjectIds, $userId) {
-                $q->whereIn('project_id', $assignedProjectIds)
+            $query->whereHas('scanJob', function ($q) use ($allowedProjectIds, $userId) {
+                $q->whereIn('project_id', $allowedProjectIds)
                   ->orWhere('created_by', $userId);
             });
         }
@@ -46,6 +49,18 @@ class ReportController extends Controller
 
         $scanJob = ScanJob::query()->findOrFail($data['scan_job_id']);
 
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($scanJob->project_id) && $scanJob->created_by !== $user->id) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke scan proyek ini.');
+            }
+        }
+
         if (! in_array($scanJob->status, ['completed', 'failed'], true) || ! $scanJob->scanRuns()->exists()) {
             throw ValidationException::withMessages([
                 'scan_job_id' => ['Laporan hanya bisa dibuat untuk scan yang sudah selesai atau gagal setelah engine berjalan.'],
@@ -53,7 +68,7 @@ class ReportController extends Controller
         }
 
         $report = $generator
-            ->generateStandardJson($scanJob, $request->user())
+            ->generateStandardJson($scanJob, $user)
             ->load(['scanJob:id,code,status', 'generator:id,name']);
 
         $auditLogger->record($request, 'report.generate', 'success', [
@@ -127,10 +142,11 @@ class ReportController extends Controller
         $role = $user?->role?->name;
 
         if (in_array($role, ['developer', 'viewer'], true)) {
-            $report->loadMissing('scanJob:id,created_by,project_id');
+            $report->loadMissing(['scanJob:id,created_by,project_id', 'scanJob.project:id,owner_id']);
             $isCreator = $report->scanJob?->created_by === $user->id;
+            $isOwner = $report->scanJob?->project?->owner_id === $user->id;
             $isAssignedProject = $user->projects()->where('projects.id', $report->scanJob?->project_id)->exists();
-            abort_unless($isCreator || $isAssignedProject, 403, 'Akses laporan ditolak: Anda tidak memiliki izin untuk laporan proyek ini.');
+            abort_unless($isCreator || $isOwner || $isAssignedProject, 403, 'Akses laporan ditolak: Anda tidak memiliki izin untuk laporan proyek ini.');
         }
     }
 }

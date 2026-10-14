@@ -29,9 +29,13 @@ class TargetController extends Controller
             ->with(['project:id,name,code', 'verifier:id,name'])
             ->orderByDesc('id');
 
-        // Scoping untuk developer dan viewer: hanya tampilkan target dari proyek yang ditugaskan
+        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
+        // Role klien/tenant (developer, viewer) hanya boleh melihat target proyek miliknya atau yang ditugaskan.
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            $query->whereIn('project_id', $user->projects()->pluck('projects.id'));
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            $query->whereIn('project_id', $allowedProjectIds);
         }
 
         return response()->json([
@@ -45,7 +49,10 @@ class TargetController extends Controller
         $userRole = $user?->role?->name;
 
         if (in_array($userRole, ['developer', 'viewer'], true)) {
-            if (! $user->projects()->where('projects.id', $target->project_id)->exists()) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($target->project_id)) {
                 return response()->json([
                     'message' => 'Akses ditolak: Anda tidak memiliki akses ke target proyek ini.',
                 ], 403);
@@ -271,6 +278,19 @@ class TargetController extends Controller
         AuditLogger $auditLogger,
     ): JsonResponse {
         $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($target->project_id)) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki akses ke target proyek ini.',
+                ], 403);
+            }
+        }
 
         // 1. Pastikan target terverifikasi
         if ($target->verification_status !== 'verified') {

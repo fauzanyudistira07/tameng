@@ -4,17 +4,15 @@ import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 
 const router = useRouter()
-const { currentUser, roleDisplayName, roleBadgeClass, isDeveloper, isAuditor, handleLogout } = useAuth()
+const { currentUser, roleDisplayName, roleBadgeClass, isDeveloper, handleLogout } = useAuth()
 
 const homePath = computed(() => {
   if (isDeveloper.value) return '/findings'
-  if (isAuditor.value) return '/reports'
   return '/'
 })
 
 const homeLabel = computed(() => {
   if (isDeveloper.value) return 'Ke Tiket Perbaikan Celah'
-  if (isAuditor.value) return 'Ke Laporan Keamanan'
   return 'Ke Dasbor Keamanan'
 })
 

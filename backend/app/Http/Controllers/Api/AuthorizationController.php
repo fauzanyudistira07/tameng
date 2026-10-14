@@ -18,23 +18,43 @@ use Illuminate\Validation\ValidationException;
 
 class AuthorizationController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = Authorization::query()
+            ->with([
+                'project:id,name,code',
+                'repository:id,name,verification_status',
+                'target:id,name,type,verification_status',
+                'scanProfile:id,key,name',
+            ])
+            ->orderByDesc('id');
+
+        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
+        // Role klien/tenant (developer, viewer) hanya boleh melihat otorisasi scan proyek miliknya atau yang dimintanya.
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            $userId = $user->id;
+            $query->where(function ($q) use ($allowedProjectIds, $userId) {
+                $q->whereIn('project_id', $allowedProjectIds)
+                  ->orWhere('requested_by', $userId);
+            });
+        }
+
         return response()->json([
-            'authorizations' => Authorization::query()
-                ->with([
-                    'project:id,name,code',
-                    'repository:id,name,verification_status',
-                    'target:id,name,type,verification_status',
-                    'scanProfile:id,key,name',
-                ])
-                ->orderByDesc('id')
-                ->get(),
+            'authorizations' => $query->get(),
         ]);
     }
 
     public function store(Request $request, AuditLogger $auditLogger): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
         $data = $request->validate([
             'project_id' => ['required', 'exists:projects,id'],
             'repository_id' => ['nullable', 'exists:repositories,id'],
@@ -47,6 +67,15 @@ class AuthorizationController extends Controller
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'notes' => ['nullable', 'string'],
         ]);
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($data['project_id'])) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke proyek ini.');
+            }
+        }
 
         $project = Project::query()->findOrFail($data['project_id']);
         $profile = ScanProfile::query()->findOrFail($data['scan_profile_id']);

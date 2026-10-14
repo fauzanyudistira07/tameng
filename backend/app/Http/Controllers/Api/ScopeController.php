@@ -10,21 +10,51 @@ use Illuminate\Validation\Rule;
 
 class ScopeController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = Scope::query()
+            ->with(['project:id,name,code', 'target:id,name,hostname,type', 'creator:id,name'])
+            ->orderByDesc('id');
+
+        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
+        // Role klien/tenant (developer, viewer) hanya boleh melihat scope proyek miliknya.
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            $userId = $user->id;
+            $query->where(function ($q) use ($allowedProjectIds, $userId) {
+                $q->whereIn('project_id', $allowedProjectIds)
+                  ->orWhere('created_by', $userId);
+            });
+        }
+
         return response()->json([
-            'scopes' => Scope::query()
-                ->with(['project:id,name,code', 'target:id,name,hostname,type', 'creator:id,name'])
-                ->orderByDesc('id')
-                ->get(),
+            'scopes' => $query->get(),
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+        $validated = $this->validateScope($request);
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($validated['project_id'])) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke proyek ini.');
+            }
+        }
+
         $scope = Scope::query()->create([
-            ...$this->validateScope($request),
-            'created_by' => $request->user()->id,
+            ...$validated,
+            'created_by' => $user->id,
         ]);
 
         return response()->json([
@@ -34,6 +64,18 @@ class ScopeController extends Controller
 
     public function update(Request $request, Scope $scope): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($scope->project_id)) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke proyek ini.');
+            }
+        }
+
         $scope->update($this->validateScope($request));
 
         return response()->json([

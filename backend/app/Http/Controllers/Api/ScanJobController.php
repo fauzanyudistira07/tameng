@@ -19,36 +19,54 @@ use Illuminate\Validation\ValidationException;
 
 class ScanJobController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        $query = ScanJob::query()
+            ->with([
+                'project:id,name,code',
+                'repository:id,name',
+                'target:id,name,type',
+                'scanProfile:id,key,name',
+                'authorization:id,code,status,valid_from,valid_until',
+                'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
+            ])
+            ->select([
+                'id',
+                'code',
+                'project_id',
+                'repository_id',
+                'target_id',
+                'scan_profile_id',
+                'authorization_id',
+                'status',
+                'progress',
+                'engine_plan',
+                'queued_at',
+                'started_at',
+                'finished_at',
+                'failure_reason',
+                'created_by',
+            ])
+            ->orderByDesc('id');
+
+        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global ke seluruh scan job.
+        // Role klien/tenant (developer, viewer) hanya melihat scan job proyek miliknya atau scan mandiri yang dibuatnya.
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            $userId = $user->id;
+            $query->where(function ($q) use ($allowedProjectIds, $userId) {
+                $q->whereIn('project_id', $allowedProjectIds)
+                  ->orWhere('created_by', $userId);
+            });
+        }
+
         return response()->json([
-            'scan_jobs' => ScanJob::query()
-                ->with([
-                    'project:id,name,code',
-                    'repository:id,name',
-                    'target:id,name,type',
-                    'scanProfile:id,key,name',
-                    'authorization:id,code,status,valid_from,valid_until',
-                    'scanRuns:id,scan_job_id,engine_key,status,exit_code,command_spec,runtime_metrics,started_at,finished_at,failure_reason',
-                ])
-                ->select([
-                    'id',
-                    'code',
-                    'project_id',
-                    'repository_id',
-                    'target_id',
-                    'scan_profile_id',
-                    'authorization_id',
-                    'status',
-                    'progress',
-                    'engine_plan',
-                    'queued_at',
-                    'started_at',
-                    'finished_at',
-                    'failure_reason',
-                ])
-                ->orderByDesc('id')
-                ->get(),
+            'scan_jobs' => $query->get(),
         ]);
     }
 
@@ -65,9 +83,21 @@ class ScanJobController extends Controller
             'authorization_id' => ['required', 'exists:authorizations,id'],
         ]);
 
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($data['project_id'])) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke proyek ini.');
+            }
+        }
+
         $decision = $gateway->decide([
             ...$data,
-            'requested_by' => $request->user()->id,
+            'requested_by' => $user->id,
             'requested_at' => now()->toISOString(),
         ]);
 
@@ -225,19 +255,33 @@ class ScanJobController extends Controller
     public function rerun(Request $request, ScanJob $scanJob, AuditLogger $auditLogger): JsonResponse
     {
         $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (in_array($userRole, ['developer', 'viewer'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($scanJob->project_id) && $scanJob->created_by !== $user->id) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses untuk menjalankan ulang scan ini.');
+            }
+        }
+
         $isAdminOrAnalyst = $user?->isAdmin() ?? false;
 
         // Kebijakan Masa Berlaku:
-        // Jika Admin: hilangkan masa berlaku (valid_until = null / unlimited)
-        // Jika Pengguna Biasa: terapkan masa berlaku 7 hari jika sudah kedaluwarsa
+        // Jika Pemohon adalah Admin: otorisasi permanen (valid_until = null / unlimited)
+        // Jika Pemohon adalah Pengguna Biasa: terapkan masa berlaku 7 hari jika kedaluwarsa
         if ($scanJob->authorization) {
             $auth = $scanJob->authorization;
-            if ($isAdminOrAnalyst) {
+            $auth->loadMissing('requester.role');
+            $isRequesterAdmin = $auth->requester?->isAdmin() ?? false;
+
+            if ($isRequesterAdmin) {
                 $auth->update([
                     'status' => 'active',
                     'valid_from' => now()->subMinute(),
                     'valid_until' => null, // Admin = Tanpa Masa Berlaku
-                    'notes' => trim(($auth->notes ?? '') . "\n[Diperbarui oleh Administrator: Tanpa Masa Berlaku pada " . now()->format('Y-m-d H:i') . "]"),
+                    'notes' => trim(($auth->notes ?? '') . "\n[Diperbarui untuk Administrator: Tanpa Masa Berlaku pada " . now()->format('Y-m-d H:i') . "]"),
                 ]);
             } else {
                 if ($auth->status !== 'active' || ($auth->valid_until && \Carbon\Carbon::parse($auth->valid_until)->isPast())) {

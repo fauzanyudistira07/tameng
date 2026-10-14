@@ -8,7 +8,7 @@ import { useSidebar } from "../../composables/useSidebar";
 const route = useRoute();
 const { isMobileSidebarOpen, closeMobileSidebar } = useSidebar();
 const { toggleTheme } = useTheme();
-const { currentUser, userInitials, roleDisplayName, isAdmin, isAnalystOrAdmin, isDeveloper, isAuditor } = useAuth();
+const { currentUser, userInitials, roleDisplayName, isAdmin, isAnalystOrAdmin, isDeveloper } = useAuth();
 
 // Tutup drawer secara otomatis jika rute berpindah
 watch(() => route.path, () => {
@@ -146,10 +146,10 @@ watch(() => route.path, () => {
           </li>
         </ul>
 
-        <!-- Navigasi Standar SOC (Super Admin, Security Admin, Security Analyst, Auditor, Viewer) -->
+        <!-- Navigasi Standar SOC (Super Admin, Security Admin, Security Analyst, Viewer) -->
         <ul v-else class="navbar-nav pt-lg-2">
-          <!-- 1. Operasional Scan (Sembunyikan dasbor untuk Auditor) -->
-          <li v-if="!isAuditor" class="nav-item">
+          <!-- 1. Operasional Scan -->
+          <li class="nav-item">
             <router-link
               class="nav-link"
               :class="{ active: route.path === '/' }"
@@ -207,7 +207,7 @@ watch(() => route.path, () => {
               <span class="nav-link-title"> Pekerjaan Scan </span>
             </router-link>
           </li>
-          <li v-if="!isAuditor" class="nav-item">
+          <li class="nav-item">
             <router-link
               class="nav-link"
               :class="{ active: route.path === '/scan-mandiri' || route.path === '/scan-saya' }"
@@ -301,9 +301,9 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 3. Tata Kelola & Mesin (khusus SOC Admin, Analyst, Auditor) -->
+          <!-- 3. Tata Kelola & Mesin (khusus SOC Admin & Analyst) -->
           <li
-            v-if="isAnalystOrAdmin || isAuditor"
+            v-if="isAnalystOrAdmin"
             class="nav-item dropdown"
             :class="{ active: ['/scopes', '/authorizations', '/engines'].includes(route.path) }"
           >
@@ -436,9 +436,9 @@ watch(() => route.path, () => {
             </div>
           </li>
 
-          <!-- 5. Administrasi & Audit (khusus Super Admin, Security Admin & Auditor) -->
+          <!-- 5. Administrasi & Audit (khusus Super Admin & Security Admin) -->
           <li
-            v-if="isAdmin || isAuditor"
+            v-if="isAdmin"
             class="nav-item dropdown"
             :class="{ active: ['/audit-logs', '/users'].includes(route.path) }"
           >

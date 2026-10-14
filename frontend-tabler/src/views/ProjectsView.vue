@@ -13,6 +13,14 @@ interface ProjectOwner {
   email: string
 }
 
+interface ProjectAuthorization {
+  id: number
+  code: string
+  status: string
+  valid_from: string
+  valid_until: string | null
+}
+
 interface Project {
   id: number
   code: string
@@ -22,6 +30,7 @@ interface Project {
   status: 'active' | 'archived'
   owner_id?: number
   owner?: ProjectOwner
+  active_authorization?: ProjectAuthorization | null
   created_at?: string
   updated_at?: string
   repositories_count?: number
@@ -42,12 +51,15 @@ const isSaving = ref(false)
 const searchQuery = ref('')
 const filterCriticality = ref<string>('all')
 const filterStatus = ref<string>('all')
+const filterScope = ref<'all' | 'mine'>('all')
 
 function resetFilters() {
   filterCriticality.value = 'all'
   filterStatus.value = 'all'
+  filterScope.value = 'all'
   searchQuery.value = ''
 }
+
 
 // Modal state
 const isModalOpen = ref(false)
@@ -169,6 +181,10 @@ const filteredProjects = computed(() => {
     }
     // Filter status
     if (filterStatus.value !== 'all' && p.status !== filterStatus.value) {
+      return false
+    }
+    // Filter scope (Semua vs Proyek Saya)
+    if (filterScope.value === 'mine' && p.owner_id !== currentUser.value?.id) {
       return false
     }
     // Search query
@@ -301,9 +317,69 @@ function getCriticalityLabel(crit: string) {
   }
 }
 
+function getProjectValidityInfo(project: Project): { text: string; badgeClass: string; tooltip: string } {
+  const auth = project.active_authorization
+  if (!auth) {
+    return {
+      text: 'Belum Ada Otorisasi',
+      badgeClass: 'bg-secondary-lt text-secondary',
+      tooltip: 'Proyek ini belum memiliki otorisasi pemindaian keamanan aktif.'
+    }
+  }
+
+  // Jika otorisasi memiliki valid_until tertentu (misal aturan 7 hari Developer)
+  if (auth.valid_until) {
+    const validUntilDate = new Date(auth.valid_until)
+    const isExpired = validUntilDate.getTime() < Date.now()
+    const formattedDate = validUntilDate.toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    })
+
+    if (isExpired) {
+      return {
+        text: `Kedaluwarsa (${formattedDate})`,
+        badgeClass: 'bg-danger-lt text-danger',
+        tooltip: `Masa berlaku otorisasi proyek 7 hari telah habis pada ${formattedDate}. Pemindaian memerlukan permohonan baru atau persetujuan Admin.`
+      }
+    }
+
+    const diffMs = validUntilDate.getTime() - Date.now()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+
+    return {
+      text: `Berlaku s/d ${formattedDate} (${diffDays} hr)`,
+      badgeClass: 'bg-info-lt text-info',
+      tooltip: `Masa berlaku otorisasi pengguna aktif hingga ${formattedDate} (Sisa ${diffDays} hari kepatuhan RoE)`
+    }
+  }
+
+  // Jika valid_until null: hanya beri label Tanpa Batas (Admin) jika pemilik adalah Admin/SOC
+  const isOwnerAdmin = (project.owner as any)?.role?.name
+    ? ['super_admin', 'security_admin', 'security_analyst'].includes((project.owner as any).role.name)
+    : (project.owner_id === 1)
+
+  if (isOwnerAdmin) {
+    return {
+      text: 'Tanpa Batas (Admin)',
+      badgeClass: 'bg-success-lt text-success',
+      tooltip: 'Otorisasi pemindaian proyek ini bersifat permanen tanpa batas masa berlaku (Akses SOC Admin)'
+    }
+  }
+
+  return {
+    text: 'Aktif (Otorisasi Tetap)',
+    badgeClass: 'bg-teal-lt text-teal',
+    tooltip: 'Otorisasi pemindaian proyek ini dalam status aktif.'
+  }
+}
+
+
 onMounted(() => {
   loadData()
 })
+
 </script>
 
 <template>
@@ -420,6 +496,22 @@ onMounted(() => {
 
           <!-- Restyled Modern Filter & Search Controls -->
           <div class="filter-toolbar-group d-flex flex-wrap align-items-center gap-2">
+            <!-- Filter Cakupan Kepemilikan (Khusus Admin: Semua vs Proyek Saya) -->
+            <div v-if="canManage" class="filter-select-wrapper position-relative">
+              <span class="select-prefix-icon text-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="7" r="4" /><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" /></svg>
+              </span>
+              <select
+                v-model="filterScope"
+                class="form-select form-select-sm custom-filter-select"
+                :class="{ 'filter-active': filterScope !== 'all' }"
+                title="Filter cakupan kepemilikan proyek"
+              >
+                <option value="all">Semua Proyek (Global SOC)</option>
+                <option value="mine">Hanya Proyek Saya</option>
+              </select>
+            </div>
+
             <!-- Filter Kritikalitas -->
             <div class="filter-select-wrapper position-relative">
               <span class="select-prefix-icon text-warning">
@@ -507,6 +599,7 @@ onMounted(() => {
                 <th>Deskripsi</th>
                 <th style="width: 140px;">Kritikalitas</th>
                 <th style="width: 110px;">Status</th>
+                <th style="width: 190px;">Masa Berlaku Scan</th>
                 <th>Penanggung Jawab (PIC)</th>
                 <th class="text-center" style="width: 240px;">Aksi</th>
               </tr>
@@ -514,7 +607,7 @@ onMounted(() => {
             <tbody>
               <!-- Loading -->
               <tr v-if="isLoading">
-                <td colspan="7" class="text-center py-4 text-secondary">
+                <td colspan="8" class="text-center py-4 text-secondary">
                   <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                   Memuat data proyek...
                 </td>
@@ -522,7 +615,7 @@ onMounted(() => {
 
               <!-- Empty state -->
               <tr v-else-if="filteredProjects.length === 0">
-                <td colspan="7" class="text-center py-5">
+                <td colspan="8" class="text-center py-5">
                   <div class="empty">
                     <div class="empty-icon text-muted">
                       <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg" width="48" height="48" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 4h6v8h-6z" /><path d="M4 16h6v4h-6z" /><path d="M14 12h6v8h-6z" /><path d="M14 4h6v4h-6z" /></svg>
@@ -575,6 +668,19 @@ onMounted(() => {
                   <span v-else class="badge bg-secondary-lt d-inline-flex align-items-center gap-1">
                     <span class="status-dot bg-secondary"></span>
                     <span>Arsip</span>
+                  </span>
+                </td>
+                <td>
+                  <span
+                    class="badge"
+                    :class="getProjectValidityInfo(project).badgeClass"
+                    :title="getProjectValidityInfo(project).tooltip"
+                    style="cursor: help; font-size: 0.75rem;"
+                  >
+                    <svg v-if="getProjectValidityInfo(project).badgeClass.includes('success')" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                    <svg v-else-if="getProjectValidityInfo(project).badgeClass.includes('danger')" xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M12 16h.01" /></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs me-1" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 15" /></svg>
+                    {{ getProjectValidityInfo(project).text }}
                   </span>
                 </td>
                 <td>
@@ -687,7 +793,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Meta row: Criticality + PIC -->
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-2 bg-body-tertiary rounded border mb-3" style="font-size: 0.75rem;">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-2 bg-body-tertiary rounded border mb-2" style="font-size: 0.75rem;">
                   <div class="d-flex align-items-center gap-1">
                     <span class="text-secondary small">Kritikalitas:</span>
                     <span class="badge py-0 px-1" :class="getCriticalityBadgeClass(project.criticality)">
@@ -698,6 +804,18 @@ onMounted(() => {
                     <span class="text-secondary small">PIC:</span>
                     <span class="fw-medium text-reset">{{ project.owner?.name || '-' }}</span>
                   </div>
+                </div>
+
+                <!-- Masa Berlaku Otorisasi Scan Mobile -->
+                <div class="d-flex align-items-center justify-content-between p-2 bg-body-tertiary rounded border mb-3" style="font-size: 0.75rem;">
+                  <span class="text-secondary small">Masa Berlaku Scan:</span>
+                  <span
+                    class="badge"
+                    :class="getProjectValidityInfo(project).badgeClass"
+                    :title="getProjectValidityInfo(project).tooltip"
+                  >
+                    {{ getProjectValidityInfo(project).text }}
+                  </span>
                 </div>
 
                 <!-- Actions: Repo, Target, Edit -->

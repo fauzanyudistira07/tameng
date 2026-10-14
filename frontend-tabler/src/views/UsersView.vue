@@ -137,7 +137,6 @@ function getAccessLevelFromRole(roleName?: string): 'lead' | 'analyst' | 'develo
       return 'analyst'
     case 'developer':
       return 'developer'
-    case 'auditor':
     case 'viewer':
     default:
       return 'viewer'
@@ -265,7 +264,6 @@ function getRoleBadgeClass(roleName?: string): string {
     case 'security_admin': return 'bg-blue-lt'
     case 'security_analyst': return 'bg-cyan-lt'
     case 'developer': return 'bg-teal-lt'
-    case 'auditor': return 'bg-orange-lt'
     default: return 'bg-secondary-lt'
   }
 }

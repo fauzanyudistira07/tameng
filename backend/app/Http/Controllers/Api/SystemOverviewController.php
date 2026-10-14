@@ -4,12 +4,25 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SystemOverviewController extends Controller
 {
-    public function __invoke(): JsonResponse
+    public function __invoke(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+        // Tim SOC (super_admin, security_admin, security_analyst) memiliki visibilitas telemetri sistem global
+        $isSocMember = in_array($userRole, ['super_admin', 'security_admin', 'security_analyst'], true);
+
+        $allowedProjectIds = null;
+        if (! $isSocMember && $user) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+        }
+
         $scanProfiles = DB::table('scan_profiles')
             ->select(['key', 'name', 'description', 'engine_keys', 'active_testing'])
             ->where('is_active', true)
@@ -23,9 +36,28 @@ class SystemOverviewController extends Controller
                 'active_testing' => (bool) $profile->active_testing,
             ]);
 
+        $projectCountQuery = DB::table('projects');
+        $repoCountQuery = DB::table('repositories');
+        $targetCountQuery = DB::table('targets');
+        $scanJobCountQuery = DB::table('scan_jobs');
+        $findingsCountQuery = DB::table('findings');
+
+        if ($allowedProjectIds !== null) {
+            $projectCountQuery->whereIn('id', $allowedProjectIds);
+            $repoCountQuery->whereIn('project_id', $allowedProjectIds);
+            $targetCountQuery->whereIn('project_id', $allowedProjectIds);
+            $scanJobCountQuery->whereIn('project_id', $allowedProjectIds);
+            $findingsCountQuery->whereIn('project_id', $allowedProjectIds);
+        }
+
         $pendingJobs = DB::table('jobs')->count();
         $failedJobs = DB::table('failed_jobs')->count();
-        $activeScans = DB::table('scan_jobs')->whereIn('status', ['queued', 'running'])->count();
+
+        $activeScansQuery = DB::table('scan_jobs')->whereIn('status', ['queued', 'running']);
+        if ($allowedProjectIds !== null) {
+            $activeScansQuery->whereIn('project_id', $allowedProjectIds);
+        }
+        $activeScans = $activeScansQuery->count();
 
         $queueStatus = 'ready';
         $queueLabel = 'Queue Worker Siap';
@@ -37,6 +69,8 @@ class SystemOverviewController extends Controller
             $queueLabel = "Memproses ({$activeScans} scan aktif)";
         }
 
+        $findingsList = (clone $findingsCountQuery)->get(['severity']);
+
         return response()->json([
             'product' => 'SecSys Security Scan System',
             'mode' => 'mvp_internal',
@@ -46,16 +80,16 @@ class SystemOverviewController extends Controller
                 'AI IS ADVISORY ONLY',
             ],
             'counts' => [
-                'projects' => DB::table('projects')->count(),
-                'repositories' => DB::table('repositories')->count(),
-                'targets' => DB::table('targets')->count(),
-                'scan_jobs' => DB::table('scan_jobs')->count(),
+                'projects' => $projectCountQuery->count(),
+                'repositories' => $repoCountQuery->count(),
+                'targets' => $targetCountQuery->count(),
+                'scan_jobs' => $scanJobCountQuery->count(),
                 'active_scans' => $activeScans,
-                'findings' => DB::table('findings')->count(),
-                'critical_findings' => DB::table('findings')->where('severity', 'critical')->count(),
-                'high_findings' => DB::table('findings')->where('severity', 'high')->count(),
-                'medium_findings' => DB::table('findings')->where('severity', 'medium')->count(),
-                'low_findings' => DB::table('findings')->where('severity', 'low')->count(),
+                'findings' => $findingsList->count(),
+                'critical_findings' => $findingsList->where('severity', 'critical')->count(),
+                'high_findings' => $findingsList->where('severity', 'high')->count(),
+                'medium_findings' => $findingsList->where('severity', 'medium')->count(),
+                'low_findings' => $findingsList->where('severity', 'low')->count(),
                 'workers' => DB::table('workers')->count(),
             ],
             'queue_telemetry' => [
@@ -66,16 +100,21 @@ class SystemOverviewController extends Controller
                 'label' => $queueLabel,
             ],
             'scan_profiles' => $scanProfiles,
-            'findings_timeline' => $this->buildFindingsTimeline(),
+            'findings_timeline' => $this->buildFindingsTimeline($allowedProjectIds),
         ]);
     }
 
-    private function buildFindingsTimeline(): array
+    private function buildFindingsTimeline($allowedProjectIds = null): array
     {
-        $raw = DB::table('findings')
+        $rawQuery = DB::table('findings')
             ->selectRaw('DATE(created_at) as date, severity, count(*) as count')
-            ->whereIn('severity', ['critical', 'high', 'medium', 'low'])
-            ->groupBy('date', 'severity')
+            ->whereIn('severity', ['critical', 'high', 'medium', 'low']);
+
+        if ($allowedProjectIds !== null) {
+            $rawQuery->whereIn('project_id', $allowedProjectIds);
+        }
+
+        $raw = $rawQuery->groupBy('date', 'severity')
             ->orderBy('date')
             ->get();
 
@@ -84,7 +123,11 @@ class SystemOverviewController extends Controller
             $grouped[$r->date][$r->severity] = (int) $r->count;
         }
 
-        $minDateStr = DB::table('findings')->min('created_at');
+        $minDateQuery = DB::table('findings');
+        if ($allowedProjectIds !== null) {
+            $minDateQuery->whereIn('project_id', $allowedProjectIds);
+        }
+        $minDateStr = $minDateQuery->min('created_at');
         $startDate = $minDateStr
             ? \Carbon\Carbon::parse($minDateStr)->startOfDay()
             : now()->subDays(14)->startOfDay();
