@@ -31,7 +31,7 @@ class UniversalFindingNormalizer
         ?string $ruleOrCwe,
         ?int $lineStart = null
     ): string {
-        $normalizedLocation = strtolower(trim((string) $filePathOrEndpoint));
+        $normalizedLocation = ltrim(strtolower(trim((string) $filePathOrEndpoint)), '/\\');
         $normalizedRule = strtolower(trim((string) $ruleOrCwe));
         // Cluster lines within ±3 lines tolerance window if applicable
         $lineBucket = $lineStart ? (int) floor($lineStart / 5) * 5 : 0;
@@ -56,7 +56,7 @@ class UniversalFindingNormalizer
         $severity = self::normalizeSeverity($data['severity'] ?? $data['severity_raw'] ?? null);
         $assetType = $data['asset_type'] ?? 'repository';
         $location = $data['file_path'] ?? $data['endpoint'] ?? $data['location'] ?? null;
-        $rule = $data['rule_id'] ?? $data['cve'] ?? $data['cwe'] ?? 'secsys.finding';
+        $rule = ! empty($data['cve']) ? $data['cve'] : ($data['rule_id'] ?? $data['cwe'] ?? 'secsys.finding');
         $lineStart = isset($data['line_start']) ? (int) $data['line_start'] : null;
 
         $fingerprint = self::computeFingerprint(

@@ -19,11 +19,12 @@ class FindingDeduplicator
         $savedFindings = [];
 
         foreach ($normalizedFindings as $item) {
+            $ruleKey = ! empty($item['cve']) ? $item['cve'] : ($item['rule_id'] ?? $item['cwe'] ?? 'rule');
             $fingerprint = $item['fingerprint'] ?? UniversalFindingNormalizer::computeFingerprint(
                 $scanJob->project_id,
                 $item['asset_type'] ?? 'repository',
                 $item['file_path'] ?? $item['endpoint'] ?? null,
-                $item['rule_id'] ?? $item['cve'] ?? $item['cwe'] ?? 'rule',
+                $ruleKey,
                 $item['line_start'] ?? null
             );
 
@@ -68,6 +69,15 @@ class FindingDeduplicator
                 // If the new finding has higher severity, escalate primary severity
                 if ($this->severityWeight($item['severity'] ?? '') > $this->severityWeight($finding->severity)) {
                     $finding->severity = $item['severity'];
+                }
+                if (empty($finding->cve) && ! empty($item['cve'])) {
+                    $finding->cve = $item['cve'];
+                }
+                if (empty($finding->cwe) && ! empty($item['cwe'])) {
+                    $finding->cwe = $item['cwe'];
+                }
+                if (empty($finding->cvss) && ! empty($item['cvss'])) {
+                    $finding->cvss = $item['cvss'];
                 }
                 $finding->save();
             }

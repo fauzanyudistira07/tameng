@@ -45,8 +45,30 @@ class OsvAdapter extends RepositoryDockerAdapter
 
         return collect($results)
             ->flatMap(fn (array $result): array => collect($result['packages'] ?? [])
-                ->flatMap(fn (array $package): array => collect($package['vulnerabilities'] ?? [])
-                    ->map(function (array $vulnerability) use ($result, $package): array {
+                ->flatMap(function (array $package) use ($result): array {
+                    $seenCves = [];
+                    $vulns = collect($package['vulnerabilities'] ?? [])->filter(function (array $vulnerability) use (&$seenCves) {
+                        $cve = null;
+                        foreach (($vulnerability['aliases'] ?? []) as $alias) {
+                            if (str_starts_with(strtoupper($alias), 'CVE-')) {
+                                $cve = strtoupper($alias);
+                                break;
+                            }
+                        }
+                        if (! $cve && str_starts_with(strtoupper($vulnerability['id'] ?? ''), 'CVE-')) {
+                            $cve = strtoupper($vulnerability['id']);
+                        }
+                        if ($cve) {
+                            if (isset($seenCves[$cve])) {
+                                return false;
+                            }
+                            $seenCves[$cve] = true;
+                        }
+
+                        return true;
+                    });
+
+                    return $vulns->map(function (array $vulnerability) use ($result, $package): array {
                         $rawSev = $vulnerability['database_specific']['severity']
                             ?? $vulnerability['ecosystem_specific']['severity']
                             ?? null;
@@ -113,7 +135,8 @@ class OsvAdapter extends RepositoryDockerAdapter
                             ],
                             'evidence' => $vulnerability['details'] ?? "OSV detected vulnerability {$vulnId} in package {$pkgName}.",
                         ];
-                    })->all())->all())
+                    })->all();
+                })->all())
             ->values()
             ->all();
     }
