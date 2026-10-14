@@ -32,9 +32,9 @@ class RepositoryController extends Controller
             ->with(['project:id,name,code', 'verifier:id,name'])
             ->orderByDesc('id');
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
-        // Role klien/tenant (developer, viewer) hanya boleh melihat repositori proyek miliknya atau yang ditugaskan.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses global.
+        // Role non-admin (security_analyst, developer, viewer) hanya boleh melihat repositori proyek miliknya atau yang ditugaskan.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -51,7 +51,19 @@ class RepositoryController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
         $validated = $this->validateRepository($request);
+
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($validated['project_id'])) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke proyek ini.');
+            }
+        }
+
         $encryptedToken = ! empty($validated['access_token']) ? Crypt::encryptString($validated['access_token']) : null;
         $metadata = [
             'is_private' => (bool) ($validated['is_private'] ?? ! empty($validated['access_token'])),
@@ -74,7 +86,19 @@ class RepositoryController extends Controller
 
     public function update(Request $request, Repository $repository): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
         $validated = $this->validateRepository($request);
+
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($repository->project_id) || ! $allowedProjectIds->contains($validated['project_id'])) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke proyek repositori ini.');
+            }
+        }
+
         $metadata = $repository->metadata ?? [];
         if (isset($validated['is_private'])) {
             $metadata['is_private'] = (bool) $validated['is_private'];
@@ -216,6 +240,20 @@ class RepositoryController extends Controller
         RepositoryWorkspaceManager $workspaceManager,
         AuditLogger $auditLogger,
     ): JsonResponse {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($repository->project_id)) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki akses untuk menghapus repositori ini.',
+                ], 403);
+            }
+        }
+
         $repoName = $repository->name;
         $repoId = $repository->id;
         $projectId = $repository->project_id;
@@ -252,8 +290,8 @@ class RepositoryController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses sistem global.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();

@@ -29,9 +29,9 @@ class TargetController extends Controller
             ->with(['project:id,name,code', 'verifier:id,name'])
             ->orderByDesc('id');
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
-        // Role klien/tenant (developer, viewer) hanya boleh melihat target proyek miliknya atau yang ditugaskan.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses sistem global.
+        // Role non-admin (security_analyst, developer, viewer) hanya boleh melihat target proyek miliknya atau yang ditugaskan.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -48,7 +48,7 @@ class TargetController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -111,7 +111,18 @@ class TargetController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
         $validated = $this->validateTarget($request);
+
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($validated['project_id'])) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke proyek ini.');
+            }
+        }
 
         $fileData = [];
         $uploadedFile = $request->file('file') ?: $request->file('app_file');
@@ -174,7 +185,18 @@ class TargetController extends Controller
 
     public function update(Request $request, Target $target): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
         $validated = $this->validateTarget($request, $target);
+
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($target->project_id) || ! $allowedProjectIds->contains($validated['project_id'])) {
+                abort(403, 'Akses ditolak: Anda tidak memiliki akses ke target proyek ini.');
+            }
+        }
 
         $fileData = [];
         $uploadedFile = $request->file('file') ?: $request->file('app_file');
@@ -234,6 +256,20 @@ class TargetController extends Controller
 
     public function destroy(Request $request, Target $target, AuditLogger $auditLogger): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $allowedProjectIds = $user->projects()->pluck('projects.id')
+                ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
+                ->unique();
+            if (! $allowedProjectIds->contains($target->project_id)) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki akses untuk menghapus target ini.',
+                ], 403);
+            }
+        }
+
         $targetName = $target->name;
         $targetId = $target->id;
         $projectId = $target->project_id;
@@ -280,8 +316,8 @@ class TargetController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses sistem global.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();

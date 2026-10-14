@@ -22,9 +22,9 @@ class FindingController extends Controller
             ->orderByRaw("FIELD(severity, 'critical', 'high', 'medium', 'low', 'informational')")
             ->orderByDesc('id');
 
-        // Scoping keamanan: Hanya developer dan viewer yang dibatasi pada proyek yang ditugaskan/dimiliki.
-        // Tim SOC (super_admin, security_admin, security_analyst) memiliki akses penuh ke seluruh temuan sistem.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan: Administrator (super_admin, security_admin) memiliki akses penuh ke seluruh temuan sistem.
+        // Role non-admin (security_analyst, developer, viewer) hanya boleh mengakses temuan proyek miliknya atau yang ditugaskan.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -51,7 +51,7 @@ class FindingController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -77,7 +77,7 @@ class FindingController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -107,8 +107,8 @@ class FindingController extends Controller
             ], 403);
         }
 
-        // Jika developer, pastikan proyek temuan ditugaskan kepadanya dan batasi status tiket
-        if ($userRole === 'developer') {
+        // Pastikan role non-admin hanya dapat mengupdate temuan pada proyek yang ditugaskan/dimilikinya
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -117,6 +117,9 @@ class FindingController extends Controller
                     'message' => 'Akses ditolak: Temuan ini bukan bagian dari proyek yang ditugaskan kepada Anda.',
                 ], 403);
             }
+        }
+
+        if ($userRole === 'developer') {
 
             $data = $request->validate([
                 'status' => ['required', Rule::in(['open', 'in_progress', 'fixed'])],

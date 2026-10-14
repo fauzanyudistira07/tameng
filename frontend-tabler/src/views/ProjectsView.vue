@@ -355,9 +355,9 @@ function getProjectValidityInfo(project: Project): { text: string; badgeClass: s
     }
   }
 
-  // Jika valid_until null: hanya beri label Tanpa Batas (Admin) jika pemilik adalah Admin/SOC
+  // Jika valid_until null: hanya beri label Tanpa Batas (Admin) jika pemilik adalah Admin
   const isOwnerAdmin = (project.owner as any)?.role?.name
-    ? ['super_admin', 'security_admin', 'security_analyst'].includes((project.owner as any).role.name)
+    ? ['super_admin', 'security_admin'].includes((project.owner as any).role.name)
     : (project.owner_id === 1)
 
   if (isOwnerAdmin) {

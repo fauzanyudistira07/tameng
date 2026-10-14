@@ -28,9 +28,9 @@ class ProjectController extends Controller
             ])
             ->orderByDesc('id');
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses global ke seluruh proyek.
-        // Role klien/tenant (developer, viewer) hanya boleh melihat proyek miliknya atau yang ditugaskan.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses global ke seluruh proyek.
+        // Role non-admin (security_analyst, developer, viewer) HANYA boleh melihat proyek miliknya atau yang ditugaskan.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $assignedIds = $user->projects()->pluck('projects.id');
             $query->where(function ($q) use ($assignedIds, $user) {
                 $q->whereIn('id', $assignedIds)
@@ -50,7 +50,14 @@ class ProjectController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $project = Project::query()->create($this->validateProject($request));
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+        $data = $this->validateProject($request);
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $data['owner_id'] = $user->id;
+        }
+
+        $project = Project::query()->create($data);
 
         return response()->json([
             'project' => $project->load('owner:id,name,email'),
@@ -62,7 +69,7 @@ class ProjectController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $isAssigned = $user->projects()->where('projects.id', $project->id)->exists();
             $isOwner = $project->owner_id === $user->id;
             if (! $isAssigned && ! $isOwner) {
@@ -79,6 +86,19 @@ class ProjectController extends Controller
 
     public function update(Request $request, Project $project): JsonResponse
     {
+        $user = $request->user();
+        $userRole = $user?->role?->name;
+
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
+            $isAssigned = $user->projects()->where('projects.id', $project->id)->exists();
+            $isOwner = $project->owner_id === $user->id;
+            if (! $isAssigned && ! $isOwner) {
+                return response()->json([
+                    'message' => 'Akses ditolak: Anda tidak memiliki izin untuk mengedit proyek ini.',
+                ], 403);
+            }
+        }
+
         $project->update($this->validateProject($request, $project));
 
         return response()->json([

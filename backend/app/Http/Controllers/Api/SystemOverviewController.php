@@ -13,11 +13,11 @@ class SystemOverviewController extends Controller
     {
         $user = $request->user();
         $userRole = $user?->role?->name;
-        // Tim SOC (super_admin, security_admin, security_analyst) memiliki visibilitas telemetri sistem global
-        $isSocMember = in_array($userRole, ['super_admin', 'security_admin', 'security_analyst'], true);
+        // Administrator (super_admin, security_admin) memiliki visibilitas telemetri sistem global
+        $isAdmin = in_array($userRole, ['super_admin', 'security_admin'], true);
 
         $allowedProjectIds = null;
-        if (! $isSocMember && $user) {
+        if (! $isAdmin && $user) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();

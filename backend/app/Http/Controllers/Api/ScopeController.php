@@ -19,9 +19,9 @@ class ScopeController extends Controller
             ->with(['project:id,name,code', 'target:id,name,hostname,type', 'creator:id,name'])
             ->orderByDesc('id');
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
-        // Role klien/tenant (developer, viewer) hanya boleh melihat scope proyek miliknya.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses sistem global.
+        // Role non-admin (security_analyst, developer, viewer) hanya boleh melihat scope proyek miliknya.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -43,7 +43,7 @@ class ScopeController extends Controller
         $userRole = $user?->role?->name;
         $validated = $this->validateScope($request);
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -67,7 +67,7 @@ class ScopeController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();

@@ -27,7 +27,7 @@ class MyScanRequestController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin'], true);
 
         $query = ScanJob::query()
             ->with([
@@ -63,7 +63,7 @@ class MyScanRequestController extends Controller
                 $sanitized->creator_email = $user->email;
                 $roleName = $user->role?->name;
                 $sanitized->creator_role = $roleName;
-                $sanitized->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin', 'security_analyst'], true);
+                $sanitized->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin'], true);
             }
 
             return $sanitized;
@@ -146,7 +146,7 @@ class MyScanRequestController extends Controller
 
         $user = $request->user();
         $user->loadMissing('role');
-        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin'], true);
 
         if (! $isAdmin) {
             // Validasi: Cegah permohonan scan baru pada repositori/target yang sama jika scan sebelumnya masih menunggu persetujuan Admin SOC
@@ -509,11 +509,12 @@ class MyScanRequestController extends Controller
     {
         $user = $request->user();
         $user->loadMissing('role');
-        $isAdminOrAnalyst = in_array($user->role?->name ?? '', ['super_admin', 'security_admin', 'security_analyst'], true);
+        $isAdmin = in_array($user->role?->name ?? '', ['super_admin', 'security_admin'], true);
 
         $isRelated = $user->projects()->where('projects.id', $scanJob->project_id)->exists();
+        $isOwner = \App\Models\Project::where('id', $scanJob->project_id)->where('owner_id', $user->id)->exists();
 
-        if ($scanJob->created_by !== $user->id && ! $isAdminOrAnalyst && ! $isRelated) {
+        if ($scanJob->created_by !== $user->id && ! $isAdmin && ! $isRelated && ! $isOwner) {
             abort(403, 'Anda tidak memiliki izin untuk mengulang pemindaian ini.');
         }
 
@@ -617,7 +618,7 @@ class MyScanRequestController extends Controller
                 $job->creator_email = $user->email;
                 $roleName = $user->role?->name;
                 $job->creator_role = $roleName;
-                $job->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin', 'security_analyst'], true);
+                $job->creator_is_admin = in_array($roleName, ['super_admin', 'security_admin'], true);
             }
         }
 

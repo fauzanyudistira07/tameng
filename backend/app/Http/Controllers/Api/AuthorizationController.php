@@ -32,9 +32,9 @@ class AuthorizationController extends Controller
             ])
             ->orderByDesc('id');
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
-        // Role klien/tenant (developer, viewer) hanya boleh melihat otorisasi scan proyek miliknya atau yang dimintanya.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses sistem global.
+        // Role non-admin (security_analyst, developer, viewer) hanya boleh melihat otorisasi scan proyek miliknya atau yang dimintanya.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -68,7 +68,7 @@ class AuthorizationController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();

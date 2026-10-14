@@ -23,9 +23,9 @@ class ReportController extends Controller
             ->with(['scanJob:id,code,status,project_id,repository_id,target_id,created_by', 'scanJob.project:id,name,code', 'generator:id,name'])
             ->orderByDesc('id');
 
-        // Scoping keamanan ketat: Tim SOC (super_admin, security_admin, security_analyst) memiliki akses sistem global.
-        // Role klien/tenant (developer, viewer) hanya boleh melihat laporan scan proyek miliknya.
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        // Scoping keamanan ketat: Administrator (super_admin, security_admin) memiliki akses sistem global.
+        // Role non-admin (security_analyst, developer, viewer) hanya boleh melihat laporan scan proyek miliknya.
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -52,7 +52,7 @@ class ReportController extends Controller
         $user = $request->user();
         $userRole = $user?->role?->name;
 
-        if (in_array($userRole, ['developer', 'viewer'], true)) {
+        if (! in_array($userRole, ['super_admin', 'security_admin'], true)) {
             $allowedProjectIds = $user->projects()->pluck('projects.id')
                 ->merge(\App\Models\Project::where('owner_id', $user->id)->pluck('id'))
                 ->unique();
@@ -141,7 +141,7 @@ class ReportController extends Controller
         $user = request()->user();
         $role = $user?->role?->name;
 
-        if (in_array($role, ['developer', 'viewer'], true)) {
+        if (! in_array($role, ['super_admin', 'security_admin'], true)) {
             $report->loadMissing(['scanJob:id,created_by,project_id', 'scanJob.project:id,owner_id']);
             $isCreator = $report->scanJob?->created_by === $user->id;
             $isOwner = $report->scanJob?->project?->owner_id === $user->id;
