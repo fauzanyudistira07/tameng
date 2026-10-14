@@ -18,7 +18,7 @@ class FindingController extends Controller
         $userRole = $user?->role?->name;
 
         $query = Finding::query()
-            ->with(['project:id,name,code', 'scanJob:id,code,status', 'scanRun:id,engine_key,status'])
+            ->with(['project:id,name,code', 'scanJob:id,code,status', 'scanRun:id,engine_key,status', 'evidence:id,finding_id,engine_key'])
             ->orderByRaw("FIELD(severity, 'critical', 'high', 'medium', 'low', 'informational')")
             ->orderByDesc('id');
 

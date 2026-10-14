@@ -572,6 +572,49 @@ function formatDate(dt?: string) {
   }
 }
 
+function formatFindingTitle(f: FindingItem): string {
+  let title = f.title || "Security Finding";
+  const doubledPrefixMatch = title.match(/^([^:]+):\s*\1:\s*(.*)$/i);
+  if (doubledPrefixMatch) {
+    title = `${doubledPrefixMatch[1]}: ${doubledPrefixMatch[2]}`;
+  } else {
+    const similarMatch = title.match(/^([a-zA-Z0-9.\-_/]+?)(?:\/v\d+)?:\s*\1(?:\/v\d+)?:?\s*(.*)$/i);
+    if (similarMatch && similarMatch[2]) {
+      title = `${similarMatch[1]}: ${similarMatch[2]}`;
+    }
+  }
+  return title;
+}
+
+function getEngines(f: FindingItem): string[] {
+  if (Array.isArray(f.evidence) && f.evidence.length > 0) {
+    const keys = f.evidence.map((e: any) => e.engine_key?.toUpperCase()).filter(Boolean);
+    const unique = Array.from(new Set(keys));
+    if (unique.length > 0) return unique as string[];
+  }
+  const fallback = f.scanRun?.engine_key || f.scan_run?.engine_key || (f as any).engine_key;
+  return [String(fallback || "SECURITY-ENGINE").toUpperCase()];
+}
+
+function getEngineBadgeClass(eng: string): string {
+  switch (eng.toLowerCase()) {
+    case "trivy":
+      return "bg-indigo-lt text-indigo";
+    case "osv":
+      return "bg-purple-lt text-purple";
+    case "semgrep":
+      return "bg-azure-lt text-azure";
+    case "gitleaks":
+      return "bg-red-lt text-red";
+    case "mobsf":
+      return "bg-teal-lt text-teal";
+    case "zap":
+      return "bg-orange-lt text-orange";
+    default:
+      return "bg-secondary-lt text-secondary";
+  }
+}
+
 onMounted(async () => {
   if (!currentUser.value) {
     await loadUser();
@@ -1099,7 +1142,13 @@ onMounted(async () => {
                   <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
                     <span class="badge bg-dark-lt text-secondary font-monospace">{{ f.code }}</span>
                     <span class="task-issue-title font-weight-semibold fs-3">
-                      {{ f.title }}
+                      {{ formatFindingTitle(f) }}
+                      <span
+                        v-if="f.cve && !formatFindingTitle(f).includes(f.cve)"
+                        class="text-secondary fw-normal fs-5 ms-1"
+                      >
+                        ({{ f.cve }})
+                      </span>
                     </span>
                   </div>
 
@@ -1453,8 +1502,15 @@ onMounted(async () => {
                   </span>
                 </td>
                 <td>
-                  <div class="fw-bold text-wrap" style="max-width: 320px">
-                    {{ f.title }}
+                  <div class="fw-bold text-wrap" style="max-width: 340px">
+                    {{ formatFindingTitle(f) }}
+                    <span
+                      v-if="f.cve && !formatFindingTitle(f).includes(f.cve)"
+                      class="text-secondary fw-normal ms-1"
+                      style="font-size: 0.8rem"
+                    >
+                      ({{ f.cve }})
+                    </span>
                   </div>
                   <div class="d-flex flex-wrap align-items-center gap-1 mt-1">
                     <span
@@ -1486,16 +1542,16 @@ onMounted(async () => {
                   </div>
                 </td>
                 <td>
-                  <div class="d-flex align-items-center gap-1">
+                  <div class="d-flex align-items-center gap-1 flex-wrap">
                     <span
-                      class="badge bg-indigo-lt text-uppercase font-monospace"
-                      style="font-size: 0.75rem"
+                      v-for="eng in getEngines(f)"
+                      :key="eng"
+                      class="badge text-uppercase font-monospace"
+                      :class="getEngineBadgeClass(eng)"
+                      style="font-size: 0.72rem"
+                      :title="`Dideteksi & divalidasi oleh engine ${eng}`"
                     >
-                      {{
-                        f.scanRun?.engine_key ||
-                        f.scan_run?.engine_key ||
-                        "SECURITY-ENGINE"
-                      }}
+                      {{ eng }}
                     </span>
                   </div>
                   <code
