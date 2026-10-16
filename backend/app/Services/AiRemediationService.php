@@ -294,7 +294,8 @@ class AiRemediationService
         $engine = $finding->engine_key ?? 'Security Scanner';
         $filePath = $finding->file_path ?? ($finding->endpoint ?? 'Web Server Configuration');
         $lineInfo = $finding->line_start ? "Baris {$finding->line_start}" . ($finding->line_end ? "-{$finding->line_end}" : "") : 'Header HTTP / Konfigurasi Global';
-        $evidence = !empty($finding->evidence_summary) ? json_encode($finding->evidence_summary, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : 'Tidak ada potongan bukti langsung.';
+        $rawEvidence = !empty($finding->evidence_summary) ? json_encode($finding->evidence_summary, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) : 'Tidak ada potongan bukti langsung.';
+        $evidence = $this->redactSensitiveSecrets($rawEvidence);
 
         return <<<PROMPT
 Anda adalah AI Spesialis Keamanan Siber Aplikasi (Senior DevSecOps & Certified Penetration Tester) tingkat dunia untuk platform TAMENG.
@@ -1119,6 +1120,21 @@ PROMPT;
             'low' => 3.1,
             default => 0.0,
         };
+    }
+
+    private function redactSensitiveSecrets(string $text): string
+    {
+        $patterns = [
+            '/(gh[pousr]_[A-Za-z0-9_]{36,255})/' => '[REDACTED_GITHUB_TOKEN]',
+            '/(AKIA[0-9A-Z]{16})/' => '[REDACTED_AWS_KEY]',
+            '/(AIza[0-9A-Za-z\\-_]{35})/' => '[REDACTED_GOOGLE_API_KEY]',
+            '/(sk-[a-zA-Z0-9]{32,})/' => '[REDACTED_OPENAI_KEY]',
+            '/(bearer\s+[A-Za-z0-9\-\._~\+\/]+=*)/i' => 'Bearer [REDACTED_TOKEN]',
+            '/-----BEGIN [A-Z ]+ PRIVATE KEY-----.*?-----END [A-Z ]+ PRIVATE KEY-----/s' => '[REDACTED_PRIVATE_KEY]',
+            '/("?(?:password|secret|token|api_key|access_token)"?\s*[:=]\s*"?[^",\s\n]+"?)/i' => '$1 => [REDACTED]',
+        ];
+
+        return preg_replace(array_keys($patterns), array_values($patterns), $text) ?? $text;
     }
 }
 

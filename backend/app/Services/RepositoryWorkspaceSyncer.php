@@ -145,6 +145,24 @@ class RepositoryWorkspaceSyncer
         $workspacePath = $workspaceRoot.DIRECTORY_SEPARATOR.$workspaceName;
         File::ensureDirectoryExists($workspacePath);
 
+        $parsedUrl = parse_url($repository->url);
+        $scheme = strtolower($parsedUrl['scheme'] ?? '');
+        $host = strtolower($parsedUrl['host'] ?? '');
+
+        if (! in_array($scheme, ['http', 'https'], true) || empty($host)) {
+            throw ValidationException::withMessages([
+                'url' => ['URL unduhan harus menggunakan protokol HTTP atau HTTPS yang valid.'],
+            ]);
+        }
+
+        // SSRF Protection: Resolve host IP and check against loopback, link-local, and private RFC1918 ranges
+        $ip = gethostbyname($host);
+        if (! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            throw ValidationException::withMessages([
+                'url' => ['Akses ke alamat IP privat, loopback, atau link-local internal diblokir oleh kebijakan keamanan TAMENG.'],
+            ]);
+        }
+
         // Determine filename
         $parsedPath = parse_url($repository->url, PHP_URL_PATH) ?? '';
         $filename = basename($parsedPath);
@@ -172,11 +190,20 @@ class RepositoryWorkspaceSyncer
             ]);
         }
 
-        // Auto extract APK/ZIP contents so that manifest, assets, and classes are available for SAST engines
+        // Auto extract APK/ZIP contents safely with Zip Slip protection
         if (class_exists(\ZipArchive::class) && in_array(strtolower(pathinfo($filename, PATHINFO_EXTENSION)), ['apk', 'zip', 'ipa', 'aab'], true)) {
             $zip = new \ZipArchive();
             if ($zip->open($targetFilePath) === true) {
-                $zip->extractTo($workspacePath);
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $entryName = $zip->getNameIndex($i);
+                    if ($entryName === false) {
+                        continue;
+                    }
+                    if (str_contains($entryName, '..') || str_starts_with($entryName, '/') || str_starts_with($entryName, '\\') || str_contains($entryName, ':')) {
+                        continue;
+                    }
+                    $zip->extractTo($workspacePath, [$entryName]);
+                }
                 $zip->close();
             }
         }

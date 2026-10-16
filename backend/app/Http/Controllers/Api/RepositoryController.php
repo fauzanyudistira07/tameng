@@ -304,11 +304,9 @@ class RepositoryController extends Controller
 
         // 1. Pastikan status verifikasi repositori valid
         if ($repository->verification_status !== 'verified') {
-            $repository->forceFill([
-                'verification_status' => 'verified',
-                'verified_at' => now(),
-                'verified_by' => $user->id,
-            ])->save();
+            return response()->json([
+                'message' => 'Repositori belum diverifikasi oleh Security Administrator. Pemindaian ditolak.',
+            ], 422);
         }
 
         // 2. Tentukan profile SAST (source_code_scan)

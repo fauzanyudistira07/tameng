@@ -11,6 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -299,18 +300,39 @@ class AuthController extends Controller
 
         $record = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
 
-        if (! $record || ! Hash::check($validated['token'], $record->token)) {
+        if (! $record) {
             throw ValidationException::withMessages([
                 'token' => ['Kode verifikasi tidak valid atau telah kadaluarsa.'],
             ]);
         }
 
-        if (Carbon::parse($record->created_at)->addMinutes(30)->isPast()) {
+        if (Carbon::parse($record->created_at)->addMinutes(15)->isPast()) {
             DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
             throw ValidationException::withMessages([
-                'token' => ['Kode verifikasi telah kadaluarsa (melebihi 30 menit). Silakan minta kode baru.'],
+                'token' => ['Kode verifikasi telah kadaluarsa (melebihi 15 menit). Silakan minta kode baru.'],
             ]);
         }
+
+        $attemptCacheKey = 'pwd_reset_attempts_'.md5($validated['email']);
+        $attempts = (int) Cache::get($attemptCacheKey, 0);
+
+        if ($attempts >= 5) {
+            DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+            Cache::forget($attemptCacheKey);
+            throw ValidationException::withMessages([
+                'token' => ['Terlalu banyak percobaan kode verifikasi yang salah. Kode telah dibatalkan demi keamanan.'],
+            ]);
+        }
+
+        if (! Hash::check($validated['token'], $record->token)) {
+            Cache::put($attemptCacheKey, $attempts + 1, 900);
+            $remaining = 5 - ($attempts + 1);
+            throw ValidationException::withMessages([
+                'token' => ["Kode verifikasi tidak valid. Sisa percobaan: {$remaining} kali."],
+            ]);
+        }
+
+        Cache::forget($attemptCacheKey);
 
         $user = User::where('email', $validated['email'])->first();
         if (! $user) {

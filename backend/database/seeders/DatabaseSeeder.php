@@ -34,7 +34,7 @@ class DatabaseSeeder extends Seeder
         ], [
             'role_id' => $superAdminRoleId,
             'name' => 'System Admin',
-            'password' => Hash::make('password'),
+            'password' => Hash::make(env('DEFAULT_ADMIN_PASSWORD', 'ChangeMe!12345')),
             'status' => 'active',
         ]);
 

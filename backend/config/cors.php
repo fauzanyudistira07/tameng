@@ -15,9 +15,7 @@ return [
         'http://localhost:8080',
     ]))),
 
-    'allowed_origins_patterns' => [
-        '#^https?://.*#',
-    ],
+    'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 

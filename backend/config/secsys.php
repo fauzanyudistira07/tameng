@@ -25,6 +25,7 @@ return [
     'docker_host_workspace_root' => env('SECSYS_DOCKER_HOST_WORKSPACE_ROOT'),
     'docker_host_storage_root' => env('SECSYS_DOCKER_HOST_STORAGE_ROOT'),
     'git_webhook_auto_scan_enabled' => env('SECSYS_GIT_WEBHOOK_AUTO_SCAN', false),
+    'git_webhook_secret' => env('SECSYS_GIT_WEBHOOK_SECRET', env('GIT_WEBHOOK_SECRET')),
 
     /*
     |--------------------------------------------------------------------------

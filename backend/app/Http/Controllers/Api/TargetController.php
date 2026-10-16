@@ -141,27 +141,28 @@ class TargetController extends Controller
             \Illuminate\Support\Facades\File::ensureDirectoryExists($workspacePath);
 
             $originalName = $uploadedFile->getClientOriginalName();
-            $targetFilePath = $workspacePath.DIRECTORY_SEPARATOR.$originalName;
-            $uploadedFile->move($workspacePath, $originalName);
+            $safeName = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', basename($originalName));
+            if ($safeName === '' || $safeName === '.' || $safeName === '..') {
+                $safeName = 'upload_'.Str::random(8).'.'.$ext;
+            }
+            $targetFilePath = $workspacePath.DIRECTORY_SEPARATOR.$safeName;
+            $uploadedFile->move($workspacePath, $safeName);
 
-            if (class_exists(\ZipArchive::class) && in_array($ext, ['apk', 'zip', 'ipa', 'aab'], true)) {
-                $zip = new \ZipArchive();
-                if ($zip->open($targetFilePath) === true) {
-                    $zip->extractTo($workspacePath);
-                    $zip->close();
-                }
+            if (in_array($ext, ['apk', 'zip', 'ipa', 'aab'], true)) {
+                $this->safelyExtractZipArchive($targetFilePath, $workspacePath);
             }
 
-            $validated['base_url'] = 'file://'.$originalName;
+            $validated['base_url'] = 'file://'.$safeName;
             if (empty($validated['hostname'])) {
-                $validated['hostname'] = $originalName;
+                $validated['hostname'] = $safeName;
             }
             if (empty($validated['name'])) {
-                $validated['name'] = pathinfo($originalName, PATHINFO_FILENAME);
+                $validated['name'] = pathinfo($safeName, PATHINFO_FILENAME);
             }
 
             $fileData = [
-                'file_name' => $originalName,
+                'file_name' => $safeName,
+                'original_name' => $originalName,
                 'file_size' => \Illuminate\Support\Facades\File::size($targetFilePath),
                 'file_path' => $targetFilePath,
                 'local_path' => $workspacePath,
@@ -215,24 +216,25 @@ class TargetController extends Controller
             \Illuminate\Support\Facades\File::ensureDirectoryExists($workspacePath);
 
             $originalName = $uploadedFile->getClientOriginalName();
-            $targetFilePath = $workspacePath.DIRECTORY_SEPARATOR.$originalName;
-            $uploadedFile->move($workspacePath, $originalName);
+            $safeName = preg_replace('/[^a-zA-Z0-9_\.-]/', '_', basename($originalName));
+            if ($safeName === '' || $safeName === '.' || $safeName === '..') {
+                $safeName = 'upload_'.Str::random(8).'.'.$ext;
+            }
+            $targetFilePath = $workspacePath.DIRECTORY_SEPARATOR.$safeName;
+            $uploadedFile->move($workspacePath, $safeName);
 
-            if (class_exists(\ZipArchive::class) && in_array($ext, ['apk', 'zip', 'ipa', 'aab'], true)) {
-                $zip = new \ZipArchive();
-                if ($zip->open($targetFilePath) === true) {
-                    $zip->extractTo($workspacePath);
-                    $zip->close();
-                }
+            if (in_array($ext, ['apk', 'zip', 'ipa', 'aab'], true)) {
+                $this->safelyExtractZipArchive($targetFilePath, $workspacePath);
             }
 
-            $validated['base_url'] = 'file://'.$originalName;
+            $validated['base_url'] = 'file://'.$safeName;
             if (empty($validated['hostname'])) {
-                $validated['hostname'] = $originalName;
+                $validated['hostname'] = $safeName;
             }
 
             $fileData = [
-                'file_name' => $originalName,
+                'file_name' => $safeName,
+                'original_name' => $originalName,
                 'file_size' => \Illuminate\Support\Facades\File::size($targetFilePath),
                 'file_path' => $targetFilePath,
                 'local_path' => $workspacePath,
@@ -330,11 +332,9 @@ class TargetController extends Controller
 
         // 1. Pastikan target terverifikasi
         if ($target->verification_status !== 'verified') {
-            $target->forceFill([
-                'verification_status' => 'verified',
-                'verified_at' => now(),
-                'verified_by' => $user->id,
-            ])->save();
+            return response()->json([
+                'message' => 'Target belum diverifikasi oleh Security Administrator. Pemindaian ditolak.',
+            ], 422);
         }
 
         // 2. Tentukan Scan Profile (container_security_scan untuk Container, mobile_app_scan untuk Mobile App, api_safe_scan untuk API, web_safe_scan untuk Web)
@@ -476,5 +476,33 @@ class TargetController extends Controller
             'file' => ['nullable', 'file', 'max:204800'],
             'app_file' => ['nullable', 'file', 'max:204800'],
         ]);
+    }
+
+    private function safelyExtractZipArchive(string $zipFilePath, string $destinationPath): void
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            return;
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipFilePath) !== true) {
+            return;
+        }
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $entryName = $zip->getNameIndex($i);
+            if ($entryName === false) {
+                continue;
+            }
+
+            // Mitigate Zip Slip: reject path traversal, absolute paths, or colon drive syntax
+            if (str_contains($entryName, '..') || str_starts_with($entryName, '/') || str_starts_with($entryName, '\\') || str_contains($entryName, ':')) {
+                continue;
+            }
+
+            $zip->extractTo($destinationPath, [$entryName]);
+        }
+
+        $zip->close();
     }
 }

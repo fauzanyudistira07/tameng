@@ -30,6 +30,31 @@ class GitWebhookController extends Controller
             ], 200);
         }
 
+        $webhookSecret = (string) config('secsys.git_webhook_secret', env('GIT_WEBHOOK_SECRET', ''));
+        if ($webhookSecret !== '') {
+            $githubSignature = (string) $request->header('X-Hub-Signature-256', '');
+            $gitlabToken = (string) $request->header('X-Gitlab-Token', '');
+            $customSecret = (string) $request->header('X-Webhook-Secret', '');
+
+            $valid = false;
+            if ($githubSignature !== '' && str_starts_with($githubSignature, 'sha256=')) {
+                $hash = substr($githubSignature, 7);
+                $expected = hash_hmac('sha256', $request->getContent(), $webhookSecret);
+                $valid = hash_equals($expected, $hash);
+            } elseif ($gitlabToken !== '') {
+                $valid = hash_equals($webhookSecret, $gitlabToken);
+            } elseif ($customSecret !== '') {
+                $valid = hash_equals($webhookSecret, $customSecret);
+            }
+
+            if (! $valid) {
+                return response()->json([
+                    'status' => 'unauthorized',
+                    'message' => 'Autentikasi webhook gagal: signature atau secret token tidak valid.',
+                ], 401);
+            }
+        }
+
         $payload = $request->all();
         
         // 1. Detect Repository URL from GitHub / GitLab / Bitbucket webhook payload

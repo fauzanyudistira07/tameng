@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class CurrentUserController extends Controller
 {
@@ -30,6 +31,7 @@ class CurrentUserController extends Controller
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'phone' => ['nullable', 'string', 'max:25'],
             'department' => ['nullable', 'string', 'max:150'],
+            'current_password' => ['nullable', 'string'],
             'password' => ['nullable', 'string', 'min:8'],
             'password_confirmation' => ['nullable', 'same:password'],
         ]);
@@ -43,6 +45,12 @@ class CurrentUserController extends Controller
         ];
 
         if (! empty($data['password'])) {
+            if (empty($data['current_password']) || ! Hash::check($data['current_password'], $user->password)) {
+                throw ValidationException::withMessages([
+                    'current_password' => ['Password saat ini yang Anda masukkan salah.'],
+                ]);
+            }
+
             $updateData['password'] = Hash::make($data['password']);
             $updateData['password_changed_at'] = now();
         }
