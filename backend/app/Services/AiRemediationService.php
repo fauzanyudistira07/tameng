@@ -441,6 +441,52 @@ PROMPT;
         $cve = strtolower($finding->cve ?? '');
         $package = data_get($finding->evidence_summary, 'package');
 
+        // 0. 2026 Critical Threat Intelligence Detection (PHP2Shell, Brotli, Citrix NetScaler, Cisco SD-WAN, SharePoint)
+        if (Str::contains($cve, ['cve-2026-109618', 'cve-2026-109619']) || Str::contains($rule, ['php2shell', 'cve-2026-109618', 'cve-2026-109619']) || Str::contains($title, ['php2shell'])) {
+            return [
+                'type' => 'cve_2026_php2shell',
+                'name' => 'PHP2Shell Critical RCE (CVE-2026-109618 / CVE-2026-109619)',
+                'cwe' => 'CWE-119: Memory Buffer Bounds Restriction Failure',
+                'owasp' => 'A06:2021-Vulnerable and Outdated Components',
+            ];
+        }
+
+        if (Str::contains($cve, ['cve-2026-111497']) || Str::contains($rule, ['cve-2026-111497', 'brotli']) || Str::contains($title, ['brotli'])) {
+            return [
+                'type' => 'cve_2026_brotli',
+                'name' => 'Google Brotli Decompression Memory Corruption (CVE-2026-111497)',
+                'cwe' => 'CWE-787: Out-of-bounds Write',
+                'owasp' => 'A06:2021-Vulnerable and Outdated Components',
+            ];
+        }
+
+        if (Str::contains($cve, ['cve-2026-88771', 'cve-2026-88772']) || Str::contains($rule, ['cve-2026-88771', 'netscaler'])) {
+            return [
+                'type' => 'cve_2026_citrix_netscaler',
+                'name' => 'Citrix NetScaler ADC & Gateway Pre-Auth RCE (CVE-2026-88771)',
+                'cwe' => 'CWE-120: Buffer Copy without Checking Size of Input',
+                'owasp' => 'A01:2021-Broken Access Control',
+            ];
+        }
+
+        if (Str::contains($cve, ['cve-2026-76504']) || Str::contains($rule, ['cve-2026-76504', 'cisco-sdwan', 'vmanage'])) {
+            return [
+                'type' => 'cve_2026_cisco_sdwan',
+                'name' => 'Cisco Catalyst SD-WAN Command Injection RCE (CVE-2026-76504)',
+                'cwe' => 'CWE-78: OS Command Injection',
+                'owasp' => 'A03:2021-Injection',
+            ];
+        }
+
+        if (Str::contains($cve, ['cve-2026-65660']) || Str::contains($rule, ['cve-2026-65660', 'sharepoint'])) {
+            return [
+                'type' => 'cve_2026_sharepoint',
+                'name' => 'Microsoft SharePoint Server Code Injection (CVE-2026-65660)',
+                'cwe' => 'CWE-94: Improper Control of Generation of Code',
+                'owasp' => 'A03:2021-Injection',
+            ];
+        }
+
         // 1. Vulnerable Dependency (SCA - OSV, Trivy, Grype, Dependency-Check, lockfiles, CVEs, GHSAs)
         $isDependencyEngine = in_array($engine, ['osv', 'trivy', 'grype', 'dependency-check', 'dependabot', 'snyk']);
         $isDependencyFile = Str::contains($filePath, ['composer.lock', 'composer.json', 'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock', 'requirements.txt', 'gemfile', 'go.mod', 'pom.xml', 'build.gradle']);
@@ -658,6 +704,41 @@ PROMPT;
     private function buildExplanation(Finding $finding, array $category): array
     {
         return match ($category['type']) {
+            'cve_2026_php2shell' => [
+                'summary' => 'Terdeteksi runtime PHP rentan terhadap PHP2Shell (CVE-2026-109618 / CVE-2026-109619) yang memungkinkan Remote Code Execution (RCE) tanpa autentikasi melalui memory corruption pada request stream buffer atau kebocoran state internal worker thread.',
+                'cause' => 'Versi PHP di bawah 8.4.27, 8.3.36, atau 8.2.35 memiliki cacat pada pemrosesan buffer inisialisasi parsial dan retensi memori antar-eksekusi worker pool.',
+                'attack_vector' => "1. Penyerang mengirimkan HTTP request dengan payload request stream terfragmentasi khusus.\n2. Server PHP-FPM mengalami korupsi memori zend_mm_heap atau membaca stale request state dari request sebelumnya.\n3. Penyerang mengarahkan alur eksekusi memori untuk menjalankan shell code di server (Remote Code Execution).",
+                'impact' => 'Pengambilalihan server secara penuh (Full Remote Code Execution), pencurian data rahasia/database credentials, dan penanaman backdoor web.',
+                'verification' => 'php -v && php -i | grep -i "Zend Memory Manager"',
+            ],
+            'cve_2026_brotli' => [
+                'summary' => 'Ditemukan pustaka Google Brotli (versi 1.0.3 s.d. 1.2.0) yang rentan terhadap out-of-bounds write dan memory corruption (CVE-2026-111497).',
+                'cause' => 'Pengecekan return value yang tidak memadai pada BrotliDecoderDecompressStream yang memungkinkan manipulasi batas buffer memori.',
+                'attack_vector' => 'Penyerang mengirimkan payload kompresi Brotli terdistorsi yang memicu kegagalan decoder state dan korupsi memori heap.',
+                'impact' => 'Denial of Service (DoS crash), kebocoran data memori, dan potensi eksekusi kode acak.',
+                'verification' => 'ldconfig -p | grep -i brotli || npm list brotli',
+            ],
+            'cve_2026_citrix_netscaler' => [
+                'summary' => 'Perangkat Citrix NetScaler ADC atau NetScaler Gateway terdeteksi rentan terhadap pre-auth Remote Code Execution (CVE-2026-88771).',
+                'cause' => 'Buffer copy tanpa validasi batas ukuran input pada penanganan endpoint gateway autentikasi.',
+                'attack_vector' => 'Penyerang mengeksploitasi buffer overflow pada endpoint VPN/AAA untuk mengeksekusi shell code tanpa autentikasi.',
+                'impact' => 'Pembajakan sistem perimeter VPN korporat, bypass akses jaringan internal, dan pencurian kredensial Active Directory.',
+                'verification' => 'Periksa versi firmware NetScaler melalui NSCLI: show version',
+            ],
+            'cve_2026_cisco_sdwan' => [
+                'summary' => 'Ditemukan konsol Cisco Catalyst SD-WAN Manager (vManage) rentan terhadap unauthenticated command injection (CVE-2026-76504).',
+                'cause' => 'Penerimaan argumen hex-encoded pada API manajemen perangkat tanpa sanitasi karakter shell sistem operasi.',
+                'attack_vector' => 'Penyerang mengirimkan permintaan HTTP ke API vManage yang menyematkan perintah shell terenkode hex untuk mengeksekusi perintah root.',
+                'impact' => 'Kompromi pengendali jaringan SD-WAN, manipulasi rute lalu lintas data, dan penghentian komunikasi antar cabang.',
+                'verification' => 'Audit versi vManage via Cisco Software Checker',
+            ],
+            'cve_2026_sharepoint' => [
+                'summary' => 'Server Microsoft SharePoint terdeteksi rentan terhadap code injection (CVE-2026-65660) via penanganan parser dokumen internal.',
+                'cause' => 'Kegagalan isolasi eksekusi objek kode saat memproses berkas dokumen SharePoint.',
+                'attack_vector' => 'Penyerang menyusupkan dokumen berformat khusus yang memicu code execution di konteks akun SharePoint Server.',
+                'impact' => 'Pencurian seluruh dokumen rahasia instansi, kompromi farm SharePoint, dan eskalasi hak istimewa di domain Windows.',
+                'verification' => 'Periksa patch level SharePoint via Windows Update / Get-SPInstalledProduct',
+            ],
             'clickjacking' => [
                 'summary' => 'Server web belum mengonfigurasi header respon anti-framing (X-Frame-Options atau CSP frame-ancestors). Kondisi ini mengizinkan halaman aplikasi dimuat di dalam iframe situs eksternal yang dikendalikan pihak lain.',
                 'cause' => 'Web server Nginx/Apache atau middleware HTTP framework aplikasi belum mengirimkan instruksi pembatasan rendering frame pada setiap respon HTTP.',
@@ -838,6 +919,36 @@ PROMPT;
         $filePath = $finding->file_path ?: ($finding->endpoint ? 'Konfigurasi Web Server' : 'src/SecurityConfig.' . $fileExt);
 
         return match ($category['type']) {
+            'cve_2026_php2shell' => [
+                'language' => 'dockerfile',
+                'file_path' => 'Dockerfile (atau composer.json)',
+                'vulnerable_code' => "# KONDISI RENTAN (Versi PHP lama rentan PHP2Shell RCE):\nFROM php:8.4.20-fpm-alpine\n# ATAU PADA composer.json:\n# \"require\": { \"php\": \"^8.4\" }",
+                'secure_code' => "# SOLUSI PERBAIKAN PADA DOCKERFILE:\nFROM php:8.4.27-fpm-alpine\n\n# MATIKAN INFORMASI VERSI DAN AMANKAN MEMORI DI php.ini:\nRUN echo \"expose_php = Off\" > /usr/local/etc/php/conf.d/security.ini \\\n  && echo \"opcache.memory_consumption = 256\" >> /usr/local/etc/php/conf.d/security.ini\n\n# ATAU PADA composer.json:\n# \"require\": { \"php\": \">=8.4.27\" }",
+            ],
+            'cve_2026_brotli' => [
+                'language' => 'json',
+                'file_path' => 'package.json (atau composer.json)',
+                'vulnerable_code' => "// KONDISI RENTAN (Brotli < 1.2.1):\n\"dependencies\": {\n  \"brotli\": \"1.1.0\"\n}",
+                'secure_code' => "// SOLUSI PERBAIKAN:\n\"dependencies\": {\n  \"brotli\": \"^1.2.1\"\n}",
+            ],
+            'cve_2026_citrix_netscaler' => [
+                'language' => 'text',
+                'file_path' => 'Citrix NetScaler Policy / Firewall ACL',
+                'vulnerable_code' => "# KONDISI RENTAN: Portal manajemen dan VPN terbuka langsung ke internet publik tanpa filtering",
+                'secure_code' => "# SOLUSI PERBAIKAN SEGERA:\n# 1. Terapkan penambalan firmware resmi dari Citrix (Citrix Security Advisory)\n# 2. Batasi akses IP admin console hanya dari subnet manajemen lokal (Bastion/Jump Host)\n# 3. Aktifkan WAF rule untuk memblokir overflow parameter pada path /vpn/ dan /oauth/",
+            ],
+            'cve_2026_cisco_sdwan' => [
+                'language' => 'text',
+                'file_path' => 'Cisco vManage Firewall / Reverse Proxy',
+                'vulnerable_code' => "# KONDISI RENTAN: API endpoint /dataservice/ terbuka ke jaringan publik",
+                'secure_code' => "# SOLUSI PERBAIKAN:\n# 1. Terapkan Cisco Security Advisory patch resmi untuk Catalyst SD-WAN Manager.\n# 2. Batasi akses ke port manajemen vManage (port 8443) hanya melalui VPN manajemen internal.",
+            ],
+            'cve_2026_sharepoint' => [
+                'language' => 'xml',
+                'file_path' => 'SharePoint web.config / Windows Update',
+                'vulnerable_code' => "<!-- KONDISI RENTAN: SharePoint Server Subscription Edition belum menginstal Security Update 2026 -->",
+                'secure_code' => "<!-- SOLUSI PERBAIKAN:\n1. Instal Microsoft Security Update terbaru (KB rilis 2026).\n2. Aktifkan AMSI (Antimalware Scan Interface) pada SharePoint farm:\n-->\n<appSettings>\n  <add key=\"EnableAMSI\" value=\"true\" />\n</appSettings>",
+            ],
             'clickjacking' => [
                 'language' => 'nginx',
                 'file_path' => '/etc/nginx/conf.d/security.conf (atau .htaccess)',
@@ -993,6 +1104,33 @@ PROMPT;
     private function buildMitigationSteps(Finding $finding, array $category): array
     {
         return match ($category['type']) {
+            'cve_2026_php2shell' => [
+                'Segera perbarui versi PHP runtime ke versi aman (PHP 8.4.27+, PHP 8.3.36+, atau PHP 8.2.35+).',
+                'Pastikan direktif `expose_php = Off` pada konfigurasi `php.ini` guna menyembunyikan versi PHP dari respon header HTTP.',
+                'Atur `opcache.memory_consumption = 256` untuk mencegah memory pressure yang memicu kegagalan buffer alokasi.',
+                'Restart seluruh daemon web server dan service PHP-FPM / worker pool setelah pembaruan runtime selesai.',
+                'Jalankan ulang pemindaian TAMENG SAST & DAST untuk memverifikasi penutupan celah.',
+            ],
+            'cve_2026_brotli' => [
+                'Perbarui pustaka Brotli ke versi 1.2.1+ atau versi LTS yang telah ditambal (misal: 1.0.10+ / 1.1.1+).',
+                'Jika menggunakan modul Nginx `ngx_brotli`, build ulang modul menggunakan commit pustaka Brotli terbaru.',
+                'Audit berkas lockfile package manager (package-lock.json / composer.lock) untuk memastikan tidak ada transitive dependency Brotli lama.',
+            ],
+            'cve_2026_citrix_netscaler' => [
+                'Segera lakukan upgrade firmware Citrix ADC / NetScaler Gateway ke versi build aman yang ditentukan pada Citrix Security Advisory.',
+                'Isolasi antarmuka manajemen NSIP/SNIP dan konsol admin dari akses internet publik.',
+                'Aktifkan Web Application Firewall (WAF) rule untuk memblokir overflow parameter pada path `/vpn/` dan `/oauth/`.',
+            ],
+            'cve_2026_cisco_sdwan' => [
+                'Lakukan patch software Cisco Catalyst SD-WAN Manager (vManage) ke rilis terverifikasi bebas celah.',
+                'Terapkan Access Control List (ACL) pada firewall perimeter untuk membatasi akses port 8443/443 hanya dari IP Bastion tepercaya.',
+                'Audit audit-log vManage untuk mendeteksi tanda-tanda command injection pada endpoint `/dataservice/`.',
+            ],
+            'cve_2026_sharepoint' => [
+                'Terapkan update kumulatif keamanan Microsoft SharePoint (KB Security Update terbaru).',
+                'Pastikan proteksi Antimalware Scan Interface (AMSI) aktif pada server farm SharePoint.',
+                'Batasi hak akses akun service SharePoint menurut prinsip Least Privilege.',
+            ],
             'clickjacking' => [
                 'Tambahkan header `X-Frame-Options: SAMEORIGIN` pada konfigurasi Nginx/Apache atau middleware HTTP.',
                 'Jika website perlu disematkan oleh domain mitra tertentu, gunakan direktif CSP `frame-ancestors \'self\' https://trusted-partner.com`.',

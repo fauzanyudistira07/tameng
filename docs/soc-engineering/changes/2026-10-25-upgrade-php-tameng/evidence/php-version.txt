@@ -1,0 +1,16 @@
+=== secsys-backend ===
+PHP 8.4.27 (cli) (built: Oct 21 2026 22:52:58) (NTS)
+Copyright (c) The PHP Group
+Built by https://github.com/docker-library/php
+Zend Engine v4.4.27, Copyright (c) Zend Technologies
+    with Zend OPcache v8.4.27, Copyright (c), by Zend Technologies
+
+=== secsys-worker ===
+PHP 8.4.27 (cli) (built: Oct 21 2026 22:52:58) (NTS)
+Copyright (c) The PHP Group
+Built by https://github.com/docker-library/php
+Zend Engine v4.4.27, Copyright (c) Zend Technologies
+    with Zend OPcache v8.4.27, Copyright (c), by Zend Technologies
+
+=== Framework ===
+Laravel Framework 12.67.0

@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-10-28T02:35:00Z",
+  "issue_reported": "Engine shows DEGRADED status and health check returns red error when image not pulled yet",
+  "root_causes": [
+    {
+      "component": "SecurityEngineController::healthCheck",
+      "flaw": "$engine->status = $isAvailable ? 'AVAILABLE' : 'DEGRADED'; immediately marks missing image as DEGRADED instead of STANDBY or triggering auto-pull",
+      "http_response": "Returns 'message' => 'Image {$image} belum di-pull di docker daemon.' without action trigger"
+    },
+    {
+      "component": "EnginesView.vue (Frontend)",
+      "flaw": "actionMessage.value = { type: res.data.image_present ? 'success' : 'danger' }; flashes red alert box on missing image, alarming users without offering a pull action button"
+    },
+    {
+      "component": "Engine Provisioning State",
+      "flaw": "Newly registered engines (codeql, sonarqube, trufflehog, dependency_check, kubescape, wapiti, wuppiefuzz) were degraded during initial healthchecks prior to image downloads completing"
+    }
+  ],
+  "engines_in_degraded_state_at_baseline": [
+    "codeql",
+    "sonarqube",
+    "trufflehog",
+    "dependency_check",
+    "kubescape",
+    "wapiti",
+    "wuppiefuzz"
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "status": "ok",
+  "checked_at": "2026-10-25T11:27:24.881755Z",
+  "checks": {
+    "database": {
+      "ok": true,
+      "connection": "mysql",
+      "migrations_table": true
+    },
+    "storage": {
+      "ok": true,
+      "paths": [
+        {
+          "path": "/var/www/html/storage/app/private",
+          "exists": true,
+          "writable": true
+        },
+        {
+          "path": "/var/www/html/storage/framework/cache",
+          "exists": true,
+          "writable": true
+        },
+        {
+          "path": "/var/www/html/storage/framework/sessions",
+          "exists": true,
+          "writable": true
+        },
+        {
+          "path": "/var/www/html/storage/framework/views",
+          "exists": true,
+          "writable": true
+        },
+        {
+          "path": "/var/www/html/storage/logs",
+          "exists": true,
+          "writable": true
+        }
+      ]
+    },
+    "queue": {
+      "ok": true,
+      "connection": "database",
+      "jobs_table": true,
+      "failed_jobs_table": true
+    },
+    "repository_workspace": {
+      "ok": true,
+      "root": "/data/repository-workspaces",
+      "exists": true,
+      "writable": true
+    },
+    "engine_runtime": {
+      "ok": true,
+      "real_engines_enabled": true,
+      "runtime": "docker",
+      "gitleaks_image": "zricethezav/gitleaks:v8.28.0"
+    }
+  }
+}

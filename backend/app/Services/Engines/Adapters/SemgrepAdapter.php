@@ -26,11 +26,19 @@ class SemgrepAdapter extends RepositoryDockerAdapter
 
     protected function containerCommand(string $containerWorkspacePath, string $containerOutputPath, ?string $imageTag = null): array
     {
-        return [
+        $cmd = [
             'semgrep',
             'scan',
             '--config',
             'p/default',
+        ];
+
+        if (\Illuminate\Support\Facades\File::isDirectory(storage_path('app/private/rules/semgrep'))) {
+            $cmd[] = '--config';
+            $cmd[] = '/rules';
+        }
+
+        return array_merge($cmd, [
             '--disable-version-check',
             '--exclude',
             'vendor',
@@ -48,7 +56,7 @@ class SemgrepAdapter extends RepositoryDockerAdapter
             '--output',
             "{$containerOutputPath}/{$this->reportFilename()}",
             $containerWorkspacePath,
-        ];
+        ]);
     }
 
     protected function parseFindings(string $output): array
@@ -65,13 +73,15 @@ class SemgrepAdapter extends RepositoryDockerAdapter
             'title' => $finding['extra']['message'] ?? $finding['check_id'] ?? 'Semgrep finding',
             'severity' => $this->severity($finding['extra']['severity'] ?? null),
             'severity_raw' => $finding['extra']['severity'] ?? null,
-            'confidence' => 0.75,
+            'confidence' => 0.85,
             'asset_type' => 'repository',
             'file_path' => $finding['path'] ?? null,
             'line_start' => $finding['start']['line'] ?? null,
             'line_end' => $finding['end']['line'] ?? null,
             'cwe' => $finding['extra']['metadata']['cwe'][0] ?? null,
             'owasp' => $finding['extra']['metadata']['owasp'][0] ?? null,
+            'cve' => $finding['extra']['metadata']['cve'] ?? null,
+            'cvss' => isset($finding['extra']['metadata']['cvss']) ? (float) $finding['extra']['metadata']['cvss'] : null,
             'evidence_summary' => [
                 'check_id' => $finding['check_id'] ?? null,
                 'metadata' => $finding['extra']['metadata'] ?? null,

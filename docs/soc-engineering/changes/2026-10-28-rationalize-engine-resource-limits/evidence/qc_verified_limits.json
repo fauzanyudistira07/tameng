@@ -1,0 +1,26 @@
+[
+    {
+        "code": "codeql",
+        "name": "GitHub CodeQL",
+        "resource_class": "MEDIUM",
+        "memory_limit_mb": 2048,
+        "cpu_limit": "1.50",
+        "default_timeout": 600
+    },
+    {
+        "code": "sonarqube",
+        "name": "SonarQube Scanner",
+        "resource_class": "MEDIUM",
+        "memory_limit_mb": 1536,
+        "cpu_limit": "1.50",
+        "default_timeout": 450
+    },
+    {
+        "code": "zap",
+        "name": "OWASP ZAP",
+        "resource_class": "MEDIUM",
+        "memory_limit_mb": 1536,
+        "cpu_limit": "1.50",
+        "default_timeout": 600
+    }
+]

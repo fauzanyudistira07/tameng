@@ -104,6 +104,14 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
             $mounts[] = '/data/secsys-cache/trivy:/root/.cache/trivy';
         }
 
+        if ($this->key() === 'semgrep') {
+            $customRulesDir = storage_path('app/private/rules/semgrep');
+            if (File::isDirectory($customRulesDir)) {
+                $mounts[] = '-v';
+                $mounts[] = $this->dockerStorageMountSource($customRulesDir).':/rules:ro';
+            }
+        }
+
         $command = [
             $dockerBinary,
             'run',

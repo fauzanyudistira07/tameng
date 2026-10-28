@@ -26,6 +26,7 @@
    * 3.1 Registry & Engine Adapters
    * 3.2 Visual Flowchart: Multi-Engine Sandbox & Detection Pipeline (13.3)
    * 3.3 Severity & Risk Classification
+   * 3.4 Manajemen Aturan Kustom & Deteksi Kerentanan 2026 (Zero-Day / N-Day)
 5. [BAGIAN 4 — Alert & Notifikasi](#bagian-4--alert--notifikasi)
    * 4.1 Kanal Notifikasi Aktif & Terencana
    * 4.2 Visual Flowchart: Evaluasi Risiko & Dispatching Alert (13.4)
@@ -35,6 +36,7 @@
 7. [BAGIAN 6 — Response & Auto Remediation](#bagian-6--response--auto-remediation)
    * 6.1 Status Implementasi Respons
    * 6.2 Visual Flowchart: Advisory Remediation vs Planned Auto-Response (13.6)
+   * 6.3 Modul Heuristik AI Remediation Spesifik Kerentanan 2026
 8. [BAGIAN 7 — Dashboard TAMENG](#bagian-7--dashboard-tameng)
    * 7.1 Telemetri & Endpoint Data
    * 7.2 Visual Flowchart: Dashboard Telemetry & Client-Side Polling (13.8)
@@ -568,23 +570,23 @@ TAMENG mengelola katalog **20 Security Engines** yang dikelompokkan ke dalam **1
 | No | Domain | Engine Name | Key | Container Image | Resource Class | Status Adapter |
 | :---: | :--- | :--- | :--- | :--- | :---: | :---: |
 | 1 | **SOURCE_CODE** | Semgrep SAST | `semgrep` | `semgrep/semgrep:1.74.0` | MEDIUM | 🟢 Implemented |
-| 2 | **SOURCE_CODE** | GitHub CodeQL | `codeql` | `mcr.microsoft.com/cstsectools/codeql-container:latest` | HEAVY | 🔵 Skeleton / Planned |
-| 3 | **SOURCE_CODE** | SonarQube Scanner | `sonarqube` | `sonarsource/sonar-scanner-cli:latest` | HEAVY | 🔵 Skeleton / Planned |
+| 2 | **SOURCE_CODE** | GitHub CodeQL | `codeql` | `mcr.microsoft.com/cstsectools/codeql-container:latest` | MEDIUM | 🟢 Implemented |
+| 3 | **SOURCE_CODE** | SonarQube Scanner | `sonarqube` | `sonarsource/sonar-scanner-cli:latest` | MEDIUM | 🟢 Implemented |
 | 4 | **SECRET** | Gitleaks Secrets | `gitleaks` | `zricethezav/gitleaks:v8.28.0` | LIGHT | 🟢 Implemented |
-| 5 | **SECRET** | TruffleHog v3 | `trufflehog` | `trufflesecurity/trufflehog:3.68.0` | LIGHT | 🔵 Skeleton / Planned |
+| 5 | **SECRET** | TruffleHog v3 | `trufflehog` | `trufflesecurity/trufflehog:3.68.0` | LIGHT | 🟢 Implemented |
 | 6 | **DEPENDENCY** | Aqua Trivy | `trivy` | `aquasec/trivy:latest` | MEDIUM | 🟢 Implemented |
 | 7 | **DEPENDENCY** | Google OSV-Scanner | `osv` | `ghcr.io/google/osv-scanner:latest` | LIGHT | 🟢 Implemented |
-| 8 | **DEPENDENCY** | OWASP Dependency-Check | `dependency_check` | `owasp/dependency-check:9.0.9` | MEDIUM | 🔵 Skeleton / Planned |
+| 8 | **DEPENDENCY** | OWASP Dependency-Check | `dependency_check` | `owasp/dependency-check:9.0.9` | MEDIUM | 🟢 Implemented |
 | 9 | **SBOM** | Anchore Syft | `syft` | `anchore/syft:v0.105.0` | LIGHT | 🟢 Implemented |
 | 10 | **CONTAINER** | Anchore Grype | `grype` | `anchore/grype:v0.74.0` | MEDIUM | 🟢 Implemented |
 | 11 | **CONTAINER** | Hadolint Linter | `hadolint` | `hadolint/hadolint:v2.12.0` | LIGHT | 🟢 Implemented |
 | 12 | **IAC** | Bridgecrew Checkov | `checkov` | `bridgecrew/checkov:3.2.35` | MEDIUM | 🟢 Implemented |
-| 13 | **IAC** | ARMO Kubescape | `kubescape` | `kubescape/kubescape:v3.0.4` | MEDIUM | 🔵 Skeleton / Planned |
-| 14 | **WEB (DAST)** | OWASP ZAP | `zap` | `zaproxy/zap-stable:2.14.0` | HEAVY | 🟢 Implemented |
+| 13 | **IAC** | ARMO Kubescape | `kubescape` | `kubescape/kubescape:v3.0.4` | MEDIUM | 🟢 Implemented |
+| 14 | **WEB (DAST)** | OWASP ZAP | `zap` | `zaproxy/zap-stable:2.14.0` | MEDIUM | 🟢 Implemented |
 | 15 | **WEB (DAST)** | ProjectDiscovery Nuclei | `nuclei` | `projectdiscovery/nuclei:v3.1.8` | MEDIUM | 🟢 Implemented |
 | 16 | **WEB (DAST)** | Sullo Nikto Web Scanner | `nikto` | `sullo/nikto:2.1.6` | MEDIUM | 🟢 Implemented |
-| 17 | **WEB (DAST)** | Wapiti Web Scanner | `wapiti` | `wapiti/wapiti:3.1.8` | MEDIUM | 🔵 Skeleton / Planned |
-| 18 | **API** | WuppieFuzz REST API | `wuppiefuzz` | `secsys/wuppiefuzz:latest` | MEDIUM | 🔵 Skeleton / Planned |
+| 17 | **WEB (DAST)** | Wapiti Web Scanner | `wapiti` | `wapiti/wapiti:3.1.8` | MEDIUM | 🟢 Implemented |
+| 18 | **API** | WuppieFuzz REST API | `wuppiefuzz` | `secsys/wuppiefuzz:latest` | MEDIUM | 🟢 Implemented |
 | 19 | **MOBILE** | Mobile Security (MobSF) | `mobsf` | `opensecurity/mobsfscan:latest` | MEDIUM | 🟢 Implemented |
 | 20 | **TLS** | TestSSL.sh TLS Audit | `testssl` | `drwetter/testssl.sh:3.0` | MEDIUM | 🟢 Implemented |
 
@@ -703,6 +705,49 @@ $$\text{Security Score} = \max(15, 100 - \text{Deduction}) \quad (\text{Jika } N
 * **Skor $75 - 89$**: `Perlu Perhatian (B)` — Terdapat temuan medium yang perlu ditinjau.
 * **Skor $50 - 74$**: `Rentan (C)` — Ditemukan kerentanan high yang berisiko dieksploitasi.
 * **Skor $< 50$**: `Kritis (F)` — Ditemukan kerentanan critical mendesak yang membutuhkan penanganan segera.
+
+---
+
+## 3.4 Manajemen Aturan Kustom & Deteksi Kerentanan 2026 (Zero-Day / N-Day)
+
+Selain mengandalkan aturan dan rule pack komunitas bawaan, TAMENG mengimplementasikan **Custom Rule Engine Subsystem** untuk mendeteksi ancaman zero-day dan N-day terkini secara cepat tanpa perlu menunggu rilis image Docker baru dari vendor scanner upstream.
+
+### 3.4.1 Arsitektur Penyimpanan & Mounting Volume Aturan
+Aturan disimpan secara persisten di storage host dan dimount secara otomatis ke dalam kontainer scanner efemeral dengan hak akses *read-only* (`:ro`):
+1. **Host Source Directory**: `storage/app/private/rules/{engine}/{suite}/`
+   * Di-mirror ke direktori kode aplikasi `app/Services/Engines/Rules/{engine}/{suite}/` untuk version control.
+2. **Mounting Path Kontainer**:
+   * **Semgrep SAST**: `/rules:ro` (dikonfigurasi oleh `RepositoryDockerAdapter.php`). Saat direktori aturan kustom terdeteksi, `SemgrepAdapter.php` secara otomatis menginjeksi argumen `--config /rules`.
+   * **Nuclei DAST**: `/root/custom-templates:ro` (dikonfigurasi oleh `NucleiAdapter.php`). Secara otomatis diinjeksi via parameter `-t /root/custom-templates` beserta tag `cve2026`.
+
+### 3.4.2 Katalog Aturan Semgrep 2026 (SAST / Supply Chain)
+
+Aturan Semgrep ditulis dalam sintaksis declarative YAML Semgrep OSS dan ditargetkan pada file repositori source code, dependensi manifest, dan Dockerfile:
+
+| Rule ID | File Aturan | Target Language | Severity / CVSS | Deskripsi Kerentanan |
+|---|---|---|---|---|
+| `tameng.cve-2026-109618.unpatched-php-dockerfile` | `cve-2026-php2shell-rules.yaml` | `dockerfile` | ERROR / 9.2 | Base image Docker menggunakan versi runtime PHP rentan terhadap PHP2Shell RCE (`< 8.4.27`, `< 8.3.36`, `< 8.2.35`). |
+| `tameng.cve-2026-109618.unpatched-php-composer` | `cve-2026-php2shell-rules.yaml` | `json` (`composer.json`) | ERROR / 9.2 | File `composer.json` mengizinkan versi PHP rentan eksploitasi memori PHP2Shell. |
+| `tameng.cve-2026-111497.vulnerable-brotli-package` | `cve-2026-brotli-rules.yaml` | `json` (`package.json`) | WARNING / 8.6 | Dependensi pustaka dekompresi Brotli versi 1.0.3 s.d. 1.2.0 rentan terhadap out-of-bounds write memory corruption. |
+
+### 3.4.3 Katalog Template Nuclei 2026 (DAST / Perimeter Web)
+
+Template Nuclei ditulis dalam format DSL Nuclei v3 dan dirancang non-destruktif (*passive detection*) untuk memvalidasi perimeter layanan jaringan dan web server:
+
+| Template ID | File Template | Protokol | Severity / CVSS | Target & Mekanisme Pengujian |
+|---|---|---|---|---|
+| `cve-2026-109618-php2shell` | `cve-2026-109618-php2shell.yaml` | HTTP | CRITICAL / 9.2 | Mendeteksi respons server yang mengekspos header PHP versi rentan dan memory error buffer. |
+| `cve-2026-109619-php-stale-state` | `cve-2026-109619-php-stale-state.yaml` | HTTP | CRITICAL / 9.2 | Mendeteksi kebocoran state internal thread worker PHP-FPM melalui anomali respon debug. |
+| `cve-2026-111497-brotli-memory-corruption` | `cve-2026-111497-brotli-memory-corruption.yaml` | HTTP | HIGH / 8.6 | Menguji respon header `Content-Encoding: br` dan menganalisis versi libbrotli pada web server. |
+| `cve-2026-88771-citrix-netscaler-rce` | `cve-2026-88771-citrix-netscaler-rce.yaml` | HTTP | CRITICAL / 9.4 | Menguji endpoint AAA Citrix Gateway (`/vpn/index.html`, `/logon/LogonPoint/`) terhadap ketiadaan mitigasi pre-auth RCE. |
+| `cve-2026-76504-cisco-sdwan-rce` | `cve-2026-76504-cisco-sdwan-rce.yaml` | HTTP | CRITICAL / 9.8 | Menguji endpoint API Cisco Catalyst SD-WAN Manager (`/dataservice/system/device`) terhadap command injection. |
+| `cve-2026-65660-sharepoint-code-injection` | `cve-2026-65660-sharepoint-code-injection.yaml` | HTTP | HIGH / 8.8 | Mendeteksi versi server Microsoft SharePoint via header `MicrosoftSharePointTeamServices` dan layout file. |
+
+### 3.4.4 Pipeline Parsing & Metadata Normalization
+Saat kontainer scanner selesai dieksekusi:
+1. `SemgrepAdapter` mem-parsing keluaran JSON, mengekstrak metadata spesifik `metadata.cve`, `metadata.cvss`, `metadata.cwe`, dan `metadata.owasp`.
+2. `NucleiAdapter` mem-parsing output JSON event line-by-line, memetakan `template-id`, `info.classification.cve-id`, dan `info.classification.cvss-score`.
+3. Seluruh atribut ini diteruskan ke `UniversalFindingNormalizer` dan dicatat ke dalam database `findings`, mengaktifkan resolusi otomatis oleh modul AI Remediation.
 
 ---
 
@@ -905,6 +950,55 @@ flowchart TD
     CHECK_AUTO_POLICY -.->|WAF Rule| PUSH_CF
     CHECK_AUTO_POLICY -.->|Host Quarantined| ISOLATE_HOST
 ```
+
+---
+
+## 6.3 Modul Heuristik AI Remediation Spesifik Kerentanan 2026
+
+Pada `AiRemediationService.php`, ditambahkan modul khusus penanganan kerentanan 2026 yang diaktifkan secara otomatis saat temuan memiliki referensi CVE atau kata kunci spesifik:
+
+```mermaid
+flowchart TD
+    classDef startEnd fill:#1e293b,stroke:#0ea5e9,stroke-width:2px,color:#f8fafc;
+    classDef process fill:#0f172a,stroke:#38bdf8,stroke-width:1px,color:#f1f5f9;
+    classDef decision fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff;
+    classDef heuristic fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+
+    FINDING_IN(["Finding Ingested by FindingController"]):::startEnd
+    CALL_GUIDANCE["AiRemediationService::generateGuidance($finding)"]:::process
+    CHECK_CACHE{"Cache 'ai_remediation_gemini_{id}' hit?"}:::decision
+
+    FINDING_IN --> CALL_GUIDANCE
+    CALL_GUIDANCE --> CHECK_CACHE
+    CHECK_CACHE -->|Hit| RETURN_CACHE(["Return Cached Guidance"]):::startEnd
+    CHECK_CACHE -->|Miss| DETECT_CATEGORY["detectVulnerabilityCategory($finding)"]:::process
+
+    DETECT_CATEGORY --> EVAL_2026{"Is 2026 Critical CVE Category?"}:::decision
+
+    EVAL_2026 -->|cve_2026_php2shell| MOD_PHP["PHP2Shell (CVE-2026-109618 / 109619)\n- Root Cause: Buffer Underflow & Stale Worker Retention\n- Diff: Dockerfile php:8.4.27 + php.ini expose_php=Off\n- Verification: php -v && php -i | grep 'Zend Memory Manager'"]:::heuristic
+    EVAL_2026 -->|cve_2026_brotli| MOD_BROTLI["Brotli Out-of-bounds Write (CVE-2026-111497)\n- Root Cause: Malformed Huffman Table Decompression\n- Diff: package.json / composer.json brotli >= 1.2.1\n- Verification: ldconfig -p | grep brotli || npm list brotli"]:::heuristic
+    EVAL_2026 -->|cve_2026_citrix_netscaler| MOD_CITRIX["Citrix NetScaler Pre-Auth RCE (CVE-2026-88771)\n- Root Cause: AAA Endpoint Buffer Corruption\n- Diff: NetScaler NSCLI Upgrade & ACL Lockdown\n- Verification: NSCLI: show version"]:::heuristic
+    EVAL_2026 -->|cve_2026_cisco_sdwan| MOD_CISCO["Cisco SD-WAN Command Injection (CVE-2026-76504)\n- Root Cause: Shell Metacharacter Injection on /dataservice\n- Diff: vManage Software Maintenance & Strict Ingress\n- Verification: Cisco Software Checker Audit"]:::heuristic
+    EVAL_2026 -->|cve_2026_sharepoint| MOD_SP["SharePoint Code Injection (CVE-2026-65660)\n- Root Cause: Insecure Document Parser Deserialization\n- Diff: SharePoint KB Cumulative Security Update\n- Verification: Get-SPInstalledProduct | ? {$_.Version}"]:::heuristic
+    EVAL_2026 -->|Standard Categories| MOD_STD["Standard OWASP/CWE Advisory Flow"]:::process
+
+    MOD_PHP --> ASSEMBLE_RESPONSE["Assemble Guidance Payload:\n- summary & root_cause\n- attack_vector breakdown\n- concrete code_diff\n- mitigation_checklist\n- verification_command"]:::process
+    MOD_BROTLI --> ASSEMBLE_RESPONSE
+    MOD_CITRIX --> ASSEMBLE_RESPONSE
+    MOD_CISCO --> ASSEMBLE_RESPONSE
+    MOD_SP --> ASSEMBLE_RESPONSE
+    MOD_STD --> ASSEMBLE_RESPONSE
+
+    ASSEMBLE_RESPONSE --> CACHE_SET["Cache for 24 Hours"]:::process
+    CACHE_SET --> DELIVER(["Deliver Response to Frontend View"]):::startEnd
+```
+
+### 5 Modul Penanganan Khusus Kerentanan 2026:
+1. **`cve_2026_php2shell`**: Menghasilkan analisis memory underflow `zend_mm_heap`, attack vector fragmentasi request stream HTTP, panduan update base image ke PHP `8.4.27+`, `8.3.36+`, atau `8.2.35+`, serta penguatan direktif `php.ini` (`expose_php = Off`, `opcache.memory_consumption = 256`).
+2. **`cve_2026_brotli`**: Menghasilkan penjelasan out-of-bounds write pada modul dekompresi Brotli, panduan migrasi dependensi manifest ke versi `1.2.1+` atau `1.0.10+`, serta perintah verifikasi audit pustaka.
+3. **`cve_2026_citrix_netscaler`**: Menghasilkan panduan isolasi antarmuka manajemen NSIP/SNIP, penerapan Web Application Firewall (WAF) mitigasi sementara, dan instruksi upgrade image firmware NetScaler via NSCLI.
+4. **`cve_2026_cisco_sdwan`**: Menghasilkan rekomendasi penguncian ingress port 443 vManage ke segmen NOC terpercaya dan penerapan patch Cisco Security Advisory resmi.
+5. **`cve_2026_sharepoint`**: Menghasilkan instruksi penerapan Microsoft Security Update Cumulative Patch, mitigasi AMSI (*Antimalware Scan Interface*), dan audit log event viewer IIS.
 
 ---
 
@@ -1485,7 +1579,9 @@ Berikut adalah pemetaan file utama sistem TAMENG untuk mempermudah navigasi tekn
 | **Engine Registry**| `backend/app/Services/Engines/EngineRegistry.php` | `all()`, `definitions()` | Definisi 20 engine keamanan, domain, dan safety controls |
 | **Deduplicator** | `backend/app/Services/Engines/Support/FindingDeduplicator.php` | `ingest()` | Deduplikasi fingerprint SHA-256 & multi-engine clustering |
 | **Normalizer** | `backend/app/Services/Engines/Support/UniversalFindingNormalizer.php`| `normalizeSeverity()`, `formatItem()` | Penyeragaman format temuan dari seluruh variasi scanner |
-| **AI Remediation**| `backend/app/Services/AiRemediationService.php` | `generateGuidance()`, `buildCodePatch()`| Rekomendasi teknis mitigasi risiko & patch perbaikan kode |
+| **Repo Adapter** | `backend/app/Services/Engines/Adapters/RepositoryDockerAdapter.php`| `buildRunCommand()`, `volumeMounts()` | Orkestrasi mount workspace source code dan mount `/rules:ro` |
+| **Custom Rules** | `backend/storage/app/private/rules/` | YAML Rule Definitions (Semgrep & Nuclei)| Penyimpanan persisten aturan deteksi kustom kerentanan 2026 |
+| **AI Remediation**| `backend/app/Services/AiRemediationService.php` | `generateGuidance()`, `buildCodePatch()`| Rekomendasi teknis mitigasi risiko, patch perbaikan & modul CVE 2026 |
 | **Queue Worker Job**| `backend/app/Jobs/RunScanJob.php` | `handle()` | Eksekutor utama pemindaian background dalam antrean worker |
 | **Audit Service** | `backend/app/Services/AuditLogger.php` | `record()`, `recordSystem()` | Pencatatan transaksi audit forensik ke tabel database |
 | **Webhook Service**| `backend/app/Services/WebhookNotificationService.php` | `notifyScanResult()` | Pengiriman notifikasi rich embed ke webhook Discord/Slack |
@@ -1690,8 +1786,8 @@ Matriks kepatuhan fitur berdasarkan pembuktian langsung source code:
 | **Multi-Tenancy Project Scoping** | 🟢 Implemented | `project_user` migration & model | Scoping akses per proyek (`lead`, `analyst`, `dev`) |
 | **Target & Repository Verification**| 🟢 Implemented | `AuthorizationGateway.php:73-84` | Aturan kaku target harus diverifikasi sebelum scan |
 | **Rule Scope (Allow/Deny)** | 🟢 Implemented | `scopes` table, `AuthorizationGateway.php` | Evaluasi cakupan URL/path sebelum eksekusi |
-| **Multi-Engine Scanner (12 Engines)**| 🟢 Implemented | `app/Services/Engines/Adapters/*` | 12 scanner terintegrasi penuh via Docker daemon |
-| **Skeleton Scanner (8 Engines)** | 🔵 Planned | `SecurityEngineSeeder.php:34-338` | Engine terdaftar di database, adapter belum aktif |
+| **Multi-Engine Scanner (20 Engines Suite)** | 🟢 Implemented | `app/Services/Engines/Adapters/*` | Seluruh 20 scanner terintegrasi penuh via Docker daemon |
+| **Custom Rules & 2026 CVE Detection** | 🟢 Implemented | `storage/rules/`, `NucleiAdapter`, `SemgrepAdapter` | Deteksi khusus PHP2Shell, Brotli, Citrix, Cisco SD-WAN, SharePoint |
 | **SHA-256 Finding Deduplication** | 🟢 Implemented | `FindingDeduplicator.php:22-48` | Toleransi baris kode dan clustering multi-engine |
 | **Advisory AI Code Patching** | 🟢 Implemented | `AiRemediationService.php:21-45` | Generator code diff dan panduan mitigasi CWE/OWASP |
 | **Formal PDF Report Generation** | 🟢 Implemented | `ReportPdfGenerator.php`, `ReportController` | Unduhan PDF laporan resmi hasil audit keamanan |
@@ -1711,9 +1807,9 @@ Matriks kepatuhan fitur berdasarkan pembuktian langsung source code:
 ## 25.1 Ringkasan Evaluasi Sistem
 1. **TAMENG** adalah platform kontrol audit keamanan yang dirancang dengan landasan tata kelola (*governance*) yang sangat kuat.
 2. Data keamanan masuk melalui antarmuka REST API terproteksi dan Git Webhook otomatis, diverifikasi kepemilikannya, dan dievaluasi terhadap aturan ruang lingkup (*scope*).
-3. Ancaman dideteksi menggunakan kombinasi **12 security engine open-source kelas dunia** yang dijalankan di dalam kontainer Docker terisolasi tanpa akses internet.
+3. Ancaman dideteksi menggunakan katalog lengkap **20 security engine open-source kelas dunia** yang dijalankan di dalam kontainer Docker efemeral terisolasi, diperkuat oleh **Custom Rule Engine Subsystem** (Semgrep & Nuclei) untuk mendeteksi kerentanan kritis 2026 (seperti PHP2Shell, Brotli, Citrix NetScaler, Cisco SD-WAN, SharePoint).
 4. Temuan dinormalisasi ke standar tunggal dan dideduplikasi menggunakan algoritma fingerprint SHA-256 dengan clustering bukti multi-engine.
-5. Analis SOC dapat menginvestigasi temuan lengkap dengan baris kode, bukti match scanner mentah, dan rekomendasi patch perbaikan dari AI Remediation Service.
+5. Analis SOC dapat menginvestigasi temuan lengkap dengan baris kode, bukti match scanner mentah, dan rekomendasi patch perbaikan dari AI Remediation Service (dilengkapi modul heuristik khusus CVE 2026).
 6. Respons sistem bersifat **advisory** untuk menjaga stabilitas infrastruktur production dari potensi gangguan akibat auto-blocking yang salah target (*false positive*).
 7. Data disimpan dengan rapi di MySQL 8.4 dan storage volume lokal dengan hash SHA-256 untuk menjamin integritas forensik.
 
@@ -1730,6 +1826,6 @@ Matriks kepatuhan fitur berdasarkan pembuktian langsung source code:
 ## 25.4 Rekomendasi Pengembangan Masa Depan (Roadmap):
 1. **Migrasi ke Redis Queue / RabbitMQ**: Memanfaatkan Redis yang sudah terpasang di container untuk antrean job berkecepatan tinggi dengan konkurensi dinamis.
 2. **Implementasi Realtime WebSocket (Laravel Reverb)**: Menggantikan polling HTTP 5 detik dengan push event WebSocket native untuk pembaruan progres scan yang instan.
-3. **Penyelesaian 8 Adapter Engine Skeleton**: Mengaktifkan adapter CodeQL, SonarQube, TruffleHog, dan Dependency-Check untuk melengkapi seluruh 20 engine suite.
+3. **Penyelesaian 20 Adapter Engine Suite**: Seluruh 20 engine adapter telah diimplementasikan penuh (`App\Services\Engines\Adapters\*`) dan terintegrasi di `EngineRegistry` serta `EngineAdapterResolver`.
 4. **Aktivasi Dispatcher Bot Telegram**: Menyelesaikan background service untuk memicu bot Telegram berdasarkan preferensi personal di tabel `user_preferences`.
 5. **Otomasi Backup Cron**: Memasang skrip cron reguler di host untuk mencadangkan database MySQL dan volume storage secara harian ke remote backup server.

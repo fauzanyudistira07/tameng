@@ -92,6 +92,20 @@ class NucleiAdapter implements EngineAdapter
             }
         }
 
+        $customTemplatesDir = storage_path('app/private/rules/nuclei');
+        $customTemplatesMount = [];
+        $customTemplateFlags = [];
+        if (File::isDirectory($customTemplatesDir)) {
+            $customTemplatesMount = [
+                '-v',
+                $this->dockerStorageMountSource($customTemplatesDir) . ':/root/custom-templates:ro',
+            ];
+            $customTemplateFlags = [
+                '-t',
+                '/root/custom-templates',
+            ];
+        }
+
         $command = [
             $dockerBinary,
             'run',
@@ -103,11 +117,13 @@ class NucleiAdapter implements EngineAdapter
             '--security-opt=no-new-privileges',
             '-v',
             'secsys-nuclei-templates:/root/nuclei-templates:rw',
+            ...$customTemplatesMount,
             '-v',
             $this->dockerStorageMountSource($outputDirectory) . ":{$containerOutputPath}:rw",
             $image,
             '-u',
             $targetUrl,
+            ...$customTemplateFlags,
             '-json-export',
             "{$containerOutputPath}/nuclei-report.json",
         ];
@@ -121,7 +137,7 @@ class NucleiAdapter implements EngineAdapter
         $command = array_merge($command, [
             '-as',
             '-tags',
-            'misconfiguration,exposures,default-login,ssl',
+            'cve,cve2026,misconfiguration,exposures,default-login,ssl',
             '-etags',
             'dos,fuzz',
             '-rate-limit',
