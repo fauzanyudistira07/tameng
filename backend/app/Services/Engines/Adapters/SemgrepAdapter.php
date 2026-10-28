@@ -33,7 +33,13 @@ class SemgrepAdapter extends RepositoryDockerAdapter
             'p/default',
         ];
 
-        if (\Illuminate\Support\Facades\File::isDirectory(storage_path('app/private/rules/semgrep'))) {
+        $sourceRulesDir = app_path('Services/Engines/Rules/semgrep');
+        $customRulesDir = storage_path('app/private/rules/semgrep');
+        if (\Illuminate\Support\Facades\File::isDirectory($sourceRulesDir)) {
+            \Illuminate\Support\Facades\File::copyDirectory($sourceRulesDir, $customRulesDir);
+        }
+
+        if (\Illuminate\Support\Facades\File::isDirectory($customRulesDir)) {
             $cmd[] = '--config';
             $cmd[] = '/rules';
         }
@@ -71,7 +77,7 @@ class SemgrepAdapter extends RepositoryDockerAdapter
         return collect($results)->map(fn (array $finding): array => [
             'rule_id' => $finding['check_id'] ?? 'semgrep.rule',
             'title' => $finding['extra']['message'] ?? $finding['check_id'] ?? 'Semgrep finding',
-            'severity' => $this->severity($finding['extra']['severity'] ?? null),
+            'severity' => $this->severity($finding['extra']['severity'] ?? null, isset($finding['extra']['metadata']['cvss']) ? (float) $finding['extra']['metadata']['cvss'] : null),
             'severity_raw' => $finding['extra']['severity'] ?? null,
             'confidence' => 0.85,
             'asset_type' => 'repository',
@@ -90,9 +96,14 @@ class SemgrepAdapter extends RepositoryDockerAdapter
         ])->values()->all();
     }
 
-    private function severity(?string $severity): string
+    private function severity(?string $severity, ?float $cvss = null): string
     {
+        if ($cvss !== null && $cvss >= 9.0) {
+            return 'critical';
+        }
+
         return match (strtolower((string) $severity)) {
+            'critical' => 'critical',
             'error' => 'high',
             'warning' => 'medium',
             'info' => 'low',

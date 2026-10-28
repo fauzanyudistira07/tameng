@@ -3,11 +3,18 @@ set -e
 
 mkdir -p \
   storage/app/private/repository-workspaces \
+  storage/app/private/rules \
   storage/framework/cache \
   storage/framework/sessions \
   storage/framework/views \
   storage/logs \
   bootstrap/cache
+
+# Sync custom engine rules from app/Services/Engines/Rules into storage/app/private/rules
+if [ -d app/Services/Engines/Rules ]; then
+  mkdir -p storage/app/private/rules
+  cp -r app/Services/Engines/Rules/* storage/app/private/rules/ 2>/dev/null || true
+fi
 
 # Guarantee docker socket access for www-data
 if [ -S /var/run/docker.sock ]; then

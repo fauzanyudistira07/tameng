@@ -2,7 +2,6 @@
 ### Technical Architecture, Security Detection Flow & System Operation Documentation
 
 * **Tanggal Dokumentasi**: 15 September 2026
-* **Versi Sistem**: Current Development (`main` branch, commit `867bf64`)
 * **Status Implementasi**: Production Ready Core (5-Domain Multi-Engine Scanner, SOC Security & Audit Active)
 * **Klasifikasi Dokumen**: Internal Technical Documentation & Security Operations Manual
 
@@ -728,8 +727,12 @@ Aturan Semgrep ditulis dalam sintaksis declarative YAML Semgrep OSS dan ditarget
 | Rule ID | File Aturan | Target Language | Severity / CVSS | Deskripsi Kerentanan |
 |---|---|---|---|---|
 | `tameng.cve-2026-109618.unpatched-php-dockerfile` | `cve-2026-php2shell-rules.yaml` | `dockerfile` | ERROR / 9.2 | Base image Docker menggunakan versi runtime PHP rentan terhadap PHP2Shell RCE (`< 8.4.27`, `< 8.3.36`, `< 8.2.35`). |
-| `tameng.cve-2026-109618.unpatched-php-composer` | `cve-2026-php2shell-rules.yaml` | `json` (`composer.json`) | ERROR / 9.2 | File `composer.json` mengizinkan versi PHP rentan eksploitasi memori PHP2Shell. |
+| `tameng.cve-2026-109618.unpatched-php-composer` | `cve-2026-php2shell-rules.yaml` | `json` (`composer.json`) | ERROR / 9.2 (CRITICAL) | File `composer.json` mengizinkan atau menargetkan versi runtime PHP rentan eksploitasi memori PHP2Shell (`< 8.4.27`, `< 8.3.36`, `< 8.2.35`) maupun versi End-Of-Life (PHP 5.x, 7.x, 8.0, 8.1) termasuk compound constraint (`^7.3|^8.0`). |
 | `tameng.cve-2026-111497.vulnerable-brotli-package` | `cve-2026-brotli-rules.yaml` | `json` (`package.json`) | WARNING / 8.6 | Dependensi pustaka dekompresi Brotli versi 1.0.3 s.d. 1.2.0 rentan terhadap out-of-bounds write memory corruption. |
+
+> [!NOTE]
+> **Mekanisme Sinkronisasi Volume Custom Rules Engine**:
+> Seluruh aturan kustom (`app/Services/Engines/Rules/*`) secara otomatis disinkronkan ke storage runtime (`storage/app/private/rules/*`) baik pada fase boot container (`entrypoint.sh`) maupun *on-the-fly* pada adapter runtime (`SemgrepAdapter`, `RepositoryDockerAdapter`, `NucleiAdapter`). Ketika Semgrep atau Nuclei dijalankan dalam container Docker terisolasi, direktori aturan ini di-mount dengan flag `:ro` (read-only) dan di-passing via argumen `--config /rules` (Semgrep) atau `-t /root/custom-templates` (Nuclei).
 
 ### 3.4.3 Katalog Template Nuclei 2026 (DAST / Perimeter Web)
 

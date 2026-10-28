@@ -92,7 +92,11 @@ class NucleiAdapter implements EngineAdapter
             }
         }
 
+        $sourceTemplatesDir = app_path('Services/Engines/Rules/nuclei');
         $customTemplatesDir = storage_path('app/private/rules/nuclei');
+        if (File::isDirectory($sourceTemplatesDir)) {
+            File::copyDirectory($sourceTemplatesDir, $customTemplatesDir);
+        }
         $customTemplatesMount = [];
         $customTemplateFlags = [];
         if (File::isDirectory($customTemplatesDir)) {

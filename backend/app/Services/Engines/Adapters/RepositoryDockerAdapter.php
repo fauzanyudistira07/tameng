@@ -105,7 +105,11 @@ abstract class RepositoryDockerAdapter implements EngineAdapter
         }
 
         if ($this->key() === 'semgrep') {
+            $sourceRulesDir = app_path('Services/Engines/Rules/semgrep');
             $customRulesDir = storage_path('app/private/rules/semgrep');
+            if (File::isDirectory($sourceRulesDir)) {
+                File::copyDirectory($sourceRulesDir, $customRulesDir);
+            }
             if (File::isDirectory($customRulesDir)) {
                 $mounts[] = '-v';
                 $mounts[] = $this->dockerStorageMountSource($customRulesDir).':/rules:ro';
