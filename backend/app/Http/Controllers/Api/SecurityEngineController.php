@@ -101,22 +101,190 @@ class SecurityEngineController extends Controller
         $dockerBinary = config('secsys.docker_binary', 'docker');
         $image = $engine->container_image;
 
+        if (! $image) {
+            $engine->status = 'AVAILABLE';
+            $engine->last_health_check = now();
+            $engine->save();
+
+            return response()->json([
+                'message' => "Mesin {$engine->name} menggunakan binary host ({$engine->binary_command}) dan siap digunakan.",
+                'data' => [
+                    'engine' => $engine->code,
+                    'status' => $engine->status,
+                    'image_present' => true,
+                    'last_health_check' => $engine->last_health_check,
+                ],
+            ]);
+        }
+
         $process = new Process([$dockerBinary, 'image', 'inspect', $image]);
         $process->setTimeout(10);
         $process->run();
 
         $isAvailable = $process->isSuccessful();
-        $engine->status = $isAvailable ? 'AVAILABLE' : 'DEGRADED';
+
+        if ($isAvailable) {
+            $engine->status = 'AVAILABLE';
+            $engine->last_health_check = now();
+            $engine->save();
+
+            return response()->json([
+                'message' => "Engine image {$image} terverifikasi siap dan aktif.",
+                'data' => [
+                    'engine' => $engine->code,
+                    'status' => $engine->status,
+                    'image_present' => true,
+                    'last_health_check' => $engine->last_health_check,
+                ],
+            ]);
+        }
+
+        // Image not present locally: attempt auto_pull if requested
+        if ($request->boolean('auto_pull', false)) {
+            $pullProcess = new Process([$dockerBinary, 'pull', $image]);
+            $pullProcess->setTimeout(300);
+            $pullProcess->run();
+
+            if ($pullProcess->isSuccessful()) {
+                $engine->status = 'AVAILABLE';
+                $engine->last_health_check = now();
+                $engine->save();
+
+                return response()->json([
+                    'message' => "Image {$image} berhasil diunduh dan mesin siap digunakan.",
+                    'data' => [
+                        'engine' => $engine->code,
+                        'status' => $engine->status,
+                        'image_present' => true,
+                        'last_health_check' => $engine->last_health_check,
+                    ],
+                ]);
+            }
+        }
+
+        // Do not degrade blindly: mark as STANDBY if image is not yet cached locally
+        $engine->status = 'STANDBY';
         $engine->last_health_check = now();
         $engine->save();
 
         return response()->json([
-            'message' => $isAvailable ? "Engine image {$image} terverifikasi tersedia." : "Image {$image} belum di-pull di docker daemon.",
+            'message' => "Image {$image} belum di-cache secara lokal. Gunakan tombol 'Tarik Image' untuk mengunduh.",
             'data' => [
                 'engine' => $engine->code,
                 'status' => $engine->status,
-                'image_present' => $isAvailable,
+                'image_present' => false,
                 'last_health_check' => $engine->last_health_check,
+            ],
+        ]);
+    }
+
+    /**
+     * Pull container image for the specified engine on demand.
+     */
+    public function pullImage(Request $request, SecurityEngine $engine): JsonResponse
+    {
+        $dockerBinary = config('secsys.docker_binary', 'docker');
+        $image = $engine->container_image;
+
+        if (! $image) {
+            return response()->json([
+                'message' => "Mesin {$engine->name} tidak memerlukan docker image.",
+                'data' => $engine,
+            ]);
+        }
+
+        $engine->status = 'UPDATING';
+        $engine->save();
+
+        $process = new Process([$dockerBinary, 'pull', $image]);
+        $process->setTimeout(600);
+        $process->run();
+
+        if ($process->isSuccessful()) {
+            $engine->status = 'AVAILABLE';
+            $engine->last_health_check = now();
+            $engine->save();
+
+            AuditLog::create([
+                'user_id' => $request->user()?->id,
+                'action' => 'security_engine.pull_image',
+                'result' => 'success',
+                'actor_ip' => $request->ip(),
+                'target_type' => 'security_engine',
+                'target_id' => $engine->id,
+                'metadata' => [
+                    'engine_code' => $engine->code,
+                    'image' => $image,
+                ],
+            ]);
+
+            return response()->json([
+                'message' => "Image {$image} berhasil diunduh. Mesin {$engine->name} siap digunakan.",
+                'data' => [
+                    'engine' => $engine->code,
+                    'status' => $engine->status,
+                    'image_present' => true,
+                    'last_health_check' => $engine->last_health_check,
+                ],
+            ]);
+        }
+
+        $engine->status = 'STANDBY';
+        $engine->save();
+
+        return response()->json([
+            'message' => "Gagal mengunduh image {$image}: " . trim($process->getErrorOutput() ?: $process->getOutput()),
+            'data' => [
+                'engine' => $engine->code,
+                'status' => $engine->status,
+                'image_present' => false,
+                'last_health_check' => $engine->last_health_check,
+            ],
+        ], 422);
+    }
+
+    /**
+     * Batch sync health checks across all security engines.
+     */
+    public function syncAll(Request $request): JsonResponse
+    {
+        $dockerBinary = config('secsys.docker_binary', 'docker');
+        $engines = SecurityEngine::all();
+        $synced = 0;
+        $available = 0;
+
+        foreach ($engines as $engine) {
+            $image = $engine->container_image;
+
+            if (! $image) {
+                $engine->status = 'AVAILABLE';
+                $engine->last_health_check = now();
+                $engine->save();
+                $available++;
+                $synced++;
+                continue;
+            }
+
+            $process = new Process([$dockerBinary, 'image', 'inspect', $image]);
+            $process->setTimeout(5);
+            $process->run();
+
+            $isOk = $process->isSuccessful();
+            $engine->status = $isOk ? 'AVAILABLE' : 'STANDBY';
+            $engine->last_health_check = now();
+            $engine->save();
+
+            if ($isOk) {
+                $available++;
+            }
+            $synced++;
+        }
+
+        return response()->json([
+            'message' => "Sinkronisasi selesai: {$available} dari {$synced} mesin terverifikasi aktif.",
+            'data' => [
+                'total_synced' => $synced,
+                'available_count' => $available,
             ],
         ]);
     }

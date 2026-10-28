@@ -12,7 +12,7 @@ interface SecurityEngine {
   domain: string
   resource_class: string
   enabled: boolean
-  status: 'AVAILABLE' | 'DEGRADED' | 'DISABLED'
+  status: 'AVAILABLE' | 'DEGRADED' | 'DISABLED' | 'STANDBY' | 'UPDATING'
   container_image?: string
   binary_command?: string
   timeout_seconds?: number
@@ -39,8 +39,9 @@ const activeTab = ref<'engines' | 'profiles'>('engines')
 const engines = ref<SecurityEngine[]>([])
 const scanProfiles = ref<ScanProfileItem[]>([])
 const isLoading = ref(true)
+const isSyncing = ref(false)
 const actionLoadingId = ref<number | null>(null)
-const actionMessage = ref<{ type: 'success' | 'danger'; text: string } | null>(null)
+const actionMessage = ref<{ type: 'success' | 'warning' | 'danger'; text: string } | null>(null)
 
 // Filters for engines
 const searchQuery = ref('')
@@ -153,7 +154,7 @@ async function runHealthCheck(engine: SecurityEngine) {
     engine.status = res.data.status
     engine.last_health_check = res.data.last_health_check
     actionMessage.value = {
-      type: res.data.image_present ? 'success' : 'danger',
+      type: res.data.image_present ? 'success' : 'warning',
       text: res.message
     }
     setTimeout(() => {
@@ -167,6 +168,66 @@ async function runHealthCheck(engine: SecurityEngine) {
     }
   } finally {
     actionLoadingId.value = null
+  }
+}
+
+async function pullEngineImage(engine: SecurityEngine) {
+  if (actionLoadingId.value === engine.id) return
+  actionLoadingId.value = engine.id
+  actionMessage.value = {
+    type: 'warning',
+    text: `Sedang mengunduh container image untuk ${engine.name} (${engine.container_image}). Mohon tunggu...`
+  }
+
+  try {
+    const res = await apiFetch(`/api/security/engines/${engine.id}/pull-image`, {
+      method: 'POST'
+    })
+    engine.status = res.data.status
+    engine.last_health_check = res.data.last_health_check
+    actionMessage.value = {
+      type: 'success',
+      text: res.message || `Image untuk ${engine.name} berhasil diunduh.`
+    }
+    setTimeout(() => {
+      actionMessage.value = null
+    }, 5000)
+  } catch (err: any) {
+    console.error('Gagal mengunduh image container:', err)
+    actionMessage.value = {
+      type: 'danger',
+      text: err?.data?.message || err?.message || 'Gagal mengunduh container image.'
+    }
+  } finally {
+    actionLoadingId.value = null
+  }
+}
+
+async function syncAllEngines() {
+  if (isSyncing.value) return
+  isSyncing.value = true
+  actionMessage.value = null
+
+  try {
+    const res = await apiFetch('/api/security/engines/sync', {
+      method: 'POST'
+    })
+    actionMessage.value = {
+      type: 'success',
+      text: res.message || 'Sinkronisasi seluruh mesin pemindai keamanan berhasil.'
+    }
+    await loadData()
+    setTimeout(() => {
+      actionMessage.value = null
+    }, 5000)
+  } catch (err: any) {
+    console.error('Gagal sinkronisasi mesin keamanan:', err)
+    actionMessage.value = {
+      type: 'danger',
+      text: err?.data?.message || err?.message || 'Gagal sinkronisasi mesin keamanan.'
+    }
+  } finally {
+    isSyncing.value = false
   }
 }
 
@@ -228,6 +289,20 @@ onMounted(() => {
             </h2>
           </div>
           <div class="col-auto ms-auto d-print-none d-flex align-items-center gap-2">
+            <!-- Sync all engines button -->
+            <button
+              v-if="canManage"
+              type="button"
+              class="btn btn-outline-primary d-inline-flex align-items-center gap-1"
+              :disabled="isSyncing"
+              @click="syncAllEngines"
+              title="Periksa dan sinkronkan status seluruh 20 container image"
+            >
+              <span v-if="isSyncing" class="spinner-border spinner-border-sm" role="status"></span>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" /><path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" /></svg>
+              <span>{{ isSyncing ? 'Menyinkronkan...' : 'Sinkronkan Semua' }}</span>
+            </button>
+
             <!-- Tab switch pills -->
             <div class="btn-group" role="group">
               <button
@@ -257,7 +332,11 @@ onMounted(() => {
       <div
         v-if="actionMessage"
         class="alert alert-dismissible mb-3 d-flex align-items-center gap-2"
-        :class="actionMessage.type === 'success' ? 'alert-success' : 'alert-danger'"
+        :class="{
+          'alert-success': actionMessage.type === 'success',
+          'alert-warning': actionMessage.type === 'warning',
+          'alert-danger': actionMessage.type === 'danger'
+        }"
       >
         <span>{{ actionMessage.text }}</span>
         <button
@@ -500,8 +579,9 @@ onMounted(() => {
                     class="badge"
                     :class="{
                       'bg-success-lt text-success': engine.status === 'AVAILABLE',
-                      'bg-warning-lt text-warning': engine.status === 'DEGRADED',
-                      'bg-secondary-lt text-secondary': engine.status === 'DISABLED'
+                      'bg-info-lt text-info': engine.status === 'UPDATING',
+                      'bg-secondary-lt text-secondary': engine.status === 'STANDBY' || engine.status === 'DISABLED',
+                      'bg-warning-lt text-warning': engine.status === 'DEGRADED'
                     }"
                   >
                     {{ engine.status }}
@@ -523,16 +603,29 @@ onMounted(() => {
                   </label>
                 </td>
                 <td v-if="canManage" class="text-end">
-                  <button
-                    class="btn btn-sm btn-secondary d-inline-flex align-items-center gap-1"
-                    :disabled="actionLoadingId === engine.id"
-                    @click="runHealthCheck(engine)"
-                    title="Jalankan Preflight Docker Health Check"
-                  >
-                    <span v-if="actionLoadingId === engine.id" class="spinner-border spinner-border-sm" role="status"></span>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h4l3 8l4 -16l3 8h4" /></svg>
-                    <span>Cek Image</span>
-                  </button>
+                  <div class="d-inline-flex align-items-center gap-1">
+                    <button
+                      v-if="engine.status === 'STANDBY' || engine.status === 'DEGRADED'"
+                      class="btn btn-sm btn-outline-warning d-inline-flex align-items-center gap-1"
+                      :disabled="actionLoadingId === engine.id"
+                      @click="pullEngineImage(engine)"
+                      title="Unduh image container ke host Docker"
+                    >
+                      <span v-if="actionLoadingId === engine.id" class="spinner-border spinner-border-sm" role="status"></span>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
+                      <span>Tarik Image</span>
+                    </button>
+                    <button
+                      class="btn btn-sm btn-secondary d-inline-flex align-items-center gap-1"
+                      :disabled="actionLoadingId === engine.id"
+                      @click="runHealthCheck(engine)"
+                      title="Jalankan Preflight Docker Health Check"
+                    >
+                      <span v-if="actionLoadingId === engine.id" class="spinner-border spinner-border-sm" role="status"></span>
+                      <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 12h4l3 8l4 -16l3 8h4" /></svg>
+                      <span>Cek Image</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -558,8 +651,9 @@ onMounted(() => {
                   class="badge"
                   :class="{
                     'bg-success-lt text-success': engine.status === 'AVAILABLE',
-                    'bg-warning-lt text-warning': engine.status === 'DEGRADED',
-                    'bg-secondary-lt text-secondary': engine.status === 'DISABLED'
+                    'bg-info-lt text-info': engine.status === 'UPDATING',
+                    'bg-secondary-lt text-secondary': engine.status === 'STANDBY' || engine.status === 'DISABLED',
+                    'bg-warning-lt text-warning': engine.status === 'DEGRADED'
                   }"
                 >
                   {{ engine.status }}
@@ -592,10 +686,21 @@ onMounted(() => {
             <div class="d-flex align-items-center justify-content-between text-secondary small mt-2 pt-1 border-top">
               <span style="font-size: 0.75rem;">Cek: {{ formatDate(engine.last_health_check) }}</span>
             </div>
-            <div v-if="canManage" class="pt-2">
+            <div v-if="canManage" class="pt-2 d-flex gap-2">
+              <button
+                v-if="engine.status === 'STANDBY' || engine.status === 'DEGRADED'"
+                type="button"
+                class="btn btn-sm btn-outline-warning flex-fill d-inline-flex align-items-center justify-content-center gap-1"
+                :disabled="actionLoadingId === engine.id"
+                @click="pullEngineImage(engine)"
+              >
+                <span v-if="actionLoadingId === engine.id" class="spinner-border spinner-border-sm" role="status"></span>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2" /><path d="M7 11l5 5l5 -5" /><path d="M12 4l0 12" /></svg>
+                <span>Tarik Image</span>
+              </button>
               <button
                 type="button"
-                class="btn btn-sm btn-secondary flex-fill w-100 d-inline-flex align-items-center justify-content-center gap-1"
+                class="btn btn-sm btn-secondary flex-fill d-inline-flex align-items-center justify-content-center gap-1"
                 :disabled="actionLoadingId === engine.id"
                 @click="runHealthCheck(engine)"
               >

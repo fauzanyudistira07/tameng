@@ -46,12 +46,16 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // Dynamic 20 Security Engines Registry & Profiles
     Route::get('/security/engines', [SecurityEngineController::class, 'index'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
+    Route::post('/security/engines/sync', [SecurityEngineController::class, 'syncAll'])
+        ->middleware('role:super_admin,security_admin,security_analyst');
     Route::get('/security/engines/{engine}', [SecurityEngineController::class, 'show'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
     Route::post('/security/engines/{engine}/toggle', [SecurityEngineController::class, 'toggle'])
         ->middleware('role:super_admin,security_admin');
     Route::post('/security/engines/{engine}/health-check', [SecurityEngineController::class, 'healthCheck'])
         ->middleware('role:super_admin,security_admin,security_analyst');
+    Route::post('/security/engines/{engine}/pull-image', [SecurityEngineController::class, 'pullImage'])
+        ->middleware('role:super_admin,security_admin');
     Route::get('/security/scan-profiles', [SecurityEngineController::class, 'scanProfiles'])
         ->middleware('role:super_admin,security_admin,security_analyst,developer,viewer');
 
