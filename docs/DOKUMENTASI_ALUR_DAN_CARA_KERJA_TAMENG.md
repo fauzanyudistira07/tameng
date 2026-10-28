@@ -49,6 +49,7 @@
 13. [BAGIAN 12 — Health Check & System Monitoring](#bagian-12--health-check--system-monitoring)
     * 12.1 Mekanisme Pemeriksaan 5 Subsistem
     * 12.2 Visual Flowchart: Subsystem Health Check & Degradation (13.10)
+    * 12.3 Visual Flowchart: Siklus Hidup Engine Image & Auto-Pull Standby
 14. [BAGIAN 13 — Logging & Observability](#bagian-13--logging--observability)
 15. [BAGIAN 14 — Error Handling](#bagian-14--error-handling)
     * 14.1 Skenario Kegagalan Nyata
@@ -279,7 +280,7 @@ flowchart TD
         GATE_EXEC{"ExecutionGateway:decide()\nEngine in Allowed Whitelist?"}:::decision
         
         DOCKER_RUN["Docker Daemon (/var/run/docker.sock)\nRun Sandbox Container\n(--network none, volume :ro, timeout limit)"]:::process
-        DOCKER_ENGINES["12 Implemented Scanner Adapters\n(Semgrep, Gitleaks, Trivy, OSV, ZAP, Nuclei, dsb.)"]:::external
+        DOCKER_ENGINES["20 Implemented Scanner Adapters Suite\n+ Custom 2026 CVE Rules Mount\n(/rules:ro & /root/custom-templates:ro)"]:::external
     end
 
     GATE_AUTH -->|YES: Allowed| CREATE_JOB
@@ -334,7 +335,7 @@ flowchart TD
         ALERT_TG["Telegram Bot Dispatcher\n(Status: PARTIALLY IMPLEMENTED)"]:::denied
         
         FE_DASH["TAMENG Web Dashboard (Vue 3 / Tabler)\nClient-Side Polling (5000ms Interval)"]:::process
-        SOC_INVESTIGATE["SOC Analyst Investigation (/findings)\n1. Multi-Evidence Review\n2. AI Remediation Guidance (AiRemediationService)\n3. Triage Status Update (open -> resolved)"]:::process
+        SOC_INVESTIGATE["SOC Analyst Investigation (/findings)\n1. Multi-Evidence Review\n2. AI Remediation Guidance (AiRemediationService)\n- 2026 CVE Heuristic Advisor (Root Cause, Diff, CLI Verif)\n3. Triage Status Update (open -> resolved)"]:::process
         DB_AUDIT[("Tabel: audit_logs\n(Forensic Audit Trail)")]:::database
     end
 
@@ -624,7 +625,7 @@ flowchart TD
         EXEC_GATE{"ExecutionGateway:decide()\n1. Engine allowed?\n2. ScanJob executable?\n3. Scope snapshot valid?"}:::decision
         DENY_RUN["Create ScanRun (status: 'denied')\nfailure_reason = reason_code"]:::denied
 
-        DOCKER_CMD["EngineAdapterResolver::resolve($engineKey)\nBuild Process: docker run --rm\nOpsi Keamanan: --network none (SAST), volume :ro"]:::process
+        DOCKER_CMD["EngineAdapterResolver::resolve($engineKey)\nBuild Process: docker run --rm\nOpsi Keamanan: --network none (SAST), volume :ro\nMount Aturan Kustom: /rules:ro & /root/custom-templates:ro\nTag Aktif: cve2026, misconfig, exposures"]:::process
         EXEC_PROCESS["Symfony Process::run()\nEnforce Timeout Limit (60s - 1200s)"]:::external
 
         CHECK_EXIT{"Container Exit Code Valid?"}:::decision
@@ -853,7 +854,7 @@ flowchart TD
     CALL_AI["Click 'AI Remediation Guidance' Tab\nAPI: GET /api/findings/{id}/ai-remediation\nService: AiRemediationService:generateGuidance()"]:::process
     VIEW_DETAILS --> CALL_AI
 
-    INSPECT_AI["Review AI Guidance:\n- Technical Cause & Attack Vector\n- Business Impact Analysis\n- Proposed Code Diff Patch (Nginx / Express / PHP)\n- Pre-deployment Mitigation Checklist"]:::process
+    INSPECT_AI["Review AI Guidance:\n- Technical Cause & Attack Vector Breakdown\n- Business Impact & Compliance Mapping\n- 2026 CVE Heuristics (PHP2Shell, Brotli, Citrix, Cisco, SharePoint)\n- Concrete Code Diff Patch (Dockerfile / composer / php.ini)\n- Mitigation Checklist & CLI Verification Command"]:::process
     CALL_AI --> INSPECT_AI
 
     DECIDE_TRIAGE{"Analyst Assessment Decision"}:::decision
@@ -1413,6 +1414,75 @@ flowchart TD
 
 ---
 
+## 12.3 Visual Flowchart: Siklus Hidup Engine Image & Auto-Pull Standby
+
+Flowchart berikut memetakan penanganan health check mesin pemindai keamanan secara individual (`SecurityEngineController`), pencegahan status false *degraded*, perizinan soket Docker host, serta mekanisme penarikan image on-demand dan sinkronisasi massal:
+
+```mermaid
+flowchart TD
+    classDef startEnd fill:#1e293b,stroke:#0ea5e9,stroke-width:2px,color:#f8fafc;
+    classDef process fill:#0f172a,stroke:#38bdf8,stroke-width:1px,color:#f1f5f9;
+    classDef decision fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff;
+    classDef available fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+    classDef standby fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef updating fill:#854d0e,stroke:#facc15,stroke-width:2px,color:#fefce8;
+    classDef error fill:#450a0a,stroke:#f87171,stroke-width:2px,color:#fef2f2;
+
+    ADMIN_UI(["Admin Navigates to /engines (Tabler UI)"]):::startEnd
+    FETCH_ENGINES["GET /api/engines\nLoad 20 Security Engines from Database"]:::process
+    TRIGGER_CHECK["Admin clicks 'Cek Image' (Health Check)\nAPI: GET /api/engines/{id}/health-check"]:::process
+
+    ADMIN_UI --> FETCH_ENGINES
+    FETCH_ENGINES --> TRIGGER_CHECK
+
+    subgraph ENGINE_HEALTH_FLOW ["Engine Image Health Check Logic (SecurityEngineController)"]
+        EXEC_DOCKER["Process: docker image inspect <container_image>\nEnforce Host GID 983 (docker_host) for www-data"]:::process
+        CHECK_INSPECT{"Inspect Exit Code == 0?"}:::decision
+
+        MARK_AVAILABLE["Engine Status = 'AVAILABLE'\nlast_health_check = now()\nSave to Database"]:::available
+        RET_AVAILABLE["HTTP 200: Image Siap Digunakan (Tersedia Lokal)"]:::available
+
+        CHECK_CACHE_MISS{"Is Error Permission Denied\nor Image Not Cached?"}:::decision
+        MARK_STANDBY["Engine Status = 'STANDBY'\nlast_health_check = now()\nSave to Database\n(Do Not Degrade Blindly!)"]:::standby
+        RET_STANDBY["HTTP 200: Image Belum Di-cache Lokal\n(Pemberitahuan Informational)"]:::standby
+        MARK_DEGRADE["Engine Status = 'DEGRADED'\nInternal Error Logged"]:::error
+    end
+
+    TRIGGER_CHECK --> EXEC_DOCKER
+    EXEC_DOCKER --> CHECK_INSPECT
+
+    CHECK_INSPECT -->|YES: Image Found Locally| MARK_AVAILABLE
+    MARK_AVAILABLE --> RET_AVAILABLE
+
+    CHECK_INSPECT -->|NO: Inspect Failed| CHECK_CACHE_MISS
+    CHECK_CACHE_MISS -->|Cache Miss (Not pulled yet)| MARK_STANDBY
+    MARK_STANDBY --> RET_STANDBY
+    CHECK_CACHE_MISS -->|Fatal Daemon Failure| MARK_DEGRADE
+
+    subgraph PULL_WORKFLOW ["Interactive Image Pulling Workflow"]
+        TRIGGER_PULL["Admin clicks 'Tarik Image'\nAPI: POST /api/engines/{id}/pull-image"]:::process
+        SET_UPDATING["Engine Status = 'UPDATING'\nSave to Database\nUI displays Spinner Loading"]:::updating
+        ASYNC_PULL["Background Process: docker pull <container_image>\nTimeout: 600s"]:::process
+        CHECK_PULL{"Pull Exit Code == 0?"}:::decision
+    end
+
+    RET_STANDBY --> TRIGGER_PULL
+    TRIGGER_PULL --> SET_UPDATING
+    SET_UPDATING --> ASYNC_PULL
+    ASYNC_PULL --> CHECK_PULL
+
+    CHECK_PULL -->|YES: Pull Success| MARK_AVAILABLE
+    CHECK_PULL -->|NO: Network Timeout| MARK_STANDBY
+
+    subgraph BULK_SYNC ["Automated Bulk Sync CLI Command"]
+        CLI_COMMAND["Artisan Command: php artisan engine:sync-images\n(Sync all 20 engines in sequence)"]:::process
+    end
+
+    CLI_COMMAND --> ASYNC_PULL
+```
+
+---
+
 # BAGIAN 13 — LOGGING & OBSERVABILITY
 
 Sistem observability TAMENG terdiri atas:
@@ -1558,6 +1628,52 @@ Developer Git Push -> Webhook Ingestion -> Gate Approval -> Multi-Engine Runner 
 5. Backend membuat scan job, memverifikasi bahwa aset berada dalam proyek yang diizinkan untuk developer tersebut (`project_user` scope), dan mengirim job ke antrean worker.
 6. Halaman developer melakukan silent polling setiap 5 detik (`setInterval` 5000ms), menampilkan indikator loading progress dari 0% hingga 100%.
 7. Setelah selesai, developer dapat langsung mengunduh laporan ringkas dalam format **PDF Formal** melalui endpoint `GET /api/reports/{id}/download-pdf`. Developer dibatasi hanya dapat mengunduh laporan dari scan yang diajukan oleh dirinya sendiri.
+
+---
+
+## Skenario 4 — Pemindaian Zero-Day 2026 (PHP2Shell & Supply Chain) & Mitigasi Cepat AI
+
+1. **Commit Repositori Pengembang**:
+   * Developer memperbarui kode dan menyertakan `Dockerfile` bertuliskan `FROM php:8.4.20-fpm-alpine` serta dependensi `package.json` bertuliskan `"brotli": "1.1.0"`.
+2. **Eksekusi Pemindaian Otomatis**:
+   * Git Webhook atau scan job manual memicu `RunScanJob`.
+   * `RepositoryDockerAdapter.php` secara otomatis me-mount host rules volume ke kontainer Semgrep:
+     `-v /opt/tameng/tameng/backend/storage/app/private/rules/semgrep:/rules:ro`
+   * `SemgrepAdapter.php` menjalankan engine dengan parameter `--config /rules`.
+3. **Pendeteksian & Ekstraksi Metadata**:
+   * Aturan Semgrep kustom mendeteksi:
+     - `tameng.cve-2026-109618.unpatched-php-dockerfile` (ERROR, CVSS 9.2).
+     - `tameng.cve-2026-111497.vulnerable-brotli-package` (WARNING, CVSS 8.6).
+   * Adapter mengekstrak atribut `metadata.cve` dan `metadata.cvss` lalu menyimpannya ke tabel `findings`.
+4. **Analisis Panduan Mitigasi AI**:
+   * Analis SOC membuka modal detail temuan di dashboard dan mengklik tab **AI Remediation Guidance** (`GET /api/findings/{id}/ai-remediation`).
+   * `AiRemediationService.php` mengenali referensi `CVE-2026-109618` dan mengaktifkan modul `cve_2026_php2shell`.
+   * Sistem menyajikan:
+     - **Akar Masalah**: Fragmentasi buffer alokasi `zend_mm_heap` dan stale worker thread retention.
+     - **Code Diff Patch**: Perubahan ke `FROM php:8.4.27-fpm-alpine` dan injeksi konfigurasi `php.ini` (`expose_php = Off`, `opcache.memory_consumption = 256`).
+     - **Checklist Kepatuhan**: 5 langkah mitigasi operasional tim DevOps.
+     - **Verifikasi CLI**: Perintah `php -v && php -i | grep -i "Zend Memory Manager"`.
+5. **Penyelesaian Triage**:
+   * Analis memperbarui status temuan ke `in_progress`, melampirkan diff perbaikan ke tim engineer, dan menutup insiden pasca pemindaian ulang verifikasi.
+
+---
+
+## Skenario 5 — Pemeliharaan Engine & Penarikan Image On-Demand Tanpa False Degraded
+
+1. **Inisiasi Pemeriksaan Kesehatan Engine**:
+   * Administrator SOC membuka antarmuka Registri Mesin Keamanan (`http://localhost:5174/engines`).
+   * Halaman frontend memanggil `GET /api/engines` untuk menampilkan katalog 20 mesin pemindai keamanan.
+2. **Pengecekan Cache Docker Daemon**:
+   * Admin menekan tombol **"Cek Image"** pada mesin pemindai (misalnya `codeql` atau `trufflehog`).
+   * Kontroler backend `SecurityEngineController::healthCheck` mengeksekusi `docker image inspect <image>` memanfaatkan hak akses soket host group `docker_host` (GID 983).
+3. **Penetapan Status STANDBY (Non-Destruktif)**:
+   * Jika image belum diunduh ke cache lokal, backend tidak mendegradasi mesin secara buta, melainkan menandai `status = 'STANDBY'`.
+   * Frontend menangkap respons informatif dan menampilkan badge netral serta memunculkan tombol **"Tarik Image"**.
+4. **Penarikan Image Interaktif**:
+   * Admin menekan tombol **"Tarik Image"**.
+   * Endpoint `POST /api/engines/{id}/pull-image` dipanggil, mengubah status mesin menjadi `UPDATING`.
+   * Kontainer backend mengeksekusi `docker pull <image>` di latar belakang.
+   * Setelah selesai, status mesin otomatis berubah menjadi **`AVAILABLE`** (badge hijau) dan siap mengeksekusi pemindaian secara optimal.
 
 ---
 
