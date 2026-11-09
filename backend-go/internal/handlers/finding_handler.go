@@ -17,10 +17,11 @@ import (
 type FindingHandler struct {
 	db        *gorm.DB
 	aiService *services.AiRemediationService
+	neurolink *services.NeurolinkService
 }
 
-func NewFindingHandler(db *gorm.DB, aiService *services.AiRemediationService) *FindingHandler {
-	return &FindingHandler{db: db, aiService: aiService}
+func NewFindingHandler(db *gorm.DB, aiService *services.AiRemediationService, neurolink *services.NeurolinkService) *FindingHandler {
+	return &FindingHandler{db: db, aiService: aiService, neurolink: neurolink}
 }
 
 // List handles GET /api/findings
@@ -168,6 +169,10 @@ func (h *FindingHandler) Update(c *gin.Context) {
 	finding.UpdatedAt = now
 
 	h.db.Save(&finding)
+
+	if h.neurolink != nil {
+		h.neurolink.AutoLearnFromFindingTriage(&finding, req.Status, req.ResolutionNotes, user.ID)
+	}
 
 	h.db.Preload("Project").
 		Preload("ScanJob").

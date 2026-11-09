@@ -1148,6 +1148,57 @@ async function toggleAiRemediation(finding: Finding, index: number) {
   }
 }
 
+// -------------------------------------------------------------
+// TAMENG NeuroLink Continuous Learning State & Feedback
+// -------------------------------------------------------------
+const neurolinkFeedbackState = ref<{
+  submittedFindingKey: string | null;
+  rating: string | null;
+  showCustomPatch: boolean;
+  customPatchInput: string;
+  isSubmitting: boolean;
+  message: string | null;
+}>({
+  submittedFindingKey: null,
+  rating: null,
+  showCustomPatch: false,
+  customPatchInput: '',
+  isSubmitting: false,
+  message: null
+})
+
+async function submitNeurolinkFeedback(finding: Finding, rating: 'helpful' | 'needs_improvement' | 'false_positive', customPatch?: string) {
+  neurolinkFeedbackState.value.isSubmitting = true
+  const findingId = finding.id
+  if (!findingId) return
+
+  try {
+    const res = await apiFetch('/api/neurolink/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        finding_id: findingId,
+        rating,
+        notes: rating === 'helpful' ? 'Diverifikasi akurat oleh developer' : (rating === 'false_positive' ? 'Ditandai false positive oleh tim' : 'Perlu penyesuaian'),
+        custom_patch: customPatch || ''
+      })
+    })
+
+    neurolinkFeedbackState.value.submittedFindingKey = getFindingKey(finding, 0)
+    neurolinkFeedbackState.value.rating = rating
+    neurolinkFeedbackState.value.showCustomPatch = false
+    neurolinkFeedbackState.value.message = res?.message || 'NeuroLink telah menyerap feedback Anda ke dalam memori sinaptik!'
+    setTimeout(() => {
+      if (neurolinkFeedbackState.value.message) {
+        neurolinkFeedbackState.value.message = null
+      }
+    }, 4500)
+  } catch (err: any) {
+    console.error('Gagal mengirim feedback NeuroLink:', err)
+  } finally {
+    neurolinkFeedbackState.value.isSubmitting = false
+  }
+}
+
 function exportFindingsCsv() {
   const findings = allFindings.value
   if (!findings || findings.length === 0) {
@@ -2882,6 +2933,22 @@ onUnmounted(() => {
 
                       <!-- Content State -->
                       <div v-else-if="aiRemediationData" class="d-flex flex-column gap-3">
+                        <!-- NeuroLink Synaptic Cognitive Banner -->
+                        <div v-if="aiRemediationData.neurolink_memory_applied" class="alert alert-purple py-2 px-3 mb-0 small border-start border-3 border-purple d-flex align-items-center justify-content-between flex-wrap gap-2">
+                          <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-purple text-purple-fg d-inline-flex align-items-center gap-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c1.918 0 3.52 1.35 3.91 3.151a4 4 0 0 1 2.09 7.723l0 7.126h-12v-7.126a4 4 0 0 1 2.09 -7.723a4.01 4.01 0 0 1 3.91 -3.151z" /><path d="M6.16 13.84a4 4 0 0 0 5.84 0" /></svg>
+                              NeuroLink Memory
+                            </span>
+                            <span class="text-body fw-medium">
+                              Rekomendasi ini diperkuat oleh memori sinaptik terverifikasi (<strong>#{{ aiRemediationData.neurolink_synapses?.[0]?.synapse_code }}</strong>).
+                            </span>
+                          </div>
+                          <span class="badge bg-success-lt text-success fw-bold font-monospace">
+                            Bobot Akurasi {{ ((aiRemediationData.neurolink_synapses?.[0]?.accuracy_weight || 1) * 20).toFixed(0) }}% ({{ aiRemediationData.neurolink_synapses?.[0]?.usage_count || 1 }}x Digunakan)
+                          </span>
+                        </div>
+
                         <!-- Summary & Cause -->
                         <div v-if="aiRemediationData.summary" class="text-body small lh-base">
                           <div class="fw-bold text-reset mb-1 d-flex align-items-center gap-1">
@@ -2968,6 +3035,81 @@ onUnmounted(() => {
                           </div>
                           <div v-if="aiRemediationData.disclaimer" class="text-muted" style="font-size: 0.7rem;">
                             {{ aiRemediationData.disclaimer }}
+                          </div>
+                        </div>
+
+                        <!-- NeuroLink Continuous Learning Bar -->
+                        <div class="p-2 bg-body-tertiary border rounded mt-2">
+                          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div class="small text-secondary d-flex align-items-center gap-1">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-purple" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a9 9 0 0 1 9 9c0 2.21 -.804 4.23 -2.146 5.8l-1.354 1.2v-2a6 6 0 0 0 -6 -6h-2a3 3 0 0 1 -3 -3v-2a9 9 0 0 1 5.5 -3z" /></svg>
+                              <strong class="text-body">TAMENG NeuroLink:</strong> Bantu AI terus belajar dan mengingat solusi untuk pemindaian berikutnya
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-outline-success py-0 px-2 d-inline-flex align-items-center gap-1"
+                                style="font-size: 0.75rem;"
+                                :disabled="neurolinkFeedbackState.isSubmitting"
+                                @click="submitNeurolinkFeedback(finding, 'helpful')"
+                                title="Tandai rekomendasi ini akurat untuk memperkuat bobot sinapsis"
+                              >
+                                <span>👍 Solusi Akurat</span>
+                              </button>
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-outline-warning py-0 px-2 d-inline-flex align-items-center gap-1"
+                                style="font-size: 0.75rem;"
+                                :disabled="neurolinkFeedbackState.isSubmitting"
+                                @click="submitNeurolinkFeedback(finding, 'needs_improvement')"
+                                title="Tandai perlu penyesuaian"
+                              >
+                                <span>👎 Perlu Koreksi</span>
+                              </button>
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-outline-primary py-0 px-2 d-inline-flex align-items-center gap-1"
+                                style="font-size: 0.75rem;"
+                                @click="neurolinkFeedbackState.showCustomPatch = !neurolinkFeedbackState.showCustomPatch"
+                              >
+                                <span>🧠 Ajarkan Patch Tim</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <!-- Feedback Success Alert -->
+                          <div v-if="neurolinkFeedbackState.message" class="text-success small mt-2 fw-bold">
+                            ✓ {{ neurolinkFeedbackState.message }}
+                          </div>
+
+                          <!-- Custom Patch Input Drawer -->
+                          <div v-if="neurolinkFeedbackState.showCustomPatch" class="mt-2 pt-2 border-top">
+                            <div class="text-secondary small mb-1">
+                              Masukkan kode perbaikan standar tim Anda untuk diserap ke memori NeuroLink:
+                            </div>
+                            <textarea
+                              v-model="neurolinkFeedbackState.customPatchInput"
+                              class="form-control form-control-sm font-monospace"
+                              rows="3"
+                              placeholder="// Tulis atau tempel potongan kode aman yang telah disepakati tim..."
+                            ></textarea>
+                            <div class="d-flex justify-content-end gap-2 mt-2">
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-ghost-secondary py-0 px-2"
+                                @click="neurolinkFeedbackState.showCustomPatch = false"
+                              >
+                                Batal
+                              </button>
+                              <button
+                                type="button"
+                                class="btn btn-sm btn-primary py-0 px-2"
+                                :disabled="!neurolinkFeedbackState.customPatchInput.trim() || neurolinkFeedbackState.isSubmitting"
+                                @click="submitNeurolinkFeedback(finding, 'helpful', neurolinkFeedbackState.customPatchInput)"
+                              >
+                                Simpan ke Memori NeuroLink
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>

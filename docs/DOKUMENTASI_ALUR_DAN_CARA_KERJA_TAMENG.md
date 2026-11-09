@@ -2268,5 +2268,54 @@ Dengan telah berfungsinya seluruh handler bisnis, orkestrator kontainer Docker p
    - **Expert Cyber Intelligence Heuristic Fallback**: Jika koneksi eksternal LLM offline atau terjadi timeout, sistem secara otomatis beralih ke *TAMENG Cyber Intelligence Engine v3.0* untuk menggenerasi panduan remediasi berbasis aturan OWASP dan CIS Benchmarks tanpa interupsi pengguna.
    - **Caching Redis Terdistribusi**: Hasil analisis AI disimpan ke dalam Redis dengan masa kedaluwarsa 24 jam berbasis sidik jari temuan (`ai_remediation_gemini_{id}_{timestamp}`), menghasilkan latensi respon ultra-cepat (<5ms) pada pemanggilan berulang.
 
+---
+
+## 26.14 Arsitektur TAMENG NeuroLink: Jaringan Sinapsis Pembelajaran Berkelanjutan AI (Continuous Reinforcement Learning Loop)
+
+Untuk memastikan modul AI Remediasi TAMENG tidak bersifat statis, melainkan **terus bertambah cerdas, mampu belajar dari umpan balik analis, dan mengingat solusi perbaikan yang telah terbukti**, dirancang modul **TAMENG NeuroLink Synaptic Brain** (`internal/services/neurolink_service.go`).
+
+### 1. Konsep & Alur Kerja NeuroLink:
+```mermaid
+flowchart TD
+    ScanFinding["Temuan Celah Keamanan Baru"] --> NeuroCheck{"NeuroLink Memory Check"}
+    NeuroCheck -->|"Ada Sinapsis Cocok"| InjectPrompt["Injeksi Memori Sinaptik ke Prompt Gemini"]
+    NeuroCheck -->|"Pola Baru"| ZeroShotPrompt["Zero-Shot Prompt Standar"]
+    InjectPrompt --> GeminiLLM["Google Gemini 3.5 Flash Lite"]
+    ZeroShotPrompt --> GeminiLLM
+    GeminiLLM --> OutputUI["Panel Rekomendasi AI + Badge NeuroLink"]
+    OutputUI --> FeedbackAction{"Umpan Balik Pengembang / Analis"}
+    FeedbackAction -->|"👍 Solusi Akurat"| ReinforcePositive["Bobot Sinapsis +0.2 (Maksimal 5.0)"]
+    FeedbackAction -->|"👎 Perlu Koreksi"| ReinforceNegative["Bobot Sinapsis -0.2 (Minimal 0.5)"]
+    FeedbackAction -->|"🧠 Ajarkan Patch Tim"| StoreCustomPatch["Simpan Patch Tim Sebagai Verified Solution"]
+    FeedbackAction -->|"Triase Status (Fixed / FP)"| AutoLearnTriage["Auto-Distill Pembelajaran Status ke Database"]
+    ReinforcePositive --> SynapseDB[("Tabel MySQL: neurolink_synapses")]
+    ReinforceNegative --> SynapseDB
+    StoreCustomPatch --> SynapseDB
+    AutoLearnTriage --> SynapseDB
+    SynapseDB --> InvalidateCache["Invalidasi Cache Redis (Update Waktu Nyata)"]
+```
+
+### 2. Komponen Teknis Modul NeuroLink:
+1. **Skema Basis Data Sinaptik (`neurolink_synapses`)**:
+   - `synapse_code`: Identifier unik sinapsis (`SYN-2026-XXXX`).
+   - `pattern_key`: Hash kriptografis 32 karakter dari kombinasi rule_id, CWE, kategori, dan bahasa pemrograman.
+   - `remediation_patch` & `resolution_notes`: Solusi kode aman dan catatan teknis yang telah diverifikasi oleh tim internal.
+   - `accuracy_weight`: Bobot reinforcement learning adaptif (skala 0.5 hingga 5.0).
+   - `usage_count`: Penghitung frekuensi sinapsis digunakan untuk memandu AI.
+2. **Skema Riwayat Umpan Balik (`neurolink_feedbacks`)**:
+   - Mencatat setiap evaluasi pengembang terhadap saran AI (`helpful`, `needs_improvement`, `false_positive`), catatan penjelasan, dan patch kustom.
+3. **Injeksi Kontekstual Dinamis (Synaptic Prompt Injection)**:
+   - Sebelum memanggil API Gemini, NeuroLink mencari sinapsis relevan dengan skor akurasi tinggi (`accuracy_weight >= 0.7`).
+   - Konteks keberhasilan masa lalu diinjeksikan secara otomatis ke prompt LLM, memastikan rekomendasi AI berikutnya selalu konsisten dengan standar coding dan kebijakan keamanan internal institusi.
+4. **Pembelajaran Triase Otomatis (`AutoLearnFromFindingTriage`)**:
+   - Ketika analis atau pengembang memperbarui status temuan menjadi `fixed` atau `false_positive`, NeuroLink secara otomatis mendestilasi alasan dan catatan triase ke dalam simpul memori sinaptik tanpa memerlukan langkah manual tambahan.
+5. **Antarmuka Interaktif Pengguna (Frontend Tabler)**:
+   - Menampilkan indikator **NeuroLink Memory Banner** saat rekomendasi AI diperkuat oleh pembelajaran tim.
+   - Menyediakan bilah kontrol interaktif:
+     - **👍 Solusi Akurat**: Memperkuat bobot kepercayaan sinapsis.
+     - **👎 Perlu Koreksi**: Menandai untuk penyesuaian model.
+     - **🧠 Ajarkan Patch Tim**: Drawer terintegrasi bagi pengembang untuk mengajarkan solusi kode aman mereka secara langsung ke otak sinaptik NeuroLink.
+
+
 
 

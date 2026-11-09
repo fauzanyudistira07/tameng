@@ -389,3 +389,52 @@ type AuditLog struct {
 
 	User *User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }
+
+type NeurolinkSynapse struct {
+	ID                uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	SynapseCode       string    `gorm:"size:50;unique;not null" json:"synapse_code"`
+	PatternKey        string    `gorm:"size:120;index;not null" json:"pattern_key"`
+	RuleID            *string   `gorm:"size:255;index" json:"rule_id"`
+	CWE               *string   `gorm:"size:100;index" json:"cwe"`
+	Category          string    `gorm:"size:150;not null" json:"category"`
+	Language          string    `gorm:"size:50;default:'universal'" json:"language"`
+	LearnedContext    string    `gorm:"type:text" json:"learned_context"`
+	VulnerablePattern *string   `gorm:"type:text" json:"vulnerable_pattern"`
+	RemediationPatch  *string   `gorm:"type:text" json:"remediation_patch"`
+	ResolutionNotes   *string   `gorm:"type:text" json:"resolution_notes"`
+	FeedbackScore     int       `gorm:"default:1" json:"feedback_score"`
+	AccuracyWeight    float64   `gorm:"type:decimal(5,2);default:1.00" json:"accuracy_weight"`
+	UsageCount        int       `gorm:"default:1" json:"usage_count"`
+	IsVerified        bool      `gorm:"default:false" json:"is_verified"`
+	CreatedBy         uint64    `gorm:"default:1" json:"created_by"`
+	SourceFindingID   *uint64   `gorm:"index" json:"source_finding_id"`
+	ProjectID         *uint64   `gorm:"index" json:"project_id"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+
+	Project       *Project `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	SourceFinding *Finding `gorm:"foreignKey:SourceFindingID" json:"source_finding,omitempty"`
+}
+
+func (NeurolinkSynapse) TableName() string {
+	return "neurolink_synapses"
+}
+
+type NeurolinkFeedback struct {
+	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	FindingID   uint64    `gorm:"index;not null" json:"finding_id"`
+	UserID      uint64    `gorm:"index;not null" json:"user_id"`
+	Rating      string    `gorm:"size:50;not null" json:"rating"` // helpful, needs_improvement, false_positive
+	UserNotes   *string   `gorm:"type:text" json:"user_notes"`
+	CustomPatch *string   `gorm:"type:text" json:"custom_patch"`
+	Applied     bool      `gorm:"default:true" json:"applied"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+
+	Finding *Finding `gorm:"foreignKey:FindingID" json:"finding,omitempty"`
+	User    *User    `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
+func (NeurolinkFeedback) TableName() string {
+	return "neurolink_feedbacks"
+}

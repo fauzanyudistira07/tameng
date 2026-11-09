@@ -35,25 +35,30 @@ type AiRemediationResult struct {
 	SecureCode          *string                `json:"secure_code"`
 	MitigationChecklist []string               `json:"mitigation_checklist"`
 	VerificationCommand *string                `json:"verification_command"`
-	Compliance          map[string]interface{} `json:"compliance"`
-	OwaspGuidance       map[string]interface{} `json:"owasp_guidance"`
-	AiModel             string                 `json:"ai_model"`
-	AiBadge             string                 `json:"ai_badge"`
-	IsLiveLLM           bool                   `json:"is_live_llm"`
-	Disclaimer          string                 `json:"disclaimer"`
+	Compliance          map[string]interface{}    `json:"compliance"`
+	OwaspGuidance       map[string]interface{}    `json:"owasp_guidance"`
+	AiModel             string                    `json:"ai_model"`
+	AiBadge             string                    `json:"ai_badge"`
+	IsLiveLLM           bool                      `json:"is_live_llm"`
+	Disclaimer          string                    `json:"disclaimer"`
+	NeurolinkSynapses   []models.NeurolinkSynapse `json:"neurolink_synapses,omitempty"`
+	NeurolinkMemoryApplied bool                   `json:"neurolink_memory_applied"`
+	SynapseMatchCount   int                       `json:"synapse_match_count"`
 }
 
 type AiRemediationService struct {
-	db  *gorm.DB
-	rdb *redis.Client
-	cfg *config.Config
+	db        *gorm.DB
+	rdb       *redis.Client
+	cfg       *config.Config
+	neurolink *NeurolinkService
 }
 
-func NewAiRemediationService(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *AiRemediationService {
+func NewAiRemediationService(db *gorm.DB, rdb *redis.Client, cfg *config.Config, neurolink *NeurolinkService) *AiRemediationService {
 	return &AiRemediationService{
-		db:  db,
-		rdb: rdb,
-		cfg: cfg,
+		db:        db,
+		rdb:       rdb,
+		cfg:       cfg,
+		neurolink: neurolink,
 	}
 }
 
@@ -72,11 +77,16 @@ func (s *AiRemediationService) GenerateGuidance(finding *models.Finding) (*AiRem
 		}
 	}
 
+	var synapses []models.NeurolinkSynapse
+	if s.neurolink != nil {
+		synapses = s.neurolink.FindMatchingSynapses(finding)
+	}
+
 	var result *AiRemediationResult
 
 	// 2. Attempt Google Gemini LLM Generation if API key is configured
 	if s.cfg.GeminiAPIKey != "" {
-		res, err := s.callGeminiAPI(finding)
+		res, err := s.callGeminiAPI(finding, synapses)
 		if err != nil {
 			log.Printf("[AI] Gemini API failed for finding #%d: %v. Falling back to heuristic engine.", finding.ID, err)
 		} else if res != nil && res.Summary != "" {
@@ -86,7 +96,13 @@ func (s *AiRemediationService) GenerateGuidance(finding *models.Finding) (*AiRem
 
 	// 3. Fallback to Advanced Cyber Intelligence Heuristic Engine
 	if result == nil {
-		result = s.generateAdvancedHeuristic(finding)
+		result = s.generateAdvancedHeuristic(finding, synapses)
+	}
+
+	if result != nil {
+		result.NeurolinkSynapses = synapses
+		result.NeurolinkMemoryApplied = len(synapses) > 0
+		result.SynapseMatchCount = len(synapses)
 	}
 
 	// 4. Save to Redis Cache (24 hours TTL)
@@ -98,10 +114,10 @@ func (s *AiRemediationService) GenerateGuidance(finding *models.Finding) (*AiRem
 	return result, nil
 }
 
-func (s *AiRemediationService) callGeminiAPI(finding *models.Finding) (*AiRemediationResult, error) {
+func (s *AiRemediationService) callGeminiAPI(finding *models.Finding, synapses []models.NeurolinkSynapse) (*AiRemediationResult, error) {
 	modelsToTry := []string{s.cfg.GeminiModel, "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"}
 	apiKey := s.cfg.GeminiAPIKey
-	prompt := s.buildPrompt(finding)
+	prompt := s.buildPrompt(finding, synapses)
 
 	payload := map[string]interface{}{
 		"contents": []map[string]interface{}{
@@ -180,7 +196,7 @@ func (s *AiRemediationService) callGeminiAPI(finding *models.Finding) (*AiRemedi
 	return nil, fmt.Errorf("all gemini models failed")
 }
 
-func (s *AiRemediationService) buildPrompt(finding *models.Finding) string {
+func (s *AiRemediationService) buildPrompt(finding *models.Finding, synapses []models.NeurolinkSynapse) string {
 	projectName := "Aplikasi Web"
 	if finding.Project.Name != "" {
 		projectName = finding.Project.Name
@@ -222,8 +238,29 @@ func (s *AiRemediationService) buildPrompt(finding *models.Finding) string {
 		cvss = fmt.Sprintf("%.1f", *finding.CVSS)
 	}
 
+	synapseContext := ""
+	if len(synapses) > 0 {
+		var sb strings.Builder
+		sb.WriteString("\nMEMORI SINAPTIK NEUROLINK (CONTINUOUS LEARNING INJECTION):\n")
+		sb.WriteString("TAMENG NeuroLink mendeteksi riwayat pembelajaran dari insiden/triase serupa sebelumnya:\n")
+		for i, syn := range synapses {
+			patch := "-"
+			if syn.RemediationPatch != nil && *syn.RemediationPatch != "" {
+				patch = *syn.RemediationPatch
+			}
+			notes := "-"
+			if syn.ResolutionNotes != nil && *syn.ResolutionNotes != "" {
+				notes = *syn.ResolutionNotes
+			}
+			sb.WriteString(fmt.Sprintf("%d. [Sinapse: %s | Kategori: %s | Skor Bobot: %.1f]\n   - Solusi Terbukti: %s\n   - Catatan Triase Tim: %s\n   - Konteks: %s\n",
+				i+1, syn.SynapseCode, syn.Category, syn.AccuracyWeight, patch, notes, syn.LearnedContext))
+		}
+		sb.WriteString("PETUNJUK: Manfaatkan dan selaraskan solusi perbaikan dengan memori sinaptik di atas agar konsisten dengan standar keamanan tim.\n")
+		synapseContext = sb.String()
+	}
+
 	return fmt.Sprintf(`Anda adalah AI Spesialis Keamanan Siber Aplikasi (Senior DevSecOps & Certified Penetration Tester) tingkat dunia untuk platform TAMENG.
-Berikan analisis kerentanan dan rekomendasi perbaikan kode (remediation patch) yang mendalam, presisi, canggih, dan dapat langsung dieksekusi oleh developer.
+Berikan analisis kerentanan dan rekomendasi perbaikan kode (remediation patch) yang mendalam, presisi, canggih, dan dapat langsung dieksekusi oleh developer.%s
 
 KONTEKS TEMUAN:
 - Judul Temuan: %s
@@ -256,7 +293,7 @@ Kembalikan respon HANYA dalam format JSON valid (Bahasa Indonesia teknis yang fo
   ],
   "verification_command": "Perintah CLI atau metode testing untuk memverifikasi perbaikan (contoh: perintah curl, composer audit, npm audit)",
   "defense_in_depth": "Rekomendasi arsitektur keamanan berlapis tambahan untuk mencegah celah serupa"
-}`, finding.Title, engine, ruleID, finding.Severity, projectName, filePath, lineInfo, cwe, owasp, cvss)
+}`, synapseContext, finding.Title, engine, ruleID, finding.Severity, projectName, filePath, lineInfo, cwe, owasp, cvss)
 }
 
 func (s *AiRemediationService) formatLlmResult(finding *models.Finding, parsed map[string]interface{}, modelName, badgeType string) *AiRemediationResult {
@@ -350,7 +387,7 @@ func (s *AiRemediationService) formatLlmResult(finding *models.Finding, parsed m
 	}
 }
 
-func (s *AiRemediationService) generateAdvancedHeuristic(finding *models.Finding) *AiRemediationResult {
+func (s *AiRemediationService) generateAdvancedHeuristic(finding *models.Finding, synapses []models.NeurolinkSynapse) *AiRemediationResult {
 	title := strings.ToLower(finding.Title)
 	rule := ""
 	if finding.RuleID != nil {
@@ -378,6 +415,16 @@ func (s *AiRemediationService) generateAdvancedHeuristic(finding *models.Finding
 		"Jalankan regression testing dan scan ulang TAMENG untuk verifikasi.",
 	}
 	verifCommand := "curl -I https://target.domain/api"
+
+	if len(synapses) > 0 {
+		syn := synapses[0]
+		if syn.RemediationPatch != nil && *syn.RemediationPatch != "" {
+			secureCode = *syn.RemediationPatch
+		}
+		if syn.ResolutionNotes != nil && *syn.ResolutionNotes != "" {
+			cause += fmt.Sprintf(" [Memori NeuroLink: %s]", *syn.ResolutionNotes)
+		}
+	}
 
 	// Heuristic rules detection
 	if strings.Contains(rule, "gitleaks") || strings.Contains(title, "secret") || strings.Contains(title, "token") || strings.Contains(title, "key") {

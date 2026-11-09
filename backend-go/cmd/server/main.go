@@ -46,7 +46,8 @@ func main() {
 	searchService := services.NewSearchService(db)
 	notifService := services.NewNotificationService(db, rdb)
 	pdfService := services.NewPDFService(db)
-	aiRemediationService := services.NewAiRemediationService(db, rdb, cfg)
+	neurolinkService := services.NewNeurolinkService(db, rdb)
+	aiRemediationService := services.NewAiRemediationService(db, rdb, cfg, neurolinkService)
 
 	// 4. Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
@@ -63,10 +64,11 @@ func main() {
 	scanProfileHandler := handlers.NewScanProfileHandler(db)
 	authzHandler := handlers.NewAuthorizationHandler(db)
 	scanJobHandler := handlers.NewScanJobHandler(db)
-	findingHandler := handlers.NewFindingHandler(db, aiRemediationService)
+	findingHandler := handlers.NewFindingHandler(db, aiRemediationService, neurolinkService)
 	reportHandler := handlers.NewReportHandler(db, pdfService)
 	engineHandler := handlers.NewEngineHandler(db)
 	gitWebhookHandler := handlers.NewGitWebhookHandler(db)
+	neurolinkHandler := handlers.NewNeurolinkHandler(neurolinkService)
 
 	// 5. Start Background Native Docker Scanner Worker
 	scannerRunner := scanner.NewRunner(db)
@@ -199,6 +201,14 @@ func main() {
 		protected.GET("/findings/:id", findingHandler.Show)
 		protected.GET("/findings/:id/ai-remediation", findingHandler.AIRemediation)
 		protected.PUT("/findings/:id", findingHandler.Update)
+
+		// 15.1 NeuroLink Continuous Learning Synaptic Hub
+		neurolink := protected.Group("/neurolink")
+		{
+			neurolink.GET("/stats", neurolinkHandler.Stats)
+			neurolink.GET("/synapses", neurolinkHandler.ListSynapses)
+			neurolink.POST("/feedback", neurolinkHandler.SubmitFeedback)
+		}
 
 		// 16. Reports
 		protected.GET("/reports", reportHandler.List)
