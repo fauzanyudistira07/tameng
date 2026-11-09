@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 )
 
@@ -254,6 +255,7 @@ type ScanJob struct {
 	Authorization *Authorization `gorm:"foreignKey:AuthorizationID" json:"authorization,omitempty"`
 	Creator       *User          `gorm:"foreignKey:CreatedBy" json:"creator,omitempty"`
 	ScanRuns      []ScanRun      `gorm:"foreignKey:ScanJobID" json:"scan_runs,omitempty"`
+	Reports       []Report       `gorm:"foreignKey:ScanJobID" json:"reports,omitempty"`
 }
 
 type ScanRun struct {
@@ -333,12 +335,27 @@ type Report struct {
 	ArtifactPath *string    `gorm:"size:255" json:"artifact_path"`
 	GeneratedBy  *uint64    `json:"generated_by"`
 	GeneratedAt  *time.Time `json:"generated_at"`
-	Metadata     *string    `gorm:"type:json" json:"metadata"`
+	Metadata     *string    `gorm:"type:json" json:"-"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 
 	ScanJob   *ScanJob `gorm:"foreignKey:ScanJobID" json:"scan_job,omitempty"`
 	Generator *User    `gorm:"foreignKey:GeneratedBy" json:"generator,omitempty"`
+}
+
+func (r Report) MarshalJSON() ([]byte, error) {
+	type Alias Report
+	var metaObj interface{}
+	if r.Metadata != nil && *r.Metadata != "" {
+		_ = json.Unmarshal([]byte(*r.Metadata), &metaObj)
+	}
+	return json.Marshal(&struct {
+		Alias
+		Metadata interface{} `json:"metadata"`
+	}{
+		Alias:    (Alias)(r),
+		Metadata: metaObj,
+	})
 }
 
 type PasswordResetToken struct {

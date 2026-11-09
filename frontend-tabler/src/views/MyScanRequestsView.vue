@@ -878,25 +878,62 @@ async function confirmAndExecuteRerun() {
 // -------------------------------------------------------------
 // Detail & Findings Modal
 // -------------------------------------------------------------
+// Detail & Findings Modal
+// -------------------------------------------------------------
 const isLoadingFindings = ref(false)
+const directScanFindings = ref<Finding[]>([])
 
 async function openDetailModal(req: ScanRequest) {
   selectedRequestForDetail.value = req
   findingsFilter.value = 'all'
   activeAiFindingKey.value = null
   aiRemediationData.value = null
+  directScanFindings.value = []
 
-  const reportId = req.reports?.[0]?.id
-  if (reportId && (!req.reports[0].metadata || !req.reports[0].metadata.content)) {
+  let report = req.reports?.[0]
+  const reportId = report?.id
+
+  // Check if report metadata needs to be parsed or fetched
+  let meta: any = report?.metadata
+  if (typeof meta === 'string') {
+    try {
+      meta = JSON.parse(meta)
+      if (report) report.metadata = meta
+    } catch (e) {}
+  }
+
+  if (reportId && (!meta || !meta.content || !meta.content.findings)) {
     isLoadingFindings.value = true
     try {
       const res = await apiFetch(`/api/reports/${reportId}`)
       if (res?.report) {
+        let rMeta = res.report.metadata
+        if (typeof rMeta === 'string') {
+          try { rMeta = JSON.parse(rMeta) } catch (e) {}
+          res.report.metadata = rMeta
+        }
+        if (!req.reports) req.reports = []
         req.reports[0] = res.report
         selectedRequestForDetail.value = { ...req }
       }
     } catch (err) {
-      console.error('Gagal memuat detail temuan:', err)
+      console.error('Gagal memuat detail temuan dari laporan:', err)
+    } finally {
+      isLoadingFindings.value = false
+    }
+  }
+
+  // Resilient Fallback: If still no findings or no report, fetch directly from /api/findings?scan_job_id=...
+  const findingsInReport = (selectedRequestForDetail.value?.reports?.[0]?.metadata as any)?.content?.findings
+  if (!findingsInReport || findingsInReport.length === 0) {
+    isLoadingFindings.value = true
+    try {
+      const fRes = await apiFetch(`/api/findings?scan_job_id=${req.id}`)
+      if (fRes?.findings && Array.isArray(fRes.findings) && fRes.findings.length > 0) {
+        directScanFindings.value = fRes.findings
+      }
+    } catch (err) {
+      console.error('Gagal memuat temuan langsung dari API:', err)
     } finally {
       isLoadingFindings.value = false
     }
@@ -907,6 +944,7 @@ function closeDetailModal() {
   selectedRequestForDetail.value = null
   activeAiFindingKey.value = null
   aiRemediationData.value = null
+  directScanFindings.value = []
   isLoadingFindings.value = false
 }
 
@@ -915,11 +953,33 @@ const currentReport = computed(() => {
 })
 
 const allFindings = computed<Finding[]>(() => {
-  return currentReport.value?.metadata?.content?.findings || []
+  if (directScanFindings.value && directScanFindings.value.length > 0) {
+    return directScanFindings.value
+  }
+  let meta: any = currentReport.value?.metadata
+  if (typeof meta === 'string') {
+    try { meta = JSON.parse(meta) } catch (e) {}
+  }
+  return meta?.content?.findings || []
 })
 
 const riskSummary = computed(() => {
-  return currentReport.value?.metadata?.content?.risk_summary || {
+  if (directScanFindings.value && directScanFindings.value.length > 0) {
+    const list = directScanFindings.value
+    return {
+      critical: list.filter(f => (f.severity || '').toLowerCase() === 'critical').length,
+      high: list.filter(f => (f.severity || '').toLowerCase() === 'high').length,
+      medium: list.filter(f => (f.severity || '').toLowerCase() === 'medium').length,
+      low: list.filter(f => (f.severity || '').toLowerCase() === 'low').length,
+      info: list.filter(f => ['informational', 'info'].includes((f.severity || '').toLowerCase())).length,
+      total: list.length
+    }
+  }
+  let meta: any = currentReport.value?.metadata
+  if (typeof meta === 'string') {
+    try { meta = JSON.parse(meta) } catch (e) {}
+  }
+  return meta?.content?.risk_summary || meta?.risk_summary || {
     critical: 0,
     high: 0,
     medium: 0,

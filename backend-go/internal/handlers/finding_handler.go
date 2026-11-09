@@ -2,24 +2,25 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"tameng-backend-go/internal/models"
+	"tameng-backend-go/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type FindingHandler struct {
-	db *gorm.DB
+	db        *gorm.DB
+	aiService *services.AiRemediationService
 }
 
-func NewFindingHandler(db *gorm.DB) *FindingHandler {
-	return &FindingHandler{db: db}
+func NewFindingHandler(db *gorm.DB, aiService *services.AiRemediationService) *FindingHandler {
+	return &FindingHandler{db: db, aiService: aiService}
 }
 
 // List handles GET /api/findings
@@ -44,6 +45,12 @@ func (h *FindingHandler) List(c *gin.Context) {
 			var assignedIDs []uint64
 			h.db.Table("project_user").Where("user_id = ?", user.ID).Pluck("project_id", &assignedIDs)
 			query = query.Where("project_id IN (?)", assignedIDs)
+		}
+	}
+
+	if scanJobIDStr := c.Query("scan_job_id"); scanJobIDStr != "" {
+		if sID, err := strconv.ParseUint(scanJobIDStr, 10, 64); err == nil {
+			query = query.Where("scan_job_id = ?", sID)
 		}
 	}
 
@@ -184,43 +191,24 @@ func (h *FindingHandler) AIRemediation(c *gin.Context) {
 	}
 
 	var finding models.Finding
-	if err := h.db.First(&finding, findingID).Error; err != nil {
+	if err := h.db.
+		Preload("Project").
+		Preload("ScanJob").
+		Preload("ScanRun").
+		Preload("Evidences").
+		First(&finding, findingID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"message": "Temuan tidak ditemukan."})
 		return
 	}
 
-	cwe := "CWE-General"
-	if finding.CWE != nil && *finding.CWE != "" {
-		cwe = *finding.CWE
-	}
-	owasp := "A00:2021"
-	if finding.OWASP != nil && *finding.OWASP != "" {
-		owasp = *finding.OWASP
-	}
-
-	explanation := fmt.Sprintf("Temuan ini mengindikasikan adanya kerentanan keamanan berkategori %s (%s) pada asset %s (%s). Kerentanan ini berisiko dieksploitasi oleh aktor jahat untuk membobol integritas atau kerahasiaan sistem.",
-		finding.Title, cwe, finding.AssetIdentifier, finding.AssetType)
-
-	steps := []string{
-		"Validasi seluruh input pengguna menggunakan parameterized query atau validator berbasis allowlist.",
-		"Terapkan prinsip least-privilege pada hak akses kredensial dan database.",
-		"Pastikan sanitasi output dilakukan sebelum data di-render atau dikirimkan ke klien.",
-		"Lakukan regression test dan jalankan ulang scan untuk memastikan perbaikan efektif.",
-	}
-
-	guidance := gin.H{
-		"finding_id":  finding.ID,
-		"title":       finding.Title,
-		"cwe":         cwe,
-		"owasp":       owasp,
-		"severity":    finding.Severity,
-		"explanation": explanation,
-		"steps":       steps,
-		"advisory":    "Rekomendasi AI bersifat asistif. Analis keamanan tetap bertanggung jawab memverifikasi kode sebelum deployment produksi.",
+	res, err := h.aiService.GenerateGuidance(&finding)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Gagal menghasilkan analisis AI: " + err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"remediation": guidance,
+		"remediation": res,
 	})
 }
 

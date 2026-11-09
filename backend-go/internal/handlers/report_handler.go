@@ -78,9 +78,69 @@ func (h *ReportHandler) Show(c *gin.Context) {
 		return
 	}
 
+	h.enrichReportMetadata(&report)
+
 	c.JSON(http.StatusOK, gin.H{
 		"report": report,
 	})
+}
+
+func (h *ReportHandler) enrichReportMetadata(report *models.Report) {
+	var metaMap map[string]interface{}
+	if report.Metadata != nil && *report.Metadata != "" {
+		_ = json.Unmarshal([]byte(*report.Metadata), &metaMap)
+	}
+	if metaMap == nil {
+		metaMap = make(map[string]interface{})
+	}
+
+	content, _ := metaMap["content"].(map[string]interface{})
+	if content == nil {
+		content = make(map[string]interface{})
+	}
+
+	findingsList, _ := content["findings"].([]interface{})
+	if len(findingsList) == 0 {
+		var findings []models.Finding
+		h.db.Preload("Evidences").Where("scan_job_id = ?", report.ScanJobID).
+			Order("FIELD(severity, 'critical', 'high', 'medium', 'low', 'informational') ASC").
+			Order("id DESC").
+			Find(&findings)
+
+		var crit, high, med, low, info int
+		for _, f := range findings {
+			switch strings.ToLower(f.Severity) {
+			case "critical":
+				crit++
+			case "high":
+				high++
+			case "medium":
+				med++
+			case "low":
+				low++
+			default:
+				info++
+			}
+		}
+
+		content["findings"] = findings
+		riskSum := map[string]int{
+			"total":         len(findings),
+			"critical":      crit,
+			"high":          high,
+			"medium":        med,
+			"low":           low,
+			"informational": info,
+		}
+		content["risk_summary"] = riskSum
+		metaMap["finding_count"] = len(findings)
+		metaMap["risk_summary"] = riskSum
+		metaMap["content"] = content
+
+		newMetaBytes, _ := json.Marshal(metaMap)
+		newMetaStr := string(newMetaBytes)
+		report.Metadata = &newMetaStr
+	}
 }
 
 // Store handles POST /api/reports

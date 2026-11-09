@@ -371,16 +371,48 @@ func (r *Runner) parseFindings(engineKey string, data []byte) []NormalizedFindin
 }
 
 func (r *Runner) createOrSyncReport(job *models.ScanJob) {
-	var totalFindings, critCount, highCount, medCount, lowCount, infoCount int64
-	r.db.Model(&models.Finding{}).Where("scan_job_id = ?", job.ID).Count(&totalFindings)
-	r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND LOWER(severity) = ?", job.ID, "critical").Count(&critCount)
-	r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND LOWER(severity) = ?", job.ID, "high").Count(&highCount)
-	r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND LOWER(severity) = ?", job.ID, "medium").Count(&medCount)
-	r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND LOWER(severity) = ?", job.ID, "low").Count(&lowCount)
-	r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND LOWER(severity) IN (?)", job.ID, []string{"informational", "info"}).Count(&infoCount)
+	var findings []models.Finding
+	r.db.Preload("Evidences").Where("scan_job_id = ?", job.ID).
+		Order("FIELD(severity, 'critical', 'high', 'medium', 'low', 'informational') ASC").
+		Order("id DESC").
+		Find(&findings)
+
+	var critCount, highCount, medCount, lowCount, infoCount int64
+	for _, f := range findings {
+		switch strings.ToLower(f.Severity) {
+		case "critical":
+			critCount++
+		case "high":
+			highCount++
+		case "medium":
+			medCount++
+		case "low":
+			lowCount++
+		default:
+			infoCount++
+		}
+	}
+
+	riskSummary := map[string]int64{
+		"total":         int64(len(findings)),
+		"critical":      critCount,
+		"high":          highCount,
+		"medium":        medCount,
+		"low":           lowCount,
+		"informational": infoCount,
+	}
+
+	content := map[string]interface{}{
+		"title":        "Laporan Standar Pemindaian Keamanan TAMENG",
+		"description":  "Laporan ini dibuat dari hasil scan yang sudah selesai diproses oleh pipeline TAMENG Go Native.",
+		"scan_job_id": job.ID,
+		"findings":     findings,
+		"risk_summary": riskSummary,
+	}
 
 	meta := map[string]interface{}{
-		"finding_count": totalFindings,
+		"finding_count": len(findings),
+		"risk_summary":  riskSummary,
 		"severity_breakdown": map[string]int64{
 			"critical":      critCount,
 			"high":          highCount,
@@ -388,6 +420,7 @@ func (r *Runner) createOrSyncReport(job *models.ScanJob) {
 			"low":           lowCount,
 			"informational": infoCount,
 		},
+		"content":             content,
 		"generated_by_engine": "tameng-go-native-runner",
 	}
 	metaBytes, _ := json.Marshal(meta)

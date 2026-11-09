@@ -46,6 +46,7 @@ func main() {
 	searchService := services.NewSearchService(db)
 	notifService := services.NewNotificationService(db, rdb)
 	pdfService := services.NewPDFService(db)
+	aiRemediationService := services.NewAiRemediationService(db, rdb, cfg)
 
 	// 4. Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
@@ -62,7 +63,7 @@ func main() {
 	scanProfileHandler := handlers.NewScanProfileHandler(db)
 	authzHandler := handlers.NewAuthorizationHandler(db)
 	scanJobHandler := handlers.NewScanJobHandler(db)
-	findingHandler := handlers.NewFindingHandler(db)
+	findingHandler := handlers.NewFindingHandler(db, aiRemediationService)
 	reportHandler := handlers.NewReportHandler(db, pdfService)
 	engineHandler := handlers.NewEngineHandler(db)
 	gitWebhookHandler := handlers.NewGitWebhookHandler(db)

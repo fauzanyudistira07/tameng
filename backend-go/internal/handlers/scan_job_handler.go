@@ -259,6 +259,7 @@ func (h *ScanJobHandler) MyScanRequests(c *gin.Context) {
 		Preload("ScanRuns").
 		Preload("Creator").
 		Preload("Creator.Role").
+		Preload("Reports").
 		Order("id DESC")
 
 	if user != nil {
@@ -274,6 +275,15 @@ func (h *ScanJobHandler) MyScanRequests(c *gin.Context) {
 	if err := query.Find(&scanJobs).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Gagal mengambil daftar permohonan scan."})
 		return
+	}
+
+	for i := range scanJobs {
+		if (scanJobs[i].Status == "completed" || scanJobs[i].Status == "failed") && len(scanJobs[i].Reports) == 0 {
+			var r models.Report
+			if err := h.db.Where("scan_job_id = ?", scanJobs[i].ID).First(&r).Error; err == nil {
+				scanJobs[i].Reports = append(scanJobs[i].Reports, r)
+			}
+		}
 	}
 
 	type RequestOutput struct {
