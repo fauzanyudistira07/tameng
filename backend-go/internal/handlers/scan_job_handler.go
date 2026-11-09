@@ -100,21 +100,29 @@ func (h *ScanJobHandler) Store(c *gin.Context) {
 	}
 	enginePlanBytes, _ := json.Marshal(enginePlan)
 
+	var auth models.Authorization
+	h.db.First(&auth, req.AuthorizationID)
+	policySnap := auth.PolicySnapshot
+	if policySnap == "" {
+		policySnap = "{}"
+	}
+
 	scanJob := models.ScanJob{
-		Code:            jobCode,
-		ProjectID:       req.ProjectID,
-		RepositoryID:    req.RepositoryID,
-		TargetID:        req.TargetID,
-		ScanProfileID:   req.ScanProfileID,
-		AuthorizationID: req.AuthorizationID,
-		CreatedBy:       user.ID,
-		Status:          "queued",
-		Progress:        0,
-		Attempt:         0,
-		QueuedAt:        &now,
-		EnginePlan:      string(enginePlanBytes),
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		Code:                    jobCode,
+		ProjectID:               req.ProjectID,
+		RepositoryID:            req.RepositoryID,
+		TargetID:                req.TargetID,
+		ScanProfileID:           req.ScanProfileID,
+		AuthorizationID:         req.AuthorizationID,
+		CreatedBy:               user.ID,
+		Status:                  "queued",
+		Progress:                0,
+		Attempt:                 0,
+		QueuedAt:                &now,
+		EnginePlan:              string(enginePlanBytes),
+		ExecutionPolicySnapshot: &policySnap,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 
 	if err := h.db.Create(&scanJob).Error; err != nil {
@@ -162,21 +170,27 @@ func (h *ScanJobHandler) Rerun(c *gin.Context) {
 	now := time.Now()
 	jobCode := fmt.Sprintf("SCAN-%s-RERUN-%04X", now.Format("20060102150405"), rand.Intn(0xFFFF))
 
+	policySnap := "{}"
+	if orig.ExecutionPolicySnapshot != nil && *orig.ExecutionPolicySnapshot != "" {
+		policySnap = *orig.ExecutionPolicySnapshot
+	}
+
 	newJob := models.ScanJob{
-		Code:            jobCode,
-		ProjectID:       orig.ProjectID,
-		RepositoryID:    orig.RepositoryID,
-		TargetID:        orig.TargetID,
-		ScanProfileID:   orig.ScanProfileID,
-		AuthorizationID: orig.AuthorizationID,
-		CreatedBy:       user.ID,
-		Status:          "queued",
-		Progress:        0,
-		Attempt:         0,
-		QueuedAt:        &now,
-		EnginePlan:      orig.EnginePlan,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		Code:                    jobCode,
+		ProjectID:               orig.ProjectID,
+		RepositoryID:            orig.RepositoryID,
+		TargetID:                orig.TargetID,
+		ScanProfileID:           orig.ScanProfileID,
+		AuthorizationID:         orig.AuthorizationID,
+		CreatedBy:               user.ID,
+		Status:                  "queued",
+		Progress:                0,
+		Attempt:                 0,
+		QueuedAt:                &now,
+		EnginePlan:              orig.EnginePlan,
+		ExecutionPolicySnapshot: &policySnap,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 
 	if err := h.db.Create(&newJob).Error; err != nil {
@@ -496,19 +510,20 @@ func (h *ScanJobHandler) StoreMyScanRequest(c *gin.Context) {
 
 	jobCode := fmt.Sprintf("SCAN-%s-REQ-%04X", now.Format("20060102150405"), rand.Intn(0xFFFF))
 	scanJob := models.ScanJob{
-		Code:            jobCode,
-		ProjectID:       project.ID,
-		RepositoryID:    repoID,
-		TargetID:        targetID,
-		ScanProfileID:   profile.ID,
-		AuthorizationID: auth.ID,
-		CreatedBy:       user.ID,
-		Status:          jobStatus,
-		Progress:        0,
-		Attempt:         0,
-		EnginePlan:      string(enginePlanBytes),
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		Code:                    jobCode,
+		ProjectID:               project.ID,
+		RepositoryID:            repoID,
+		TargetID:                targetID,
+		ScanProfileID:           profile.ID,
+		AuthorizationID:         auth.ID,
+		CreatedBy:               user.ID,
+		Status:                  jobStatus,
+		Progress:                0,
+		Attempt:                 0,
+		EnginePlan:              string(enginePlanBytes),
+		ExecutionPolicySnapshot: &auth.PolicySnapshot,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	if isAdmin {
 		scanJob.QueuedAt = &now

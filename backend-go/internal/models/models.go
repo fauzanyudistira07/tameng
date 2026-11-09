@@ -308,12 +308,16 @@ type Finding struct {
 }
 
 type FindingEvidence struct {
-	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	FindingID   uint64    `gorm:"index;not null" json:"finding_id"`
-	EngineKey   string    `gorm:"size:255;not null" json:"engine_key"`
-	RawPayload  *string   `gorm:"type:json" json:"raw_payload"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID              uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
+	FindingID       uint64    `gorm:"index;not null" json:"finding_id"`
+	EngineKey       string    `gorm:"size:50;not null" json:"engine_key"`
+	EngineVersion   *string   `gorm:"size:50" json:"engine_version"`
+	Confidence      float64   `gorm:"type:decimal(3,2);default:0.80" json:"confidence"`
+	FingerprintHash *string   `gorm:"size:64" json:"fingerprint_hash"`
+	EvidenceSummary *string   `gorm:"type:json" json:"evidence_summary"`
+	RawArtifactPath *string   `gorm:"size:255" json:"raw_artifact_path"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func (FindingEvidence) TableName() string {

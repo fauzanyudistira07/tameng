@@ -3,25 +3,25 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"tameng-backend-go/internal/models"
+	"tameng-backend-go/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type ReportHandler struct {
-	db *gorm.DB
+	db         *gorm.DB
+	pdfService *services.PDFService
 }
 
-func NewReportHandler(db *gorm.DB) *ReportHandler {
-	return &ReportHandler{db: db}
+func NewReportHandler(db *gorm.DB, pdfService *services.PDFService) *ReportHandler {
+	return &ReportHandler{db: db, pdfService: pdfService}
 }
 
 // List handles GET /api/reports
@@ -208,35 +208,22 @@ func (h *ReportHandler) Sync(c *gin.Context) {
 // DownloadPDF handles GET /api/reports/:id/download-pdf
 func (h *ReportHandler) DownloadPDF(c *gin.Context) {
 	idStr := c.Param("id")
-
-	// Proxy request to internal Laravel backend container on port 8000
-	targetURL := fmt.Sprintf("http://127.0.0.1:8000/api/reports/%s/download-pdf", url.PathEscape(idStr))
-
-	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", targetURL, nil)
+	reportID, err := strconv.ParseUint(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "Gagal menyiapkan permintaan PDF."})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "ID tidak valid."})
 		return
 	}
 
-	// Forward Cookie header (secsys_session) and other relevant headers
-	for key, values := range c.Request.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	pdfBytes, filename, err := h.pdfService.GeneratePDF(reportID)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"message": "Gagal menghubungi generator PDF: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Gagal merender PDF: " + err.Error()})
 		return
 	}
-	defer resp.Body.Close()
 
-	for k, v := range resp.Header {
-		c.Writer.Header()[k] = v
-	}
-	c.Writer.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(c.Writer, resp.Body)
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Header("Content-Length", strconv.Itoa(len(pdfBytes)))
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+	c.Data(http.StatusOK, "application/pdf", pdfBytes)
 }
 

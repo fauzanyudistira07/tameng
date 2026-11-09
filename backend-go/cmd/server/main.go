@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"tameng-backend-go/internal/database"
 	"tameng-backend-go/internal/handlers"
 	"tameng-backend-go/internal/middleware"
+	"tameng-backend-go/internal/scanner"
 	"tameng-backend-go/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -43,6 +45,7 @@ func main() {
 	authService := services.NewAuthService(db, rdb, cfg, mailService, auditService)
 	searchService := services.NewSearchService(db)
 	notifService := services.NewNotificationService(db, rdb)
+	pdfService := services.NewPDFService(db)
 
 	// 4. Initialize Handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
@@ -60,11 +63,17 @@ func main() {
 	authzHandler := handlers.NewAuthorizationHandler(db)
 	scanJobHandler := handlers.NewScanJobHandler(db)
 	findingHandler := handlers.NewFindingHandler(db)
-	reportHandler := handlers.NewReportHandler(db)
+	reportHandler := handlers.NewReportHandler(db, pdfService)
 	engineHandler := handlers.NewEngineHandler(db)
 	gitWebhookHandler := handlers.NewGitWebhookHandler(db)
 
-	// 5. Setup Gin Router
+	// 5. Start Background Native Docker Scanner Worker
+	scannerRunner := scanner.NewRunner(db)
+	workerCtx, cancelWorker := context.WithCancel(context.Background())
+	defer cancelWorker()
+	go scannerRunner.StartWorker(workerCtx)
+
+	// 6. Setup Gin Router
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())

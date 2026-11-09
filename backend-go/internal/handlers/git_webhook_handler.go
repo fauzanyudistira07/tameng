@@ -164,19 +164,20 @@ func (h *GitWebhookHandler) Handle(c *gin.Context) {
 
 	jobCode := fmt.Sprintf("SCAN-%s-CI-%04X", now.Format("20060102150405"), rand.Intn(0xFFFF))
 	scanJob := models.ScanJob{
-		Code:            jobCode,
-		ProjectID:       repo.ProjectID,
-		RepositoryID:    &repo.ID,
-		ScanProfileID:   profile.ID,
-		AuthorizationID: auth.ID,
-		CreatedBy:       firstUser.ID,
-		Status:          "queued",
-		Progress:        0,
-		Attempt:         0,
-		QueuedAt:        &now,
-		EnginePlan:      string(enginePlanBytes),
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		Code:                    jobCode,
+		ProjectID:               repo.ProjectID,
+		RepositoryID:            &repo.ID,
+		ScanProfileID:           profile.ID,
+		AuthorizationID:         auth.ID,
+		CreatedBy:               firstUser.ID,
+		Status:                  "queued",
+		Progress:                0,
+		Attempt:                 0,
+		QueuedAt:                &now,
+		EnginePlan:              string(enginePlanBytes),
+		ExecutionPolicySnapshot: &auth.PolicySnapshot,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	h.db.Create(&scanJob)
 

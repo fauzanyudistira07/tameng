@@ -324,19 +324,20 @@ func (h *RepositoryHandler) Scan(c *gin.Context) {
 	enginePlanBytes, _ := json.Marshal(enginePlan)
 
 	scanJob := models.ScanJob{
-		Code:                jobCode,
-		ProjectID:           repo.ProjectID,
-		RepositoryID:        &repo.ID,
-		ScanProfileID:       profile.ID,
-		AuthorizationID:     auth.ID,
-		CreatedBy:           user.ID,
-		Status:              "queued",
-		Progress:            0,
-		Attempt:             0,
-		QueuedAt:            &now,
-		EnginePlan:          string(enginePlanBytes),
-		CreatedAt:           now,
-		UpdatedAt:           now,
+		Code:                    jobCode,
+		ProjectID:               repo.ProjectID,
+		RepositoryID:            &repo.ID,
+		ScanProfileID:           profile.ID,
+		AuthorizationID:         auth.ID,
+		CreatedBy:               user.ID,
+		Status:                  "queued",
+		Progress:                0,
+		Attempt:                 0,
+		QueuedAt:                &now,
+		EnginePlan:              string(enginePlanBytes),
+		ExecutionPolicySnapshot: &auth.PolicySnapshot,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	if err := h.db.Create(&scanJob).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Gagal membuat scan job."})
