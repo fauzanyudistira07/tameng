@@ -33,7 +33,9 @@ class ReportPdfGenerator
             }
 
             if ($findingModel) {
-                $guidance = $remediationService->generateGuidance($findingModel);
+                // Pass false to disallow synchronous live LLM calls during batch PDF rendering,
+                // ensuring cached AI advice is used if available, or fast local cyber intelligence is leveraged.
+                $guidance = $remediationService->generateGuidance($findingModel, false);
                 $item['remediation'] = [
                     'category' => $guidance['category'] ?? null,
                     'summary' => $guidance['summary'] ?? null,

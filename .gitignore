@@ -33,6 +33,10 @@ backend/storage/logs/*
 !backend/storage/framework/views/.gitignore
 !backend/storage/logs/.gitignore
 
+# Golang Binaries & Build artifacts
+backend-go/bin/
+backend-go/*.log
+
 # Operating System & IDE Files
 .DS_Store
 Thumbs.db

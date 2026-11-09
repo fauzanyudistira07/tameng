@@ -16,13 +16,43 @@ export default defineConfig({
       overlay: true
     },
     proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
+      '/sanctum': {
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         secure: false,
         cookieDomainRewrite: '',
       },
-      '/sanctum': {
+      '/api/login': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        secure: false,
+        cookieDomainRewrite: '',
+      },
+      '/api/logout': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        secure: false,
+        cookieDomainRewrite: '',
+      },
+      '/api/user': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        secure: false,
+        cookieDomainRewrite: '',
+      },
+      '/api/forgot-password': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        secure: false,
+        cookieDomainRewrite: '',
+      },
+      '/api/reset-password': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        secure: false,
+        cookieDomainRewrite: '',
+      },
+      '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         secure: false,

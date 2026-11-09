@@ -1120,18 +1120,32 @@ function exportFindingsCsv() {
 }
 
 // Download PDF Report
+const isDownloadingPdf = ref(false)
+
 async function downloadReportPdfFile() {
+  if (isDownloadingPdf.value) return
   const reportId = currentReport.value?.id
   if (!reportId) {
     showAlert('info', 'Laporan PDF belum tersedia untuk pekerjaan pemindaian ini.')
     return
   }
+
+  isDownloadingPdf.value = true
+  showAlert('info', 'Sedang mengompilasi dan mengunduh file PDF laporan...')
+
   try {
     const res = await fetch(`/api/reports/${reportId}/download-pdf`, {
       headers: { Accept: 'application/pdf' },
       credentials: 'include'
     })
-    if (!res.ok) throw new Error('Gagal mengunduh file PDF laporan.')
+    if (!res.ok) {
+      let errMsg = 'Gagal mengunduh file PDF laporan.'
+      try {
+        const errJson = await res.json()
+        if (errJson?.message) errMsg = errJson.message
+      } catch {}
+      throw new Error(errMsg)
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -1144,6 +1158,8 @@ async function downloadReportPdfFile() {
     showAlert('success', 'Laporan PDF berhasil diunduh.')
   } catch (err: any) {
     showAlert('danger', err?.message || 'Gagal mengunduh laporan PDF.')
+  } finally {
+    isDownloadingPdf.value = false
   }
 }
 
@@ -2611,11 +2627,13 @@ onUnmounted(() => {
                   <button
                     type="button"
                     class="btn btn-sm btn-primary d-flex align-items-center gap-1"
+                    :disabled="isDownloadingPdf"
                     @click="downloadReportPdfFile"
                     title="Unduh laporan resmi PDF"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /><path d="M12 17v-6" /><path d="M9.5 14.5l2.5 2.5l2.5 -2.5" /></svg>
-                    <span>Unduh PDF</span>
+                    <span v-if="isDownloadingPdf" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M14 3v4a1 1 0 0 0 1 1h4" /><path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z" /><path d="M12 17v-6" /><path d="M9.5 14.5l2.5 2.5l2.5 -2.5" /></svg>
+                    <span>{{ isDownloadingPdf ? 'Menyiapkan PDF...' : 'Unduh PDF' }}</span>
                   </button>
                 </div>
               </div>

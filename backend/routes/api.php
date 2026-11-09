@@ -27,7 +27,7 @@ Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middle
 Route::get('/health', HealthController::class);
 Route::post('/webhooks/git', [GitWebhookController::class, 'handle'])->middleware('throttle:30,1');
 
-Route::middleware('auth:sanctum')->group(function (): void {
+Route::middleware(\App\Http\Middleware\AuthenticateFromGoSession::class)->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', CurrentUserController::class);
     Route::put('/user', [CurrentUserController::class, 'update']);

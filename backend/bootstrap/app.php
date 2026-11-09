@@ -13,6 +13,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->encryptCookies(except: ['secsys_session', 'XSRF-TOKEN']);
+        $middleware->prependToGroup('api', \App\Http\Middleware\AuthenticateFromGoSession::class);
         $middleware->statefulApi();
         $middleware->alias([
             'role' => EnsureRole::class,

@@ -12,8 +12,11 @@ class AiRemediationService
 {
     /**
      * Generate comprehensive AI remediation guidance for a security finding.
+     * When $allowLiveLlm is false (e.g. during batch PDF generation), uncached findings
+     * immediately fallback to the local advanced cyber intelligence engine to prevent
+     * HTTP timeouts and API rate-limiting bottlenecks.
      */
-    public function generateGuidance(Finding $finding): array
+    public function generateGuidance(Finding $finding, bool $allowLiveLlm = true): array
     {
         $finding->loadMissing(['project', 'scanJob', 'scanRun']);
 
@@ -27,8 +30,8 @@ class AiRemediationService
         $provider = config('secsys.ai.provider', env('AI_PROVIDER', 'auto'));
         $guidance = null;
 
-        // Attempt live LLM generation if configured
-        if ($provider !== 'heuristic') {
+        // Attempt live LLM generation if configured AND explicitly allowed for this invocation
+        if ($allowLiveLlm && $provider !== 'heuristic') {
             try {
                 $guidance = $this->tryGenerateLlmGuidance($finding, $provider);
             } catch (\Throwable $e) {
