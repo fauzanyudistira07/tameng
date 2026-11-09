@@ -1,4 +1,4 @@
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { apiFetch } from '../services/api'
 
 export interface NotificationItem {
@@ -16,200 +16,37 @@ export interface NotificationItem {
   url?: string
 }
 
-const STORAGE_READ_KEY = 'tameng_notif_read'
-const STORAGE_STARRED_KEY = 'tameng_notif_starred'
-const STORAGE_DISMISSED_KEY = 'tameng_notif_dismissed'
-
-function getStoredSet(key: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? new Set(JSON.parse(raw)) : new Set()
-  } catch {
-    return new Set()
-  }
-}
-
-function saveStoredSet(key: string, set: Set<string>) {
-  try {
-    localStorage.setItem(key, JSON.stringify(Array.from(set)))
-  } catch {
-    // Ignore quota errors
-  }
-}
-
-function formatRelativeTime(dateStr?: string): string {
-  if (!dateStr) return 'Baru saja'
-  try {
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMins / 60)
-    const diffDays = Math.floor(diffHours / 24)
-
-    if (diffMins < 1) return 'Baru saja'
-    if (diffMins < 60) return `${diffMins} menit yang lalu`
-    if (diffHours < 24) return `${diffHours} jam yang lalu`
-    if (diffDays === 1) return 'Kemarin'
-    if (diffDays < 30) return `${diffDays} hari yang lalu`
-    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-  } catch {
-    return dateStr
-  }
-}
-
-// Shared module-level state & cache to avoid re-fetching on every page navigation
+// Global state across components
 const notifications = ref<NotificationItem[]>([])
 const activeFilter = ref<'all' | 'unread' | 'starred'>('all')
 const isLoading = ref(false)
-let lastFetchedTime = 0
-const NOTIFICATION_CACHE_TTL_MS = 60 * 1000 // 60 seconds cache
+const backendUnreadCount = ref(0)
+const backendStarredCount = ref(0)
+let lastFetchTime = 0
+const CACHE_TTL_MS = 15000 // 15 seconds
 
 export function useNotifications() {
-  const readSet = getStoredSet(STORAGE_READ_KEY)
-  const starredSet = getStoredSet(STORAGE_STARRED_KEY)
-  const dismissedSet = getStoredSet(STORAGE_DISMISSED_KEY)
-
   async function loadRealTamengNotifications(force = false) {
-    if (!force && notifications.value.length > 0 && (Date.now() - lastFetchedTime < NOTIFICATION_CACHE_TTL_MS)) {
+    if (!force && notifications.value.length > 0 && Date.now() - lastFetchTime < CACHE_TTL_MS) {
       return
     }
     if (isLoading.value) return
     isLoading.value = true
+
     try {
-      const items: NotificationItem[] = []
-
-      // 1. Fetch Real High & Critical Findings from TAMENG
-      try {
-        const findingsData = await apiFetch('/api/findings')
-        const findingsList = findingsData?.findings || []
-        // Filter high and critical findings, sorted by ID descending
-        const criticalFindings = findingsList
-          .filter((f: any) => ['critical', 'high'].includes(f.severity?.toLowerCase()))
-          .slice(0, 10)
-
-        criticalFindings.forEach((f: any) => {
-          const id = `notif-fnd-${f.id}`
-          if (dismissedSet.has(id)) return
-
-          const isCrit = f.severity?.toLowerCase() === 'critical'
-          const timestamp = f.created_at ? new Date(f.created_at).getTime() : Date.now()
-
-          items.push({
-            id,
-            title: `[${f.severity?.toUpperCase()}] ${f.rule_id || 'Kerentanan Terdeteksi'}`,
-            description: `${f.title} (${f.code} • ${f.project?.name || 'Aset'})`,
-            time: formatRelativeTime(f.created_at),
-            timestamp,
-            category: 'Celah Keamanan',
-            statusDot: isCrit ? 'status-dot-animated bg-red' : 'bg-orange',
-            badge: f.severity?.toUpperCase() || 'HIGH',
-            badgeClass: isCrit ? 'bg-red-lt text-red' : 'bg-orange-lt text-orange',
-            isRead: readSet.has(id),
-            isStarred: starredSet.has(id),
-            url: '/findings'
-          })
-        })
-      } catch (err) {
-        console.warn('[Notifications] Findings fetch error:', err)
+      const data = await apiFetch('/api/notifications')
+      if (data?.notifications && Array.isArray(data.notifications)) {
+        notifications.value = data.notifications
+        backendUnreadCount.value = data.unread_count ?? 0
+        backendStarredCount.value = data.starred_count ?? 0
+        lastFetchTime = Date.now()
       }
-
-      // 2. Fetch Real Scan Jobs from TAMENG
-      try {
-        const jobsData = await apiFetch('/api/scan-jobs')
-        const jobsList = jobsData?.scan_jobs || []
-        const recentJobs = jobsList.slice(0, 10)
-
-        recentJobs.forEach((j: any) => {
-          const id = `notif-job-${j.id}`
-          if (dismissedSet.has(id)) return
-
-          const status = (j.status || 'unknown').toLowerCase()
-          const timestamp = j.created_at ? new Date(j.created_at).getTime() : Date.now()
-          const targetDesc = j.repository?.name || j.target?.name || j.project?.name || 'Aset'
-
-          let dotClass = 'bg-secondary'
-          let badgeClass = 'bg-secondary-lt text-secondary'
-          if (status === 'completed') {
-            dotClass = 'bg-green'
-            badgeClass = 'bg-green-lt text-green'
-          } else if (status === 'running') {
-            dotClass = 'status-dot-animated bg-blue'
-            badgeClass = 'bg-blue-lt text-blue'
-          } else if (['failed', 'denied'].includes(status)) {
-            dotClass = 'bg-red'
-            badgeClass = 'bg-red-lt text-red'
-          }
-
-          items.push({
-            id,
-            title: `Pekerjaan Scan: ${j.code}`,
-            description: `Status: ${status.toUpperCase()} (${j.progress || 0}%) • Target: ${targetDesc}`,
-            time: formatRelativeTime(j.created_at),
-            timestamp,
-            category: 'Pekerjaan Scan',
-            statusDot: dotClass,
-            badge: status.toUpperCase(),
-            badgeClass,
-            isRead: readSet.has(id),
-            isStarred: starredSet.has(id),
-            url: '/scan-jobs'
-          })
-        })
-      } catch (err) {
-        console.warn('[Notifications] Scan jobs fetch error:', err)
-      }
-
-      // 3. Fetch Real Audit Logs from TAMENG
-      try {
-        const auditData = await apiFetch('/api/audit-logs')
-        const auditList = Array.isArray(auditData) ? auditData : auditData?.audit_logs || []
-        const recentLogs = auditList.slice(0, 10)
-
-        recentLogs.forEach((l: any) => {
-          const id = `notif-audit-${l.id}`
-          if (dismissedSet.has(id)) return
-
-          const timestamp = l.created_at ? new Date(l.created_at).getTime() : Date.now()
-          const isSuccess = (l.result || 'success').toLowerCase() === 'success'
-
-          items.push({
-            id,
-            title: `Log Audit: ${l.action}`,
-            description: `User: ${l.user?.name || 'Sistem'} • Hasil: ${(l.result || 'OK').toUpperCase()}`,
-            time: formatRelativeTime(l.created_at),
-            timestamp,
-            category: 'Tata Kelola',
-            statusDot: isSuccess ? 'bg-cyan' : 'bg-orange',
-            badge: l.target_type ? l.target_type.toUpperCase() : 'AUDIT',
-            badgeClass: 'bg-cyan-lt text-cyan',
-            isRead: readSet.has(id),
-            isStarred: starredSet.has(id),
-            url: '/audit-logs'
-          })
-        })
-      } catch (err) {
-        console.warn('[Notifications] Audit logs fetch error:', err)
-      }
-
-      // Sort all notifications by timestamp descending (newest first)
-      items.sort((a, b) => b.timestamp - a.timestamp)
-      notifications.value = items
-      lastFetchedTime = Date.now()
-
-      // Set default filter based on unread count
-      const hasUnread = items.some(item => !item.isRead)
-      activeFilter.value = hasUnread ? 'unread' : 'all'
     } catch (err) {
-      console.error('[Notifications] Global load error:', err)
+      console.warn('[Notifications] Failed loading from Go backend:', err)
     } finally {
       isLoading.value = false
     }
   }
-
-  onMounted(() => {
-    loadRealTamengNotifications()
-  })
 
   const unreadCount = computed(() => {
     return notifications.value.filter(n => !n.isRead).length
@@ -229,64 +66,73 @@ export function useNotifications() {
     return notifications.value
   })
 
-  function markAsRead(id: string) {
+  async function markAsRead(id: string) {
     const item = notifications.value.find(n => n.id === id)
-    if (item) {
+    if (item && !item.isRead) {
       item.isRead = true
-      readSet.add(id)
-      saveStoredSet(STORAGE_READ_KEY, readSet)
+      try {
+        await apiFetch(`/api/notifications/${id}/read`, { method: 'POST' })
+      } catch (err) {
+        console.warn('[Notifications] Failed to sync mark as read:', err)
+      }
     }
   }
 
-  function markAllAsRead() {
+  async function markAllAsRead() {
     notifications.value.forEach(n => {
       n.isRead = true
-      readSet.add(n.id)
     })
-    saveStoredSet(STORAGE_READ_KEY, readSet)
+    try {
+      await apiFetch('/api/notifications/read-all', { method: 'POST' })
+    } catch (err) {
+      console.warn('[Notifications] Failed to sync mark all read:', err)
+    }
   }
 
-  function toggleStar(id: string) {
+  async function toggleStar(id: string) {
     const item = notifications.value.find(n => n.id === id)
     if (item) {
       item.isStarred = !item.isStarred
-      if (item.isStarred) {
-        starredSet.add(id)
-      } else {
-        starredSet.delete(id)
+      try {
+        await apiFetch(`/api/notifications/${id}/star`, { method: 'POST' })
+      } catch (err) {
+        console.warn('[Notifications] Failed to sync star:', err)
       }
-      saveStoredSet(STORAGE_STARRED_KEY, starredSet)
     }
   }
 
-  function removeNotification(id: string) {
-    const index = notifications.value.findIndex(n => n.id === id)
-    if (index !== -1) {
-      dismissedSet.add(id)
-      saveStoredSet(STORAGE_DISMISSED_KEY, dismissedSet)
-      notifications.value.splice(index, 1)
+  async function removeNotification(id: string) {
+    const idx = notifications.value.findIndex(n => n.id === id)
+    if (idx !== -1) {
+      notifications.value.splice(idx, 1)
+      try {
+        await apiFetch(`/api/notifications/${id}`, { method: 'DELETE' })
+      } catch (err) {
+        console.warn('[Notifications] Failed to sync dismiss:', err)
+      }
     }
   }
 
-  function handleNotificationClick(notif: NotificationItem) {
-    markAsRead(notif.id)
-    if (notif.url) {
-      window.location.href = notif.url
+  function handleNotificationClick(item: NotificationItem) {
+    markAsRead(item.id)
+    if (item.url) {
+      window.location.href = item.url
     }
   }
 
   function resetFilterOnOpen() {
-    activeFilter.value = unreadCount.value > 0 ? 'unread' : 'all'
+    activeFilter.value = 'all'
+    loadRealTamengNotifications(true)
   }
 
   return {
     notifications,
     activeFilter,
+    isLoading,
     unreadCount,
     starredCount,
     filteredNotifications,
-    isLoading,
-    refreshNotifications: loadRealTamengNotifications,
+    loadRealTamengNotifications,
     markAsRead,
     markAllAsRead,
     toggleStar,

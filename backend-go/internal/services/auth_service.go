@@ -328,6 +328,210 @@ func (s *AuthService) GetUserBySession(ctx context.Context, sessionToken string)
 	return &user, nil
 }
 
+// UpdateProfileInput represents the payload for updating user profile and preferences.
+type UpdateProfileInput struct {
+	Name                 string  `json:"name"`
+	Username             *string `json:"username"`
+	Email                string  `json:"email"`
+	Phone                *string `json:"phone"`
+	Department           *string `json:"department"`
+	CurrentPassword      *string `json:"current_password"`
+	Password             *string `json:"password"`
+	PasswordConfirmation *string `json:"password_confirmation"`
+	Theme                *string `json:"theme"`
+	AlertEmail           *bool   `json:"alert_email"`
+	AlertTelegram        *bool   `json:"alert_telegram"`
+	TelegramChatID       *string `json:"telegram_chat_id"`
+	AlertMinSeverity     *string `json:"alert_min_severity"`
+}
+
+// UpdateProfile updates user personal info, password with history checks, and preferences.
+func (s *AuthService) UpdateProfile(ctx context.Context, userID uint64, input UpdateProfileInput, ip, userAgent string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).
+		Preload("Role").
+		Preload("Projects").
+		Preload("Preference").
+		First(&user, userID).Error; err != nil {
+		return nil, ErrUserNotFound
+	}
+
+	if input.Name == "" {
+		return nil, errors.New("Nama lengkap wajib diisi.")
+	}
+	if input.Email == "" {
+		return nil, errors.New("Email wajib diisi.")
+	}
+
+	// 1. Check Email uniqueness if changed
+	if input.Email != user.Email {
+		var count int64
+		s.db.WithContext(ctx).Model(&models.User{}).Where("email = ? AND id != ?", input.Email, user.ID).Count(&count)
+		if count > 0 {
+			return nil, errors.New("Email sudah digunakan oleh pengguna lain.")
+		}
+	}
+
+	// 2. Check Username uniqueness if provided and changed
+	if input.Username != nil && *input.Username != "" {
+		var count int64
+		s.db.WithContext(ctx).Model(&models.User{}).Where("username = ? AND id != ?", *input.Username, user.ID).Count(&count)
+		if count > 0 {
+			return nil, errors.New("Username sudah digunakan oleh pengguna lain.")
+		}
+	}
+
+	now := time.Now()
+
+	// 3. Password change handling
+	if input.Password != nil && *input.Password != "" {
+		if input.CurrentPassword == nil || *input.CurrentPassword == "" {
+			return nil, errors.New("Kata sandi saat ini wajib diisi untuk mengubah kata sandi.")
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(*input.CurrentPassword)); err != nil {
+			return nil, errors.New("Kata sandi saat ini yang Anda masukkan salah.")
+		}
+		if len(*input.Password) < 8 {
+			return nil, errors.New("Kata sandi baru minimal 8 karakter.")
+		}
+		if input.PasswordConfirmation != nil && *input.Password != *input.PasswordConfirmation {
+			return nil, errors.New("Konfirmasi kata sandi baru tidak cocok.")
+		}
+
+		// Check against current password
+		if bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(*input.Password)) == nil {
+			return nil, errors.New("Kata sandi baru tidak boleh sama dengan kata sandi saat ini.")
+		}
+
+		// Check last 3 password histories
+		var histories []models.PasswordHistory
+		s.db.WithContext(ctx).Where("user_id = ?", user.ID).Order("id DESC").Limit(3).Find(&histories)
+		for _, h := range histories {
+			if bcrypt.CompareHashAndPassword([]byte(h.Password), []byte(*input.Password)) == nil {
+				return nil, errors.New("Kata sandi baru tidak boleh sama dengan salah satu dari 3 kata sandi terakhir yang pernah digunakan.")
+			}
+		}
+
+		hashed, err := bcrypt.GenerateFromPassword([]byte(*input.Password), 12)
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash password: %w", err)
+		}
+
+		user.Password = string(hashed)
+		user.PasswordChangedAt = &now
+
+		// Record in password_histories
+		s.db.WithContext(ctx).Create(&models.PasswordHistory{
+			UserID:    user.ID,
+			Password:  string(hashed),
+			CreatedAt: now,
+		})
+	}
+
+	// 4. Update basic user data
+	user.Name = input.Name
+	user.Email = input.Email
+	if input.Username != nil {
+		if *input.Username == "" {
+			user.Username = nil
+		} else {
+			user.Username = input.Username
+		}
+	}
+	if input.Phone != nil {
+		if *input.Phone == "" {
+			user.Phone = nil
+		} else {
+			user.Phone = input.Phone
+		}
+	}
+	if input.Department != nil {
+		if *input.Department == "" {
+			user.Department = nil
+		} else {
+			user.Department = input.Department
+		}
+	}
+	user.UpdatedAt = now
+
+	if err := s.db.WithContext(ctx).Save(&user).Error; err != nil {
+		return nil, fmt.Errorf("failed to update user profile: %w", err)
+	}
+
+	// 5. Update user preferences if any preference fields supplied
+	var pref models.UserPreference
+	errPref := s.db.WithContext(ctx).Where("user_id = ?", user.ID).First(&pref).Error
+	if errors.Is(errPref, gorm.ErrRecordNotFound) {
+		pref = models.UserPreference{
+			UserID:           user.ID,
+			AlertEmail:       true,
+			AlertTelegram:    false,
+			AlertMinSeverity: "high",
+			Theme:            "dark",
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+		if err := s.db.WithContext(ctx).Create(&pref).Error; err != nil {
+			log.Printf("[USER] Failed to create default preference: %v", err)
+		}
+	}
+
+	prefUpdated := false
+	if input.Theme != nil && *input.Theme != "" {
+		pref.Theme = *input.Theme
+		prefUpdated = true
+	}
+	if input.AlertEmail != nil {
+		pref.AlertEmail = *input.AlertEmail
+		prefUpdated = true
+	}
+	if input.AlertTelegram != nil {
+		pref.AlertTelegram = *input.AlertTelegram
+		prefUpdated = true
+	}
+	if input.TelegramChatID != nil {
+		if *input.TelegramChatID == "" {
+			pref.TelegramChatID = nil
+		} else {
+			pref.TelegramChatID = input.TelegramChatID
+		}
+		prefUpdated = true
+	}
+	if input.AlertMinSeverity != nil && *input.AlertMinSeverity != "" {
+		pref.AlertMinSeverity = *input.AlertMinSeverity
+		prefUpdated = true
+	}
+
+	if prefUpdated {
+		pref.UpdatedAt = now
+		s.db.WithContext(ctx).Save(&pref)
+	}
+
+	// 6. Record audit log
+	s.audit.LogAction(
+		&user.ID,
+		"user.profile_update",
+		"success",
+		strPtr("user"),
+		&user.ID,
+		map[string]interface{}{
+			"updated_fields": []string{"profile", "preferences"},
+			"email":          user.Email,
+		},
+		ip,
+		userAgent,
+	)
+
+	// Reload with all relationships
+	s.db.WithContext(ctx).
+		Preload("Role").
+		Preload("Projects").
+		Preload("Preference").
+		First(&user, user.ID)
+
+	return &user, nil
+}
+
 func strPtr(s string) *string {
 	return &s
 }

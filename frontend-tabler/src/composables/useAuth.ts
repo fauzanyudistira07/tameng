@@ -19,6 +19,7 @@ export interface UserPreference {
   alert_telegram: boolean
   telegram_chat_id?: string | null
   alert_min_severity: string
+  theme?: string
 }
 
 export interface User {
@@ -45,8 +46,14 @@ export interface UpdateProfilePayload {
   email: string
   phone?: string
   department?: string
+  current_password?: string
   password?: string
   password_confirmation?: string
+  theme?: string
+  alert_email?: boolean
+  alert_telegram?: boolean
+  telegram_chat_id?: string
+  alert_min_severity?: string
 }
 
 const currentUser = ref<User | null>(null)
@@ -74,6 +81,14 @@ export function useAuth() {
       const data = await apiFetch('/api/user')
       if (data?.user) {
         currentUser.value = data.user
+        if (data.user.preference?.theme) {
+          const savedTheme = localStorage.getItem('tamengTheme')
+          if (!savedTheme) {
+            import('./useTheme').then(({ useTheme }) => {
+              useTheme().initTheme(data.user.preference.theme)
+            })
+          }
+        }
       }
     } catch (err) {
       console.warn('[useAuth] Error loading user:', err)
@@ -101,9 +116,28 @@ export function useAuth() {
     }
     if (payload.password && payload.password.trim().length > 0) {
       body.password = payload.password.trim()
+      if (payload.current_password) {
+        body.current_password = payload.current_password.trim()
+      }
       if (payload.password_confirmation) {
         body.password_confirmation = payload.password_confirmation.trim()
       }
+    }
+
+    if (payload.theme !== undefined) {
+      body.theme = payload.theme
+    }
+    if (payload.alert_email !== undefined) {
+      body.alert_email = payload.alert_email
+    }
+    if (payload.alert_telegram !== undefined) {
+      body.alert_telegram = payload.alert_telegram
+    }
+    if (payload.telegram_chat_id !== undefined) {
+      body.telegram_chat_id = payload.telegram_chat_id
+    }
+    if (payload.alert_min_severity !== undefined) {
+      body.alert_min_severity = payload.alert_min_severity
     }
 
     const res = await apiFetch('/api/user', {

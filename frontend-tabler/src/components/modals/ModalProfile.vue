@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useAuth } from '../../composables/useAuth'
+import { useTheme } from '../../composables/useTheme'
 
 const {
   currentUser,
@@ -11,6 +12,8 @@ const {
   loadUser,
   updateProfile
 } = useAuth()
+
+const { activeTheme, setTheme } = useTheme()
 
 const isEditing = ref(false)
 const isSaving = ref(false)
@@ -23,8 +26,14 @@ const editForm = reactive({
   email: '',
   phone: '',
   department: '',
+  current_password: '',
   password: '',
-  password_confirmation: ''
+  password_confirmation: '',
+  theme: 'dark',
+  alert_email: true,
+  alert_telegram: false,
+  telegram_chat_id: '',
+  alert_min_severity: 'high'
 })
 
 function startEditing() {
@@ -35,8 +44,14 @@ function startEditing() {
   editForm.email = currentUser.value?.email || ''
   editForm.phone = currentUser.value?.phone || ''
   editForm.department = currentUser.value?.department || ''
+  editForm.current_password = ''
   editForm.password = ''
   editForm.password_confirmation = ''
+  editForm.theme = currentUser.value?.preference?.theme || activeTheme.value || 'dark'
+  editForm.alert_email = currentUser.value?.preference?.alert_email ?? true
+  editForm.alert_telegram = currentUser.value?.preference?.alert_telegram ?? false
+  editForm.telegram_chat_id = currentUser.value?.preference?.telegram_chat_id || ''
+  editForm.alert_min_severity = currentUser.value?.preference?.alert_min_severity || 'high'
   isEditing.value = true
 }
 
@@ -58,13 +73,19 @@ async function handleSaveProfile() {
     errorMessage.value = 'Email wajib diisi.'
     return
   }
-  if (editForm.password && editForm.password.length < 8) {
-    errorMessage.value = 'Kata sandi baru minimal 8 karakter.'
-    return
-  }
-  if (editForm.password && editForm.password !== editForm.password_confirmation) {
-    errorMessage.value = 'Konfirmasi kata sandi tidak cocok.'
-    return
+  if (editForm.password) {
+    if (!editForm.current_password) {
+      errorMessage.value = 'Kata sandi saat ini wajib diisi untuk mengganti kata sandi.'
+      return
+    }
+    if (editForm.password.length < 8) {
+      errorMessage.value = 'Kata sandi baru minimal 8 karakter.'
+      return
+    }
+    if (editForm.password !== editForm.password_confirmation) {
+      errorMessage.value = 'Konfirmasi kata sandi baru tidak cocok.'
+      return
+    }
   }
 
   isSaving.value = true
@@ -75,10 +96,21 @@ async function handleSaveProfile() {
       email: editForm.email,
       phone: editForm.phone,
       department: editForm.department,
+      current_password: editForm.current_password || undefined,
       password: editForm.password || undefined,
-      password_confirmation: editForm.password_confirmation || undefined
+      password_confirmation: editForm.password_confirmation || undefined,
+      theme: editForm.theme,
+      alert_email: editForm.alert_email,
+      alert_telegram: editForm.alert_telegram,
+      telegram_chat_id: editForm.telegram_chat_id,
+      alert_min_severity: editForm.alert_min_severity
     })
-    successMessage.value = 'Profil berhasil diperbarui!'
+
+    if (editForm.theme) {
+      setTheme(editForm.theme as any, false)
+    }
+
+    successMessage.value = 'Profil & preferensi berhasil diperbarui!'
     setTimeout(() => {
       isEditing.value = false
       successMessage.value = ''
@@ -269,6 +301,53 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
+
+            <!-- Section: Preferensi Tampilan & Notifikasi -->
+            <div class="card border mb-3">
+              <div class="card-header py-2 px-3 bg-body-tertiary">
+                <h4 class="card-title fs-5 mb-0 d-flex align-items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="icon text-primary" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z" /><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /></svg>
+                  Preferensi Tampilan & Notifikasi SOC
+                </h4>
+              </div>
+              <div class="card-body p-3">
+                <div class="row g-3">
+                  <div class="col-sm-6">
+                    <div class="text-secondary small mb-1">Tema Tampilan Aktif</div>
+                    <div class="fw-semibold text-body d-flex align-items-center gap-1">
+                      <span class="badge" :class="activeTheme === 'cyber' ? 'bg-cyan text-white' : activeTheme === 'light' ? 'bg-warning-lt text-warning' : 'bg-primary-lt text-primary'">
+                        {{ activeTheme === 'cyber' ? '⚡ Cyber SOC (Neon)' : activeTheme === 'light' ? '☀️ Terang (Light)' : activeTheme === 'system' ? '💻 Sistem (Auto)' : '🌙 Gelap (Dark)' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-6">
+                    <div class="text-secondary small mb-1">Notifikasi Email</div>
+                    <div class="fw-semibold text-body">
+                      <span :class="currentUser?.preference?.alert_email ? 'badge bg-green-lt text-green' : 'badge bg-secondary-lt'">
+                        {{ currentUser?.preference?.alert_email ? 'Aktif' : 'Nonaktif' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-6">
+                    <div class="text-secondary small mb-1">Notifikasi Telegram</div>
+                    <div class="fw-semibold text-body">
+                      <span :class="currentUser?.preference?.alert_telegram ? 'badge bg-blue-lt text-blue' : 'badge bg-secondary-lt'">
+                        {{ currentUser?.preference?.alert_telegram ? 'Aktif (' + (currentUser?.preference?.telegram_chat_id || '-') + ')' : 'Nonaktif' }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-6">
+                    <div class="text-secondary small mb-1">Minimal Severity Alert</div>
+                    <div class="fw-semibold text-body text-uppercase">
+                      <span class="badge bg-secondary-lt">{{ currentUser?.preference?.alert_min_severity || 'HIGH' }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </template>
 
           <!-- EDIT MODE FORM -->
@@ -341,6 +420,77 @@ onUnmounted(() => {
                 </div>
               </div>
 
+              <!-- Preferensi Tema & Notifikasi -->
+              <div class="card border mb-3">
+                <div class="card-header py-2 px-3 bg-body-tertiary">
+                  <h4 class="card-title fs-5 mb-0 d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon text-primary" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" /><path d="M12 3a9 9 0 0 1 9 9" /></svg>
+                    Tema & Preferensi Notifikasi
+                  </h4>
+                </div>
+                <div class="card-body p-3">
+                  <!-- Tema Selector -->
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold small mb-2">Pilih Tema Tampilan</label>
+                    <div class="row g-2">
+                      <div class="col-6 col-sm-3" v-for="t in [
+                        { id: 'dark', label: 'Gelap (Dark)', icon: '🌙' },
+                        { id: 'light', label: 'Terang (Light)', icon: '☀️' },
+                        { id: 'cyber', label: 'Cyber SOC', icon: '⚡' },
+                        { id: 'system', label: 'Sistem', icon: '💻' }
+                      ]" :key="t.id">
+                        <label class="form-selectgroup-item w-100">
+                          <input type="radio" name="profile_theme" :value="t.id" class="form-selectgroup-input" v-model="editForm.theme" />
+                          <span class="form-selectgroup-label d-flex flex-column align-items-center p-2 text-center" :class="{ 'border-primary shadow-sm': editForm.theme === t.id }">
+                            <span class="fs-2 mb-1">{{ t.icon }}</span>
+                            <span class="small fw-semibold">{{ t.label }}</span>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Notifikasi Toggles -->
+                  <div class="row g-3">
+                    <div class="col-sm-6">
+                      <label class="form-check form-switch cursor-pointer">
+                        <input class="form-check-input" type="checkbox" v-model="editForm.alert_email">
+                        <span class="form-check-label fw-semibold">Notifikasi Email Alert</span>
+                      </label>
+                      <small class="text-secondary d-block mt-1">Kirim ringkasan temuan kritis ke email Anda.</small>
+                    </div>
+
+                    <div class="col-sm-6">
+                      <label class="form-check form-switch cursor-pointer">
+                        <input class="form-check-input" type="checkbox" v-model="editForm.alert_telegram">
+                        <span class="form-check-label fw-semibold">Notifikasi Bot Telegram</span>
+                      </label>
+                      <small class="text-secondary d-block mt-1">Kirim alert instan melalui bot Telegram.</small>
+                    </div>
+
+                    <div v-if="editForm.alert_telegram" class="col-sm-6">
+                      <label class="form-label small">Telegram Chat ID</label>
+                      <input
+                        v-model="editForm.telegram_chat_id"
+                        type="text"
+                        class="form-control form-control-sm"
+                        placeholder="Contoh: 123456789"
+                      />
+                    </div>
+
+                    <div class="col-sm-6">
+                      <label class="form-label small">Ambang Batas Notifikasi (Severity)</label>
+                      <select v-model="editForm.alert_min_severity" class="form-select form-select-sm">
+                        <option value="critical">Hanya Critical</option>
+                        <option value="high">Critical & High (Rekomendasi)</option>
+                        <option value="medium">Critical, High, & Medium</option>
+                        <option value="all">Semua Temuan Termasuk Low</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Password Change (Optional) -->
               <div class="card border mb-0">
                 <div class="card-header py-2 px-3 bg-body-tertiary">
@@ -351,6 +501,16 @@ onUnmounted(() => {
                 </div>
                 <div class="card-body p-3">
                   <div class="row g-3">
+                    <div v-if="editForm.password" class="col-12">
+                      <label class="form-label required text-warning">Kata Sandi Saat Ini</label>
+                      <input
+                        v-model="editForm.current_password"
+                        type="password"
+                        class="form-control"
+                        placeholder="Wajib masukkan kata sandi lama Anda untuk otorisasi"
+                        autocomplete="current-password"
+                      />
+                    </div>
                     <div class="col-sm-6">
                       <label class="form-label">Kata Sandi Baru</label>
                       <input

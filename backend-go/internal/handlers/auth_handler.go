@@ -120,6 +120,47 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	})
 }
 
+// UpdateProfile handles PUT /api/user
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	val, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Unauthenticated."})
+		return
+	}
+	user := val.(*models.User)
+
+	var req services.UpdateProfileInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"message": "Data yang dikirim tidak valid.",
+			"errors":  gin.H{"general": []string{err.Error()}},
+		})
+		return
+	}
+
+	updatedUser, err := h.authService.UpdateProfile(
+		c.Request.Context(),
+		user.ID,
+		req,
+		c.ClientIP(),
+		c.Request.UserAgent(),
+	)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"message": err.Error(),
+			"errors": gin.H{
+				"general": []string{err.Error()},
+			},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Profil berhasil diperbarui.",
+		"user":    formatUserResponse(updatedUser),
+	})
+}
+
 // Logout handles POST /api/logout
 func (h *AuthHandler) Logout(c *gin.Context) {
 	sessionToken, _ := c.Get("session_token")
@@ -232,11 +273,16 @@ func formatUserResponse(user *models.User) gin.H {
 
 	var prefData gin.H
 	if user.Preference != nil {
+		prefTheme := user.Preference.Theme
+		if prefTheme == "" {
+			prefTheme = "dark"
+		}
 		prefData = gin.H{
 			"alert_email":        user.Preference.AlertEmail,
 			"alert_telegram":     user.Preference.AlertTelegram,
 			"telegram_chat_id":   user.Preference.TelegramChatID,
 			"alert_min_severity": user.Preference.AlertMinSeverity,
+			"theme":              prefTheme,
 		}
 	}
 

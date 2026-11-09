@@ -356,4 +356,48 @@ button:active {
   height: 1.15rem !important;
   stroke-width: 2.2 !important;
 }
+
+/* ========================================================
+   CYBERPUNK NEON SOC THEME (data-theme="cyber")
+   ======================================================== */
+[data-theme="cyber"],
+[data-theme="cyber"] body {
+  --tblr-body-bg: #070d18 !important;
+  --tblr-bg-surface: #0c1629 !important;
+  --tblr-border-color: rgba(0, 229, 255, 0.22) !important;
+  --tblr-border-color-translucent: rgba(0, 229, 255, 0.12) !important;
+  --tblr-primary: #00f0ff !important;
+  --tblr-primary-rgb: 0, 240, 255 !important;
+  background-color: #070d18 !important;
+  color: #e0f2fe !important;
+}
+
+[data-theme="cyber"] .navbar,
+[data-theme="cyber"] .card,
+[data-theme="cyber"] .modal-content {
+  background: rgba(12, 22, 41, 0.92) !important;
+  border-color: rgba(0, 229, 255, 0.25) !important;
+  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.08) !important;
+  backdrop-filter: blur(14px) !important;
+}
+
+[data-theme="cyber"] .btn-primary {
+  background: linear-gradient(135deg, #00f0ff 0%, #0070f3 100%) !important;
+  border: none !important;
+  color: #070d18 !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.35) !important;
+}
+
+[data-theme="cyber"] .text-cyan,
+[data-theme="cyber"] .text-primary {
+  color: #00f0ff !important;
+}
+
+[data-theme="cyber"] .badge.bg-cyan,
+[data-theme="cyber"] .badge.bg-azure-lt {
+  background: rgba(0, 240, 255, 0.18) !important;
+  color: #00f0ff !important;
+  border: 1px solid rgba(0, 240, 255, 0.4) !important;
+}
 </style>

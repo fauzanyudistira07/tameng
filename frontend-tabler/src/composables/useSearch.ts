@@ -146,144 +146,9 @@ const MODULE_PAGES: SearchItem[] = [
   }
 ]
 
-// Global cache for live TAMENG data
-const tamengLiveItems = ref<SearchItem[]>([])
+const searchResults = ref<SearchItem[]>([])
 const isLoadingTameng = ref(false)
-let isLoaded = false
-
-function getSeverityBadgeClass(sev: string): string {
-  switch (sev?.toLowerCase()) {
-    case 'critical':
-      return 'bg-red text-red-fg'
-    case 'high':
-      return 'bg-orange text-orange-fg'
-    case 'medium':
-      return 'bg-yellow text-yellow-fg'
-    case 'low':
-      return 'bg-blue-lt text-blue'
-    default:
-      return 'bg-secondary-lt text-secondary'
-  }
-}
-
-async function fetchTamengData() {
-  if (isLoaded || isLoadingTameng.value) return
-  isLoadingTameng.value = true
-
-  try {
-    const items: SearchItem[] = []
-
-    // 1. Fetch Real Findings from TAMENG API
-    try {
-      const findingsData = await apiFetch('/api/findings')
-      const findingsList = findingsData?.findings || []
-      findingsList.forEach((f: any) => {
-        const severity = f.severity ? f.severity.toUpperCase() : 'MEDIUM'
-        items.push({
-          id: `finding-${f.id}`,
-          title: f.title || f.rule_id || 'Kerentanan Terdeteksi',
-          subtitle: `${f.code} • Engine: ${f.engine_key || 'scanner'} • Proyek: ${f.project?.name || 'Aset'}`,
-          category: 'Celah Keamanan',
-          url: '/findings',
-          badge: severity,
-          badgeClass: getSeverityBadgeClass(f.severity),
-          iconType: 'bug'
-        })
-      })
-    } catch (e) {
-      console.warn('[Search] Failed loading findings:', e)
-    }
-
-    // 2. Fetch Real Scan Jobs from TAMENG API
-    try {
-      const jobsData = await apiFetch('/api/scan-jobs')
-      const jobsList = jobsData?.scan_jobs || []
-      jobsList.forEach((j: any) => {
-        const status = (j.status || 'unknown').toUpperCase()
-        const targetDesc = j.repository?.name || j.target?.name || j.project?.name || 'Aset'
-        items.push({
-          id: `job-${j.id}`,
-          title: `${j.code}`,
-          subtitle: `Status: ${status} (${j.progress ?? 0}%) • Target: ${targetDesc}`,
-          category: 'Pekerjaan Scan',
-          url: '/scan-jobs',
-          badge: status,
-          badgeClass: j.status === 'completed' ? 'bg-success text-success-fg' : j.status === 'running' ? 'bg-blue text-blue-fg' : 'bg-secondary-lt text-secondary',
-          iconType: 'scan'
-        })
-      })
-    } catch (e) {
-      console.warn('[Search] Failed loading scan jobs:', e)
-    }
-
-    // 3. Fetch Real Projects from TAMENG API
-    try {
-      const projectsData = await apiFetch('/api/projects')
-      const projectList = Array.isArray(projectsData) ? projectsData : projectsData?.projects || []
-      projectList.forEach((p: any) => {
-        items.push({
-          id: `project-${p.id}`,
-          title: p.name,
-          subtitle: `Kode: ${p.code || '-'} • ${p.description || 'Grup proyek aplikasi'}`,
-          category: 'Aset & Repositori',
-          url: '/projects',
-          badge: 'Proyek',
-          badgeClass: 'bg-purple-lt',
-          iconType: 'folder'
-        })
-      })
-    } catch (e) {
-      console.warn('[Search] Failed loading projects:', e)
-    }
-
-    // 4. Fetch Real Repositories from TAMENG API
-    try {
-      const reposData = await apiFetch('/api/repositories')
-      const repoList = Array.isArray(reposData) ? reposData : reposData?.repositories || []
-      repoList.forEach((r: any) => {
-        items.push({
-          id: `repo-${r.id}`,
-          title: r.name,
-          subtitle: `${r.clone_url || r.name} (${r.default_branch || 'main'})`,
-          category: 'Aset & Repositori',
-          url: '/repositories',
-          badge: 'SAST Git',
-          badgeClass: 'bg-dark-lt',
-          iconType: 'folder'
-        })
-      })
-    } catch (e) {
-      console.warn('[Search] Failed loading repositories:', e)
-    }
-
-    // 5. Fetch Real Targets from TAMENG API
-    try {
-      const targetsData = await apiFetch('/api/targets')
-      const targetList = Array.isArray(targetsData) ? targetsData : targetsData?.targets || []
-      targetList.forEach((t: any) => {
-        items.push({
-          id: `target-${t.id}`,
-          title: t.name || t.target_url || 'Target',
-          subtitle: `${t.target_url || t.ip_address || '-'} (Tipe: ${t.type || 'web'})`,
-          category: 'Aset & Repositori',
-          url: '/targets',
-          badge: 'Target DAST',
-          badgeClass: 'bg-green-lt',
-          iconType: 'target'
-        })
-      })
-    } catch (e) {
-      console.warn('[Search] Failed loading targets:', e)
-    }
-
-    tamengLiveItems.value = items
-    isLoaded = true
-  } catch (err) {
-    console.error('[Search] Error fetching TAMENG live data:', err)
-  } finally {
-    isLoadingTameng.value = false
-  }
-}
+let debounceTimer: any = null
 
 export function useSearch() {
   const searchQuery = ref('')
@@ -291,30 +156,52 @@ export function useSearch() {
   const searchInputRef = ref<HTMLInputElement | null>(null)
   const selectedIndex = ref(0)
 
-  // Lazy load data only when search is actually opened or user starts typing
-  watch([isSearchOpen, searchQuery], ([open, query]) => {
-    if ((open || (query && query.trim().length > 0)) && !isLoaded && !isLoadingTameng.value) {
-      fetchTamengData()
+  async function executeSearch(query: string) {
+    const q = query.trim()
+    if (!q) {
+      searchResults.value = []
+      isLoadingTameng.value = false
+      return
     }
-  })
 
-  const searchResults = computed(() => {
-    const q = searchQuery.value.trim().toLowerCase()
-    if (!q) return []
+    // 1. Instant local matching for static modules
+    const lowerQ = q.toLowerCase()
+    const localMatches = MODULE_PAGES.filter(p =>
+      p.title.toLowerCase().includes(lowerQ) ||
+      p.subtitle.toLowerCase().includes(lowerQ) ||
+      p.url?.toLowerCase().includes(lowerQ)
+    )
+    if (searchResults.value.length === 0) {
+      searchResults.value = localMatches
+    }
 
-    // Search across static navigation modules + real live TAMENG data
-    const allPool = [...MODULE_PAGES, ...tamengLiveItems.value]
+    isLoadingTameng.value = true
 
-    const matches = allPool.filter(item => {
-      const titleMatch = item.title.toLowerCase().includes(q)
-      const subMatch = item.subtitle.toLowerCase().includes(q)
-      const catMatch = item.category.toLowerCase().includes(q)
-      const badgeMatch = item.badge?.toLowerCase().includes(q)
-      return titleMatch || subMatch || catMatch || badgeMatch
-    })
+    // 2. Fetch comprehensive results from Go Backend Unified Search API
+    try {
+      const res = await apiFetch(`/api/search?q=${encodeURIComponent(q)}`)
+      if (res?.results && Array.isArray(res.results)) {
+        searchResults.value = res.results
+      }
+    } catch (err) {
+      console.warn('[Search] Go search error, fallback to local matches:', err)
+      searchResults.value = localMatches
+    } finally {
+      isLoadingTameng.value = false
+    }
+  }
 
-    // Limit to top 20 most relevant results for smooth UX
-    return matches.slice(0, 20)
+  // Watch search input with debounce
+  watch([searchQuery, isSearchOpen], ([query, open]) => {
+    if (!open && !query) {
+      searchResults.value = []
+      return
+    }
+
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      executeSearch(query)
+    }, 150)
   })
 
   const resultsByCategory = computed(() => {
@@ -329,6 +216,7 @@ export function useSearch() {
   function clearSearch() {
     searchQuery.value = ''
     isSearchOpen.value = false
+    searchResults.value = []
     selectedIndex.value = 0
     searchInputRef.value?.focus()
   }
@@ -384,7 +272,6 @@ export function useSearch() {
     searchResults,
     resultsByCategory,
     isLoadingTameng,
-    refreshTamengData: fetchTamengData,
     clearSearch
   }
 }

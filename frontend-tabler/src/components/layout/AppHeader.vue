@@ -8,7 +8,7 @@ import { useSidebar } from "../../composables/useSidebar"
 
 const { toggleMobileSidebar } = useSidebar()
 const isMobileSearchOpen = ref(false)
-const { toggleTheme, isDark } = useTheme()
+const { activeTheme, isDark, setTheme, toggleTheme } = useTheme()
 const {
   currentUser,
   userInitials,
@@ -111,17 +111,74 @@ function handleSelect(url?: string) {
               <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" /><path d="M21 21l-6 -6" /></svg>
             </button>
 
-            <div class="d-flex">
-              <a href="?theme=dark" @click="toggleTheme" class="nav-link px-1 px-sm-2 hide-theme-dark" title="Enable dark mode" data-bs-toggle="tooltip"
-		   data-bs-placement="bottom">
-                <!-- Download SVG icon from http://tabler-icons.io/i/moon -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
+            <!-- Multi-Theme Switcher Dropdown -->
+            <div class="nav-item dropdown d-flex">
+              <a
+                href="#"
+                class="nav-link px-1 px-sm-2 text-secondary"
+                data-bs-toggle="dropdown"
+                tabindex="-1"
+                aria-label="Ganti Tema Tampilan"
+                title="Ganti Tema Tampilan"
+              >
+                <!-- Icon based on activeTheme -->
+                <svg v-if="activeTheme === 'dark'" xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
+                <svg v-else-if="activeTheme === 'light'" xmlns="http://www.w3.org/2000/svg" class="icon text-warning" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>
+                <svg v-else-if="activeTheme === 'cyber'" xmlns="http://www.w3.org/2000/svg" class="icon text-cyan" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0z" /></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="icon text-secondary" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z" /><path d="M7 20h10" /><path d="M9 16v4" /><path d="M15 16v4" /></svg>
               </a>
-              <a href="?theme=light" @click="toggleTheme" class="nav-link px-1 px-sm-2 hide-theme-light" title="Enable light mode" data-bs-toggle="tooltip"
-		   data-bs-placement="bottom">
-                <!-- Download SVG icon from http://tabler-icons.io/i/sun -->
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="22" height="22" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1m-6.4 -15.4l.7 .7m12.1 -.7l-.7 .7m0 11.4l.7 .7m-12.1 -.7l-.7 .7" /></svg>
-              </a>
+              <div class="dropdown-menu dropdown-menu-end dropdown-menu-arrow py-1 shadow-sm" style="min-width: 175px;">
+                <span class="dropdown-header text-uppercase text-secondary py-1" style="font-size: 0.65rem;">Tema Tampilan</span>
+                <button
+                  type="button"
+                  class="dropdown-item d-flex align-items-center justify-content-between py-2"
+                  :class="{ 'active fw-bold': activeTheme === 'dark' }"
+                  @click="setTheme('dark')"
+                >
+                  <span class="d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" /></svg>
+                    Gelap (Dark)
+                  </span>
+                  <span v-if="activeTheme === 'dark'" class="badge bg-primary-lt p-1">&check;</span>
+                </button>
+                <button
+                  type="button"
+                  class="dropdown-item d-flex align-items-center justify-content-between py-2"
+                  :class="{ 'active fw-bold': activeTheme === 'light' }"
+                  @click="setTheme('light')"
+                >
+                  <span class="d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-warning" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" /><path d="M3 12h1m8 -9v1m8 8h1m-9 8v1" /></svg>
+                    Terang (Light)
+                  </span>
+                  <span v-if="activeTheme === 'light'" class="badge bg-primary-lt p-1">&check;</span>
+                </button>
+                <button
+                  type="button"
+                  class="dropdown-item d-flex align-items-center justify-content-between py-2"
+                  :class="{ 'active fw-bold text-cyan': activeTheme === 'cyber' }"
+                  @click="setTheme('cyber')"
+                >
+                  <span class="d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-cyan" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M13 3l0 7l6 0l-8 11l0 -7l-6 0z" /></svg>
+                    Cyber SOC
+                  </span>
+                  <span v-if="activeTheme === 'cyber'" class="badge bg-cyan text-white p-1">&check;</span>
+                </button>
+                <div class="dropdown-divider my-1"></div>
+                <button
+                  type="button"
+                  class="dropdown-item d-flex align-items-center justify-content-between py-2"
+                  :class="{ 'active fw-bold': activeTheme === 'system' }"
+                  @click="setTheme('system')"
+                >
+                  <span class="d-flex align-items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M3 5a1 1 0 0 1 1 -1h16a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10z" /><path d="M7 20h10" /><path d="M9 16v4" /><path d="M15 16v4" /></svg>
+                    Sistem (Auto)
+                  </span>
+                  <span v-if="activeTheme === 'system'" class="badge bg-primary-lt p-1">&check;</span>
+                </button>
+              </div>
             </div>
             <div class="nav-item dropdown d-flex me-1 me-sm-3" ref="notifDropdownRef">
               <a

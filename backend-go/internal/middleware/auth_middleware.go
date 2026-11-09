@@ -45,3 +45,26 @@ func AuthRequired(authService *services.AuthService, cfg *config.Config) gin.Han
 		c.Next()
 	}
 }
+
+// AuthOptional extracts user if session exists, but does not block unauthenticated requests.
+func AuthOptional(authService *services.AuthService, cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var sessionToken string
+		if cookie, err := c.Cookie(cfg.SessionCookieName); err == nil && cookie != "" {
+			sessionToken = cookie
+		}
+		if sessionToken == "" {
+			authHeader := c.GetHeader("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				sessionToken = strings.TrimPrefix(authHeader, "Bearer ")
+			}
+		}
+		if sessionToken != "" {
+			if user, err := authService.GetUserBySession(c.Request.Context(), sessionToken); err == nil && user != nil {
+				c.Set("user", user)
+				c.Set("session_token", sessionToken)
+			}
+		}
+		c.Next()
+	}
+}
