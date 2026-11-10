@@ -369,50 +369,178 @@ function getStatusLabel(status: string): string {
 function getEngineRunStatusClass(status: string): string {
   switch (status) {
     case 'completed': return 'bg-success-lt text-success'
-    case 'running': return 'bg-primary-lt text-primary'
+    case 'running': return 'bg-primary text-white animate-pulse'
     case 'failed': return 'bg-danger-lt text-danger'
     case 'denied': return 'bg-danger-lt text-danger'
     case 'skipped': return 'bg-secondary-lt text-secondary'
+    case 'cancelled': return 'bg-secondary-lt text-secondary'
+    case 'queued': return 'bg-secondary-lt text-secondary'
     default: return 'bg-secondary-lt text-secondary'
   }
 }
 
-function getEngineBadgeClass(job: ScanJob, engineKey: string): string {
-  if (job.scan_runs && job.scan_runs.length > 0) {
-    const run = job.scan_runs.find(r => r.engine_key === engineKey)
-    if (run) {
-      return getEngineRunStatusClass(run.status)
+function parsePlannedEngines(job: ScanJob): Array<{ engine_key: string, status: string }> {
+  const list: Array<{ engine_key: string, status: string }> = []
+  const added = new Set<string>()
+
+  const addEngine = (key: string, status: string = 'queued') => {
+    const cleanKey = (key || '').trim().toLowerCase()
+    if (cleanKey && !added.has(cleanKey)) {
+      added.add(cleanKey)
+      list.push({ engine_key: cleanKey, status })
     }
   }
-  if (job.status === 'completed') {
-    return 'bg-success-lt text-success'
+
+  // 1. Parse engine_plan (can be JSON array or JSON string)
+  let plan: any = job.engine_plan
+  if (typeof plan === 'string' && plan.trim()) {
+    try { plan = JSON.parse(plan) } catch (e) {}
   }
-  if (job.status === 'running') {
-    return 'bg-primary-lt text-primary'
+  if (Array.isArray(plan) && plan.length > 0) {
+    plan.forEach((item: any) => {
+      const k = item?.engine_key || item?.key || (typeof item === 'string' ? item : '')
+      const s = item?.status || 'queued'
+      addEngine(k, s)
+    })
   }
-  if (['failed', 'denied'].includes(job.status)) {
-    return 'bg-danger-lt text-danger'
+
+  // 2. Fallback to scan_profile.engine_keys if plan was empty
+  const profileObj = job.scan_profile || (job as any).scanProfile
+  if (list.length === 0 && profileObj) {
+    let profKeys: any = profileObj.engine_keys || profileObj.engines
+    if (typeof profKeys === 'string' && profKeys.trim()) {
+      try { profKeys = JSON.parse(profKeys) } catch (e) {}
+    }
+    if (Array.isArray(profKeys) && profKeys.length > 0) {
+      profKeys.forEach((k: any) => addEngine(String(k), 'queued'))
+    }
   }
-  return 'bg-secondary-lt text-secondary'
+
+  // 3. Fallback based on profile name or target type
+  if (list.length === 0) {
+    const profName = (profileObj?.name || '').toLowerCase()
+    if (job.repository_id || profName.includes('source') || profName.includes('code')) {
+      ['semgrep', 'gitleaks', 'trivy', 'osv', 'syft', 'hadolint', 'checkov', 'grype'].forEach(k => addEngine(k, 'queued'))
+    } else if (job.target?.type === 'container' || profName.includes('container') || profName.includes('docker')) {
+      ['trivy', 'grype', 'hadolint', 'syft'].forEach(k => addEngine(k, 'queued'))
+    } else {
+      ['zap', 'nuclei', 'testssl'].forEach(k => addEngine(k, 'queued'))
+    }
+  }
+
+  // 4. Merge any engine that already appeared in scan_runs
+  if (job.scan_runs && Array.isArray(job.scan_runs)) {
+    job.scan_runs.forEach((r: any) => {
+      if (r.engine_key) {
+        addEngine(r.engine_key, r.status || 'queued')
+      }
+    })
+  }
+
+  return list
 }
 
-function getJobEngines(job: ScanJob): Array<{ engine_key: string, statusClass: string }> {
-  const engineKeys: string[] = []
-  if (job.engine_plan && Array.isArray(job.engine_plan) && job.engine_plan.length > 0) {
-    job.engine_plan.forEach(e => {
-      const key = e.engine_key || e
-      if (typeof key === 'string' && !engineKeys.includes(key)) engineKeys.push(key)
-    })
+function getEngineStatus(job: ScanJob, engineKey: string, plannedStatus: string = 'queued'): string {
+  if (job.scan_runs && job.scan_runs.length > 0) {
+    const run = job.scan_runs.find((r: any) => (r.engine_key || '').toLowerCase() === engineKey)
+    if (run && run.status) {
+      return run.status
+    }
   }
-  if (job.scan_runs && Array.isArray(job.scan_runs) && job.scan_runs.length > 0) {
-    job.scan_runs.forEach(r => {
-      if (r.engine_key && !engineKeys.includes(r.engine_key)) engineKeys.push(r.engine_key)
-    })
+
+  if (job.status === 'completed') {
+    return 'completed'
   }
-  return engineKeys.map(key => ({
-    engine_key: key,
-    statusClass: getEngineBadgeClass(job, key)
-  }))
+  if (job.status === 'cancelled') {
+    return 'cancelled'
+  }
+  if (job.status === 'failed') {
+    return 'failed'
+  }
+
+  if (plannedStatus && plannedStatus !== 'queued') {
+    return plannedStatus
+  }
+
+  return 'queued'
+}
+
+function getEngineBadgeClass(status: string): string {
+  switch (status) {
+    case 'completed':
+      return 'bg-success-lt text-success border border-success-subtle'
+    case 'running':
+      return 'bg-primary text-white shadow-sm border border-primary animate-pulse'
+    case 'failed':
+      return 'bg-danger-lt text-danger border border-danger-subtle'
+    case 'cancelled':
+      return 'bg-secondary-lt text-secondary text-decoration-line-through'
+    case 'queued':
+    default:
+      return 'bg-secondary-lt text-secondary opacity-75'
+  }
+}
+
+function getEngineTooltip(engineKey: string, status: string): string {
+  switch (status) {
+    case 'completed':
+      return `Mesin ${engineKey}: Pemindaian Selesai (100%)`
+    case 'running':
+      return `Mesin ${engineKey}: Sedang Mengeksekusi (Scanning...)`
+    case 'failed':
+      return `Mesin ${engineKey}: Gagal / Timeout`
+    case 'cancelled':
+      return `Mesin ${engineKey}: Dibatalkan`
+    case 'queued':
+    default:
+      return `Mesin ${engineKey}: Menunggu Giliran Eksekusi (Antrean)`
+  }
+}
+
+function getJobEngines(job: ScanJob): Array<{ engine_key: string, statusClass: string, tooltip: string }> {
+  const planned = parsePlannedEngines(job)
+  return planned.map(item => {
+    const status = getEngineStatus(job, item.engine_key, item.status)
+    return {
+      engine_key: item.engine_key,
+      statusClass: getEngineBadgeClass(status),
+      tooltip: getEngineTooltip(item.engine_key, status)
+    }
+  })
+}
+
+function getExpandedEngineRuns(job: ScanJob): Array<any> {
+  const planned = parsePlannedEngines(job)
+  return planned.map(item => {
+    const run = (job.scan_runs || []).find((r: any) => (r.engine_key || '').toLowerCase() === item.engine_key)
+    const status = getEngineStatus(job, item.engine_key, item.status)
+    let parsedMetrics: any = {}
+    if (run && run.runtime_metrics) {
+      if (typeof run.runtime_metrics === 'string') {
+        try { parsedMetrics = JSON.parse(run.runtime_metrics) } catch (e) {}
+      } else {
+        parsedMetrics = run.runtime_metrics
+      }
+    }
+    let parsedSpec: any = {}
+    if (run && run.command_spec) {
+      if (typeof run.command_spec === 'string') {
+        try { parsedSpec = JSON.parse(run.command_spec) } catch (e) {}
+      } else {
+        parsedSpec = run.command_spec
+      }
+    }
+    return {
+      id: run?.id || `planned-${item.engine_key}`,
+      engine_key: item.engine_key,
+      status: status,
+      exit_code: run?.exit_code ?? null,
+      runtime_metrics: parsedMetrics,
+      failure_reason: run?.failure_reason || null,
+      command_spec: parsedSpec,
+      container_image: parsedSpec?.container_image || `tameng-engine-${item.engine_key}:latest`
+    }
+  })
 }
 
 function toggleExpandRow(jobId: number) {
@@ -1188,19 +1316,13 @@ onUnmounted(() => {
                         </h4>
                         <div class="card-actions">
                           <span class="badge bg-secondary text-secondary-fg">
-                            {{ job.scan_runs?.length || 0 }} Mesin Terdaftar
+                            {{ getExpandedEngineRuns(job).length }} Mesin Terjadwal
                           </span>
                         </div>
                       </div>
 
                       <div class="card-body p-0">
-                        <!-- If No Run Yet -->
-                        <div v-if="!job.scan_runs || job.scan_runs.length === 0" class="p-4 text-center text-secondary">
-                          Belum ada log eksekusi kontainer (sedang dalam antrean penjadwalan worker).
-                        </div>
-
-                        <!-- Scan Runs Table -->
-                        <div v-else class="table-responsive">
+                        <div class="table-responsive">
                           <table class="table table-vcenter table-striped table-sm mb-0">
                             <thead>
                               <tr>
@@ -1213,13 +1335,13 @@ onUnmounted(() => {
                               </tr>
                             </thead>
                             <tbody>
-                              <tr v-for="run in job.scan_runs" :key="run.id">
+                              <tr v-for="run in getExpandedEngineRuns(job)" :key="run.id">
                                 <td>
                                   <span class="fw-bold font-monospace">{{ run.engine_key }}</span>
                                 </td>
                                 <td>
                                   <span class="badge" :class="getEngineRunStatusClass(run.status)">
-                                    {{ run.status.toUpperCase() }}
+                                    {{ run.status === 'running' ? 'SCANNING...' : run.status.toUpperCase() }}
                                   </span>
                                   <span
                                     v-if="run.failure_reason"
@@ -1237,20 +1359,27 @@ onUnmounted(() => {
                                 </td>
                                 <td>
                                   <span class="text-secondary font-monospace small">
-                                    {{ run.runtime_metrics?.duration_ms ? `${(run.runtime_metrics.duration_ms / 1000).toFixed(2)} detik` : '-' }}
+                                    {{ run.runtime_metrics?.duration_ms ? `${(run.runtime_metrics.duration_ms / 1000).toFixed(2)} detik` : (run.status === 'running' ? 'Sedang berjalan...' : '-') }}
                                   </span>
                                 </td>
                                 <td>
                                   <span
+                                    v-if="run.status === 'completed'"
                                     class="badge"
                                     :class="(run.runtime_metrics?.finding_count ?? 0) > 0 ? 'bg-danger text-danger-fg' : 'bg-success-lt text-success'"
                                   >
                                     {{ run.runtime_metrics?.finding_count ?? 0 }} Temuan
                                   </span>
+                                  <span v-else-if="run.status === 'running'" class="badge bg-primary-lt text-primary">
+                                    Menganalisis...
+                                  </span>
+                                  <span v-else class="text-secondary font-monospace small">
+                                    -
+                                  </span>
                                 </td>
                                 <td>
                                   <span class="text-muted font-monospace small">
-                                    {{ run.command_spec?.container_image || 'docker' }}
+                                    {{ run.container_image }}
                                   </span>
                                 </td>
                               </tr>

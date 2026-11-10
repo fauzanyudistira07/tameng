@@ -2402,6 +2402,61 @@ flowchart TD
    - Bilah lama yang bertuliskan *"Bantu AI terus belajar..."* dan tombol-tombol masukan manual telah digantikan dengan **Autonomous Cognitive Telemetry Bar**.
    - Menampilkan status langsung bahwa sistem sedang berjalan secara otonom (*Autonomous Self-Learning Active - Synaptic Accuracy 99.4%*).
 
+---
+
+## 26.17 Visualisasi Rencana Eksekusi Multi-Mesin Waktu Nyata (Real-time Multi-Engine State Rendering)
+
+### 1. Masalah Tampilan Mesin Pemindai Sebelumnya
+Sebelum pembaruan arsitektural ini, pengguna mendapati inkonsistensi visual pada baris scan:
+1. **Saat Dalam Antrean (`queued`)**: Baris tabel tidak menampilkan badge mesin pemindai sama sekali (`-` / kosong).
+2. **Saat Pemindaian Berjalan (`running`)**: Hanya 1 badge mesin (misal: `semgrep`) yang tampil di tabel, dan mesin lainnya tidak tampak.
+3. **Saat Pemindaian Selesai (`completed`)**: Seluruh 8 mesin tiba-tiba muncul serentak di tabel.
+
+**Penyebab Akar Masalah (*Root Cause*)**:
+- Runner Go mengeksekusi mesin kontainer secara serial dan baru membuat rekaman pada tabel `scan_runs` tepat ketika kontainer mesin tersebut mulai berjalan.
+- Frontend Vue sebelumnya membaca daftar mesin secara langsung dari `job.scan_runs` karena deserialisasi `job.engine_plan` gagal ketika diterima dalam format serialized string JSON dari endpoint Go.
+- Akibatnya, pada fase antrean di mana belum ada baris di `scan_runs`, jumlah mesin terdeteksi 0; selama berjalan hanya mesin yang sedang dieksekusi yang tercatat; dan baru setelah seluruh siklus selesai, semua entri `scan_runs` tercipta.
+
+```mermaid
+flowchart TD
+    classDef startEnd fill:#1e293b,stroke:#0ea5e9,stroke-width:2px,color:#f8fafc;
+    classDef queued fill:#334155,stroke:#94a3b8,stroke-width:1px,color:#f8fafc;
+    classDef running fill:#1e40af,stroke:#60a5fa,stroke-width:2px,color:#ffffff;
+    classDef completed fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+
+    SCAN_INIT["Pengajuan Scan / Rerun Dibuat"]:::startEnd --> PARSE_PLAN["Parser: parsePlannedEngines(job)\nEkstraksi Universal dari engine_plan & scan_profile"]
+    
+    subgraph REALTIME_LIFECYCLE ["Siklus Visual Multi-Mesin Waktu Nyata"]
+        STAGE_QUEUED["1. Status ANTIRAN (Queued)\nSeluruh mesin langsung tampil lengkap (Abu-abu)\nContoh: [semgrep] [gitleaks] [trivy] [osv] [syft] [hadolint] [checkov] [grype]"]:::queued
+        STAGE_RUNNING["2. Status BERJALAN (Running)\n- Mesin Aktif: Biru Berkedip (Scanning...)\n- Mesin Selesai: Hijau (Completed)\n- Mesin Berikutnya: Abu-abu (Menunggu giliran)"]:::running
+        STAGE_COMPLETED["3. Status SELESAI (Completed)\nSeluruh mesin menyala hijau terang (100% Selesai)"]:::completed
+    end
+
+    PARSE_PLAN --> STAGE_QUEUED
+    STAGE_QUEUED --> STAGE_RUNNING
+    STAGE_RUNNING --> STAGE_COMPLETED
+```
+
+### 2. Solusi & Peningkatan Arsitektural:
+1. **Parser Universal Rencana Mesin (`parsePlannedEngines`)**:
+   - Mendukung format array JSON maupun string ter-serialisasi dari database GORM/MySQL.
+   - Mengambil cetak biru mesin dari `job.engine_plan`, fallback ke `job.scan_profile.engine_keys` (atau `job.scanProfile`), dan penggabungan reaktif dengan `scan_runs`.
+   - Menjamin bahwa sejak milidetik pertama scan dibuat atau masuk antrean, seluruh mesin yang dijadwalkan langsung terlihat.
+
+2. **Dukungan Status Mesin Waktu Nyata (*Real-Time Engine Status Tracker*)**:
+   - `running`: Latar belakang biru primer (`bg-primary text-white`) dengan animasi pulsing (`animate-pulse`).
+   - `completed`: Latar belakang hijau muda bergaris halus (`bg-success-lt text-success border border-success-subtle`).
+   - `queued`: Abu-abu sekunder (`bg-secondary-lt text-secondary opacity-75`).
+   - `failed`: Merah terang (`bg-danger-lt text-danger border border-danger-subtle`).
+   - Setiap badge dilengkapi atribut `title` (tooltip informatif) yang menjelaskan kondisi spesifik mesin saat dikursori.
+
+3. **Sinkronisasi Otomatis Runner Go (`scanner_runner.go`)**:
+   - Runner kini secara instan memperbarui `job.EnginePlan` di database MySQL dengan status `"running"` begitu satu mesin kontainer Docker di-spin up.
+   - Mengatur ulang status mesin ke `"queued"` saat operasi Rerun dijalankan melalui `scan_job_handler.go`.
+
+4. **Transparansi Detail Eksekusi Sandbox (*Accordion Drawer Detail*)**:
+   - Saat baris di-klik/diperluas, tabel internal kini menampilkan seluruh mesin yang terjadwal (`getExpandedEngineRuns`), durasi eksekusi aktif, metrik temuan individual, exit code, dan nama image sandbox secara akurat tanpa terputus.
+
 
 
 

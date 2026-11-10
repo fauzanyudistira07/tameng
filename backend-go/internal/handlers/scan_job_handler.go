@@ -176,6 +176,33 @@ func (h *ScanJobHandler) Rerun(c *gin.Context) {
 		policySnap = *orig.ExecutionPolicySnapshot
 	}
 
+	resetEnginePlan := orig.EnginePlan
+	if resetEnginePlan != "" {
+		var planItems []map[string]interface{}
+		if err := json.Unmarshal([]byte(resetEnginePlan), &planItems); err == nil {
+			for idx := range planItems {
+				planItems[idx]["status"] = "queued"
+				planItems[idx]["finding_count"] = 0
+			}
+			b, _ := json.Marshal(planItems)
+			resetEnginePlan = string(b)
+		}
+	} else if orig.ScanProfile != nil && orig.ScanProfile.EngineKeys != "" {
+		var keys []string
+		if err := json.Unmarshal([]byte(orig.ScanProfile.EngineKeys), &keys); err == nil {
+			var planItems []map[string]interface{}
+			for _, k := range keys {
+				planItems = append(planItems, map[string]interface{}{
+					"engine_key":    k,
+					"status":        "queued",
+					"finding_count": 0,
+				})
+			}
+			b, _ := json.Marshal(planItems)
+			resetEnginePlan = string(b)
+		}
+	}
+
 	newJob := models.ScanJob{
 		Code:                    jobCode,
 		ProjectID:               orig.ProjectID,
@@ -188,7 +215,7 @@ func (h *ScanJobHandler) Rerun(c *gin.Context) {
 		Progress:                0,
 		Attempt:                 0,
 		QueuedAt:                &now,
-		EnginePlan:              orig.EnginePlan,
+		EnginePlan:              resetEnginePlan,
 		ExecutionPolicySnapshot: &policySnap,
 		CreatedAt:               now,
 		UpdatedAt:               now,

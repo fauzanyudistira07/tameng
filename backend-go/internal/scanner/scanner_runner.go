@@ -262,6 +262,12 @@ func (r *Runner) processJob(jobID uint64) {
 		}
 		r.db.Create(&scanRun)
 
+		// Mark current engine as running in plan so real-time status is visible immediately
+		planItems[i].Status = "running"
+		planStartBytes, _ := json.Marshal(planItems)
+		job.EnginePlan = string(planStartBytes)
+		r.db.Save(&job)
+
 		outDir := fmt.Sprintf("/tmp/tameng-scan/%d/%s", job.ID, engineKey)
 		_ = os.MkdirAll(outDir, 0777)
 
