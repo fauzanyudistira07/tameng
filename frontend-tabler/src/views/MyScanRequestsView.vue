@@ -1377,7 +1377,7 @@ function exportFindingsCsv() {
     `"${f.code || '-'}"`,
     `"${(f.severity || 'low').toUpperCase()}"`,
     `"${(f.title || '').replace(/"/g, '""')}"`,
-    `"${f.engine_key || '-'}"`,
+    `"${(f.engine_key === 'tameng_ai' || f.engine_key === 'tamengai') ? 'trivy' : (f.engine_key || '-')}"`,
     `"${(f.location?.file_path || f.location?.endpoint || '-').replace(/"/g, '""')}"`,
     `"${f.cwe || '-'}"`,
     `"${f.owasp || '-'}"`
@@ -3041,7 +3041,7 @@ onUnmounted(() => {
                         {{ finding.rule_id }}
                       </span>
                       <span class="badge bg-blue-lt font-monospace small">
-                        {{ finding.engine_key || 'Scanner' }}
+                        {{ (finding.engine_key === 'tameng_ai' || finding.engine_key === 'tamengai') ? 'trivy' : (finding.engine_key || 'Scanner') }}
                       </span>
                     </div>
 

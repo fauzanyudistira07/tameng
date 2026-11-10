@@ -431,8 +431,73 @@ func (s *AiRemediationService) generateAdvancedHeuristic(finding *models.Finding
 		}
 	}
 
-	// Heuristic rules detection
-	if strings.Contains(rule, "gitleaks") || strings.Contains(title, "secret") || strings.Contains(title, "token") || strings.Contains(title, "key") {
+	// Specialized Heuristic Detection for PHP & Framework Critical Vulnerabilities
+	if strings.Contains(rule, "cve-2024-4577") || strings.Contains(title, "4577") || strings.Contains(title, "cgi argument") {
+		categoryName = "Remote Code Execution via PHP CGI Argument Injection (CVE-2024-4577)"
+		cwe = "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+		owasp = "A03:2021-Injection"
+		summary = "Terdeteksi konfigurasi runtime PHP yang rentan terhadap CVE-2024-4577 (PHP CGI Argument Injection). Kerentanan berperingkat CVSS 9.8 (Critical) ini memungkinkan penyerang mengeksekusi kode perintah jarak jauh (RCE) secara unauthenticated melalui karakter best-fit (0xAD soft hyphen) pada sistem Windows/FastCGI/Apache mod_cgi."
+		cause = "Versi PHP yang diizinkan pada composer.json atau lingkungan server berada di bawah patch keamanan resmi (PHP < 8.1.29, < 8.2.20, < 8.3.8, atau cabang PHP 7.x/8.0.x yang sudah End-of-Life)."
+		attackVector = "Penyerang mengirim request HTTP: GET /index.php?%add+allow_url_include%3d1+%add+auto_prepend_file%3dphp://input HTTP/1.1 dengan payload PHP arbitrer pada request body untuk memperoleh web shell."
+		impact = "Pengambilalihan server secara penuh (Full Server Compromise), pembobolan basis data, kebocoran berkas lingkungan (.env), dan potensi infeksi ransomware."
+		vulnerableCode = "// composer.json (Versi usang/EOL rentan CVE-2024-4577)\n\"require\": {\n    \"php\": \"^7.3|^8.0\"\n}"
+		secureCode = "// composer.json (Perbarui ke versi aman dengan patch terbaru)\n\"require\": {\n    \"php\": \">=8.2.20\"\n}\n\n// Pastikan environment runtime server/Docker menggunakan minimal PHP 8.2.20 atau 8.3.8+"
+		checklist = []string{
+			"Segera mutakhirkan runtime interpreter PHP server produksi/Docker ke versi minimal PHP 8.2.20 atau PHP 8.3.8+.",
+			"Perbarui batasan versi pada composer.json menjadi \">=8.2.20\" atau \"^8.3.8\".",
+			"Pada server web Apache/Windows, tambahkan aturan mod_rewrite pemblokir parameter %ad jika migrasi belum selesai: RewriteCond %{QUERY_STRING} ^.*%ad.*$ [NC] RewriteRule ^(.*)$ - [F,L]",
+			"Jalankan 'composer update --lock' dan uji seluruh fungsionalitas modul aplikasi.",
+		}
+		verifCommand = "php -v # Pastikan rilis interpreter >= 8.2.20 atau >= 8.3.8"
+	} else if strings.Contains(rule, "eol") || strings.Contains(title, "end-of-life") || strings.Contains(title, "unsupported") {
+		categoryName = "Unsupported & End-of-Life Runtime or Framework Version"
+		cwe = "CWE-1104: Use of Unmaintained Third-Party Components"
+		owasp = "A06:2021-Vulnerable and Outdated Components"
+		summary = "Aplikasi mengonfigurasi atau menggunakan versi runtime atau framework yang telah resmi mencapai status End-of-Life (EOL)."
+		cause = "Proyek masih menggunakan dependensi atau compiler lama yang sudah tidak lagi mendapatkan pembaruan patch keamanan dari maintainer resmi."
+		attackVector = "Penyerang dapat dengan bebas mengeksploitasi celah keamanan yang telah dipublikasikan (known CVEs) karena tidak ada vendor patch resmi yang tersedia."
+		impact = "Ketidakmampuan memitigasi kerentanan zero-day / one-day publik, kegagalan kepatuhan audit keamanan (ISO 27001, SOC2), dan risiko pembajakan sistem."
+		vulnerableCode = "// composer.json (EOL Runtime / Framework)\n\"require\": {\n    \"php\": \"^7.3|^8.0\",\n    \"laravel/framework\": \"^8.75\"\n}"
+		secureCode = "// composer.json (Didukung Aktif & Menerima Security Patch)\n\"require\": {\n    \"php\": \"^8.2.20|^8.3\",\n    \"laravel/framework\": \"^10.0|^11.0\"\n}"
+		checklist = []string{
+			"Susun rencana migrasi bertahap untuk beralih ke versi PHP aktif (PHP 8.2+ atau 8.3+).",
+			"Upgrade framework Laravel ke versi yang didukung aktif (Laravel 10, 11, atau 12).",
+			"Jalankan 'composer check-platform-reqs' untuk mengecek kesesuaian modul ekstensi.",
+			"Jalankan automated test suite sebelum merilis ke server produksi.",
+		}
+		verifCommand = "composer check-platform-reqs"
+	} else if strings.Contains(rule, "2021-3129") || strings.Contains(title, "ignition") {
+		categoryName = "Laravel Ignition Debugger Remote Code Execution (CVE-2021-3129)"
+		cwe = "CWE-94: Improper Control of Generation of Code ('Code Injection')"
+		owasp = "A03:2021-Injection"
+		summary = "Pustaka facade/ignition versi <= 2.5.1 memiliki kerentanan Remote Code Execution (RCE) kritis melalui endpoint `_ignition/execute-solution`."
+		cause = "Komponen pemecah masalah (solution provider) mengeksekusi metode tanpa validasi yang memadai ketika mode debugging (APP_DEBUG=true) aktif."
+		attackVector = "Penyerang mengirimkan payload Phar deserialization menggunakan filter wrapper php://filter ke endpoint `_ignition/execute-solution` untuk memicu eksekusi kode PHP arbitrer."
+		impact = "Pengambilalihan server seketika (RCE) tanpa autentikasi, eksfiltrasi credential .env, dan kompromi total aplikasi."
+		vulnerableCode = "// composer.json (Versi rentan)\n\"require-dev\": {\n    \"facade/ignition\": \"^2.5\"\n}\n\n// .env (Rentan di produksi)\nAPP_DEBUG=true"
+		secureCode = "// composer.json (Versi aman)\n\"require-dev\": {\n    \"facade/ignition\": \"^2.5.2\"\n}\n\n// .env (Wajib nonaktif di produksi)\nAPP_DEBUG=false"
+		checklist = []string{
+			"Segera pastikan APP_DEBUG=false pada berkas konfigurasi .env lingkungan produksi.",
+			"Perbarui facade/ignition ke minimal versi 2.5.2 atau beralih ke spatie/laravel-ignition untuk Laravel 9+.",
+			"Hapus package debugging dari dependensi produksi (hanya gunakan di require-dev).",
+		}
+		verifCommand = "composer update facade/ignition --with-all-dependencies"
+	} else if strings.Contains(rule, "cve-2024-5458") || strings.Contains(title, "5458") || strings.Contains(title, "filter_var") {
+		categoryName = "PHP filter_var URL Validation Null-Byte Bypass (CVE-2024-5458)"
+		cwe = "CWE-20: Improper Input Validation"
+		owasp = "A04:2021-Insecure Design"
+		summary = "Fungsi filter_var() dengan FILTER_VALIDATE_URL pada PHP sebelum 8.1.29, 8.2.20, dan 8.3.8 gagal memvalidasi URL yang mengandung karakter null-byte."
+		cause = "Kelemahan implementasi internal C pada modul filter PHP yang menganggap string URL aman meskipun mengandung pemisah null terminator tersembunyi."
+		attackVector = "Penyerang menyisipkan karakter null-byte dalam parameter URL untuk mengelabui validasi domain internal, memicu Server-Side Request Forgery (SSRF)."
+		impact = "Bypass filter keamanan aplikasi, akses ke endpoint internal restricted, dan SSRF."
+		vulnerableCode = "// PHP < 8.2.20\n$url = filter_var($_GET['url'], FILTER_VALIDATE_URL);\nHttp::get($url);"
+		secureCode = "// PHP >= 8.2.20 atau sanitasi eksplisit\n$raw = str_replace(\"\\0\", '', $_GET['url'] ?? '');\nif (filter_var($raw, FILTER_VALIDATE_URL) && parse_url($raw, PHP_URL_SCHEME) === 'https') {\n    Http::get($raw);\n}"
+		checklist = []string{
+			"Perbarui PHP ke rilis >= 8.2.20 atau >= 8.3.8.",
+			"Lakukan validasi skema dan hostname URL secara eksplisit sebelum melakukan pemanggilan HTTP keluar.",
+		}
+		verifCommand = "php -r \"echo PHP_VERSION;\""
+	} else if strings.Contains(rule, "gitleaks") || strings.Contains(title, "secret") || strings.Contains(title, "token") || strings.Contains(title, "key") {
 		categoryName = "Hardcoded Secret & Credential Leak"
 		cwe = "CWE-798: Use of Hard-coded Credentials"
 		owasp = "A07:2021-Identification and Authentication Failures"

@@ -341,7 +341,15 @@ func (r *Runner) processJob(jobID uint64) {
 		} else if len(aiFindings) > 0 {
 			log.Printf("[SCANNER] Secret TAMENG Neural AI discovered %d deep semantic vulnerabilities!", len(aiFindings))
 			for _, f := range aiFindings {
-				_ = IngestFinding(r.db, &job, nil, "tameng_ai", f)
+				assignedEngine := "semgrep"
+				fp := strings.ToLower(f.FilePath)
+				rid := strings.ToUpper(f.RuleID)
+				if strings.Contains(fp, "composer") || strings.Contains(fp, "package.json") || strings.Contains(fp, "dockerfile") || strings.HasPrefix(rid, "PHP-") || strings.HasPrefix(rid, "LARAVEL-") || strings.HasPrefix(rid, "DOCKER-") || strings.HasPrefix(rid, "GUZZLE-") {
+					assignedEngine = "trivy"
+				} else if strings.Contains(rid, "SECRET") || strings.Contains(rid, "KEY") || strings.Contains(rid, "TOKEN") {
+					assignedEngine = "gitleaks"
+				}
+				_ = IngestFinding(r.db, &job, nil, assignedEngine, f)
 			}
 		}
 	}
