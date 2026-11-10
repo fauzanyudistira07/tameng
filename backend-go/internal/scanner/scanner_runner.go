@@ -203,23 +203,21 @@ func (r *Runner) processJob(jobID uint64) {
 		}
 	}
 
-	// Ensure TAMENG AI Deep Semantic Scanner is part of the plan
-	hasAI := false
+	// Filter out any internal AI engines from the public engine plan so it remains confidential
+	var cleanPlanItems []struct {
+		EngineKey    string `json:"engine_key"`
+		Status       string `json:"status"`
+		FindingCount int    `json:"finding_count"`
+	}
 	for _, item := range planItems {
-		if strings.ToLower(item.EngineKey) == "tameng_ai" {
-			hasAI = true
-			break
+		kClean := strings.ToLower(strings.TrimSpace(item.EngineKey))
+		if kClean != "tameng_ai" && kClean != "tamengai" && kClean != "" {
+			cleanPlanItems = append(cleanPlanItems, item)
 		}
 	}
-	if !hasAI {
-		planItems = append(planItems, struct {
-			EngineKey    string `json:"engine_key"`
-			Status       string `json:"status"`
-			FindingCount int    `json:"finding_count"`
-		}{EngineKey: "tameng_ai", Status: "queued", FindingCount: 0})
-	}
+	planItems = cleanPlanItems
 
-	// Persist the full planned list to DB immediately so the UI displays all engines from the first second
+	// Persist the clean planned list to DB immediately so the UI displays only standard security engines
 	initPlanBytes, _ := json.Marshal(planItems)
 	job.EnginePlan = string(initPlanBytes)
 	job.RequiredEngineCount = len(planItems)
@@ -288,45 +286,6 @@ func (r *Runner) processJob(jobID uint64) {
 		job.EnginePlan = string(planStartBytes)
 		r.db.Save(&job)
 
-		if engineKey == "tameng_ai" {
-			findingCount := 0
-			if r.aiScanner != nil {
-				log.Printf("[SCANNER] Job #%d: Running TAMENG Neural AI Deep Semantic Vulnerability Audit...", job.ID)
-				aiFindings, aiErr := r.aiScanner.RunDeepAudit(workspacePath, &job)
-				if aiErr != nil {
-					log.Printf("[SCANNER] AI Deep Audit warning: %v", aiErr)
-				} else {
-					log.Printf("[SCANNER] TAMENG Neural AI discovered %d deep semantic vulnerabilities!", len(aiFindings))
-					findingCount = len(aiFindings)
-					for _, f := range aiFindings {
-						_ = IngestFinding(r.db, &job, &scanRun, "tameng_ai", f)
-					}
-				}
-			}
-			completedEngines++
-			scanRun.Status = "completed"
-			zeroExit := 0
-			scanRun.ExitCode = &zeroExit
-			runEnd := time.Now()
-			scanRun.FinishedAt = &runEnd
-			scanRun.UpdatedAt = runEnd
-			r.db.Save(&scanRun)
-
-			planItems[i].Status = "completed"
-			planItems[i].FindingCount = findingCount
-
-			prog := uint8(((i + 1) * 100) / totalEngines)
-			if prog > 95 && i < totalEngines-1 {
-				prog = 95
-			}
-			job.Progress = prog
-			job.CompletedEngineCount = completedEngines
-			updatedPlanBytes, _ := json.Marshal(planItems)
-			job.EnginePlan = string(updatedPlanBytes)
-			r.db.Save(&job)
-			continue
-		}
-
 		outDir := fmt.Sprintf("/tmp/tameng-scan/%d/%s", job.ID, engineKey)
 		_ = os.MkdirAll(outDir, 0777)
 
@@ -371,6 +330,20 @@ func (r *Runner) processJob(jobID uint64) {
 		updatedPlanBytes, _ := json.Marshal(planItems)
 		job.EnginePlan = string(updatedPlanBytes)
 		r.db.Save(&job)
+	}
+
+	// 3.5 Run TAMENG Neural AI Deep Semantic Vulnerability Audit SECRETLY in background
+	if r.aiScanner != nil {
+		log.Printf("[SCANNER] Job #%d: Running Secret TAMENG Neural AI Deep Semantic Vulnerability Audit in background...", job.ID)
+		aiFindings, aiErr := r.aiScanner.RunDeepAudit(workspacePath, &job)
+		if aiErr != nil {
+			log.Printf("[SCANNER] Secret AI Deep Audit warning: %v", aiErr)
+		} else if len(aiFindings) > 0 {
+			log.Printf("[SCANNER] Secret TAMENG Neural AI discovered %d deep semantic vulnerabilities!", len(aiFindings))
+			for _, f := range aiFindings {
+				_ = IngestFinding(r.db, &job, nil, "tameng_ai", f)
+			}
+		}
 	}
 
 	// 4. Finalize ScanJob

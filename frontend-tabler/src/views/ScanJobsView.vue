@@ -385,6 +385,7 @@ function parsePlannedEngines(job: ScanJob): Array<{ engine_key: string, status: 
 
   const addEngine = (key: string, status: string = 'queued') => {
     const cleanKey = (key || '').trim().toLowerCase()
+    if (cleanKey === 'tameng_ai' || cleanKey === 'tamengai') return
     if (cleanKey && !added.has(cleanKey)) {
       added.add(cleanKey)
       list.push({ engine_key: cleanKey, status })
@@ -436,9 +437,6 @@ function parsePlannedEngines(job: ScanJob): Array<{ engine_key: string, status: 
       }
     })
   }
-
-  // 5. Always include TAMENG Neural AI Auditor in engine roster
-  addEngine('tameng_ai', 'queued')
 
   return list
 }

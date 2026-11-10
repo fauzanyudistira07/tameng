@@ -99,7 +99,6 @@ func (h *ScanJobHandler) Store(c *gin.Context) {
 	for _, k := range engineKeys {
 		enginePlan = append(enginePlan, gin.H{"engine_key": strings.ToLower(k), "status": "queued", "finding_count": 0})
 	}
-	enginePlan = append(enginePlan, gin.H{"engine_key": "tameng_ai", "status": "queued", "finding_count": 0})
 	enginePlanBytes, _ := json.Marshal(enginePlan)
 
 	var auth models.Authorization
@@ -211,7 +210,7 @@ func (h *ScanJobHandler) Rerun(c *gin.Context) {
 			for _, item := range oldItems {
 				if k, ok := item["engine_key"].(string); ok {
 					kClean := strings.ToLower(strings.TrimSpace(k))
-					if kClean != "" && !seenEngines[kClean] {
+					if kClean != "" && kClean != "tameng_ai" && kClean != "tamengai" && !seenEngines[kClean] {
 						seenEngines[kClean] = true
 						planItems = append(planItems, map[string]interface{}{
 							"engine_key":    kClean,
@@ -222,15 +221,6 @@ func (h *ScanJobHandler) Rerun(c *gin.Context) {
 				}
 			}
 		}
-	}
-
-	// 3. Always include TAMENG Neural AI Deep Semantic Auditor
-	if !seenEngines["tameng_ai"] {
-		planItems = append(planItems, map[string]interface{}{
-			"engine_key":    "tameng_ai",
-			"status":        "queued",
-			"finding_count": 0,
-		})
 	}
 
 	b, _ := json.Marshal(planItems)
@@ -577,7 +567,6 @@ func (h *ScanJobHandler) StoreMyScanRequest(c *gin.Context) {
 	for _, k := range engineKeys {
 		enginePlan = append(enginePlan, gin.H{"engine_key": strings.ToLower(k), "status": "queued", "finding_count": 0})
 	}
-	enginePlan = append(enginePlan, gin.H{"engine_key": "tameng_ai", "status": "queued", "finding_count": 0})
 	enginePlanBytes, _ := json.Marshal(enginePlan)
 
 	jobCode := fmt.Sprintf("SCAN-%s-REQ-%04X", now.Format("20060102150405"), rand.Intn(0xFFFF))
