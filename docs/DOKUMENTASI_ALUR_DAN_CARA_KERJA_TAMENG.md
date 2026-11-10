@@ -2316,6 +2316,55 @@ flowchart TD
      - **👎 Perlu Koreksi**: Menandai untuk penyesuaian model.
      - **🧠 Ajarkan Patch Tim**: Drawer terintegrasi bagi pengembang untuk mengajarkan solusi kode aman mereka secara langsung ke otak sinaptik NeuroLink.
 
+---
+
+## 26.15 Sistem Pemulihan Pekerjaan Terbengkalai (Watchdog Auto-Recovery) & Pembatalan Scan Instan
+
+### 1. Latar Belakang & Akar Masalah Scan Stalled (#SCAN-20261109230836-REP-A4CE)
+Pada saat proses migrasi total sistem dari Laravel ke Golang native:
+1. Pekerjaan scan Job #69 (`SCAN-20261109230836-REP-A4CE`) dijalankan oleh container worker lama (`secsys-worker`).
+2. Tiga mesin pertama (`semgrep`, `gitleaks`, `trivy`) telah selesai dieksekusi dengan sempurna dan berhasil menemukan 85 celah keamanan (progress 36%).
+3. Ketika container worker Laravel dihentikan untuk migrasi ke Go runner, proses eksekusi terputus mendadak (*abrupt SIGTERM*).
+4. Akibatnya, baris database Job #69 tertinggal dalam status `running` tanpa ada proses yang melanjutkan, sementara Go runner awal hanya memantau status `queued`.
+5. Hal inilah yang menyebabkan scan Job #69 terlihat berjalan sangat lama (>59 menit), padahal seluruh scan baru berbasis Golang (Job #70, #71, #72, #73) selalu selesai cepat di bawah 2 menit.
+
+### 2. Arsitektur Watchdog Pemulihan Otomatis (Stale Job Recovery)
+Untuk mencegah kejadian serupa terulang akibat gangguan jaringan atau restart server, diimplementasikan pengawas otomatis (*watchdog*) di dalam `internal/scanner/scanner_runner.go`:
+
+```mermaid
+flowchart TD
+    classDef startEnd fill:#1e293b,stroke:#0ea5e9,stroke-width:2px,color:#f8fafc;
+    classDef process fill:#0f172a,stroke:#38bdf8,stroke-width:1px,color:#f1f5f9;
+    classDef decision fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#ffffff;
+    classDef action fill:#064e3b,stroke:#34d399,stroke-width:2px,color:#ecfdf5;
+
+    WATCHDOG["Watchdog Loop (Setiap 15 Detik)"]:::startEnd --> QUERY["Query Database: status = 'running' & waktu > 2 menit"]:::process
+    QUERY --> DETECT{"Ada Pekerjaan Terbengkalai?"}:::decision
+    DETECT -->|"Tidak"| SLEEP["Standby"]:::process
+    DETECT -->|"Ya (misal Job #69)"| RESUME["Ambil Alih Eksekusi (r.processJob)"]:::action
+    RESUME --> CHECK_PLAN{"Periksa Mesin Scan"}:::decision
+    CHECK_PLAN -->|"Mesin Sudah Selesai (Semgrep/Gitleaks/Trivy)"| SKIP["Lewati Eksekusi & Pertahankan 85 Temuan"]:::action
+    CHECK_PLAN -->|"Mesin Belum Selesai (OSV/Syft/Hadolint/Grype/Checkov)"| RUN["Jalankan Kontainer Docker"]:::process
+    SKIP --> FINISH["Finalisasi ke Status Selesai 100%"]:::action
+    RUN --> FINISH
+    FINISH --> GEN_REPORT["Otomatis Buat Laporan Komprehensif (Reports)"]:::action
+```
+
+### 3. Fitur Pembatalan Scan Instan (Scan Cancellation Mechanism)
+Pengguna dan administrator kini dibekali kontrol penuh untuk menghentikan pemindaian yang tidak lagi diperlukan secara instan:
+1. **Endpoint API**:
+   - `POST /api/scan-jobs/:id/cancel`
+   - `POST /api/my/scan-requests/:id/cancel`
+2. **Perilaku Sistem Saat Pembatalan**:
+   - Status pekerjaan langsung diubah menjadi `cancelled`.
+   - Menghentikan proses docker yang sedang aktif.
+   - Menandai semua *in-flight scan runs* menjadi `cancelled`.
+   - Jika scan sudah sempat mengumpulkan temuan sebelum dibatalkan, sistem secara otomatis menyusun laporan parsial sehingga data temuan tidak hilang (*zero data loss*).
+3. **Antarmuka Tabler UI**:
+   - Tombol **Batalkan** berwarna merah kini muncul secara otomatis pada baris scan yang berstatus `running` atau `queued`.
+   - Dilengkapi modal dialog konfirmasi bahaya untuk mencegah ketidaksengajaan klik.
+
+
 
 
 

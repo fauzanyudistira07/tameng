@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"tameng-backend-go/internal/models"
+	"tameng-backend-go/internal/scanner"
 	"tameng-backend-go/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -278,7 +279,7 @@ func (h *ScanJobHandler) MyScanRequests(c *gin.Context) {
 	}
 
 	for i := range scanJobs {
-		if (scanJobs[i].Status == "completed" || scanJobs[i].Status == "failed") && len(scanJobs[i].Reports) == 0 {
+		if (scanJobs[i].Status == "completed" || scanJobs[i].Status == "failed" || scanJobs[i].Status == "cancelled") && len(scanJobs[i].Reports) == 0 {
 			var r models.Report
 			if err := h.db.Where("scan_job_id = ?", scanJobs[i].ID).First(&r).Error; err == nil {
 				scanJobs[i].Reports = append(scanJobs[i].Reports, r)
@@ -658,4 +659,73 @@ func (h *ScanJobHandler) RejectMyScanRequest(c *gin.Context) {
 		"message": "Permohonan scan berhasil ditolak.",
 	})
 }
+
+// Cancel handles POST /api/scan-jobs/:id/cancel and POST /api/my/scan-requests/:id/cancel
+func (h *ScanJobHandler) Cancel(c *gin.Context) {
+	val, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "Unauthenticated."})
+		return
+	}
+	user := val.(*models.User)
+	roleName := strings.ToLower(user.Role.Name)
+	isAdmin := (roleName == "super_admin" || roleName == "security_admin")
+
+	idStr := c.Param("id")
+	jobID, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "ID tidak valid."})
+		return
+	}
+
+	var job models.ScanJob
+	if err := h.db.First(&job, jobID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "Scan job tidak ditemukan."})
+		return
+	}
+
+	if !isAdmin && job.CreatedBy != user.ID {
+		c.JSON(http.StatusForbidden, gin.H{"message": "Anda tidak memiliki izin untuk membatalkan proses scan ini."})
+		return
+	}
+
+	if job.Status == "completed" || job.Status == "cancelled" || job.Status == "rejected" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": fmt.Sprintf("Proses scan tidak dapat dibatalkan karena saat ini sudah berstatus %s.", job.Status),
+		})
+		return
+	}
+
+	now := time.Now()
+	cancelReason := fmt.Sprintf("Dibatalkan oleh pengguna (%s)", user.Name)
+	job.Status = "cancelled"
+	job.CancelledAt = &now
+	job.FinishedAt = &now
+	job.FailureReason = &cancelReason
+	job.UpdatedAt = now
+	h.db.Save(&job)
+
+	// Mark in-flight scan_runs as cancelled
+	h.db.Model(&models.ScanRun{}).
+		Where("scan_job_id = ? AND status IN ('queued', 'running')", job.ID).
+		Updates(map[string]interface{}{
+			"status":         "cancelled",
+			"finished_at":    now,
+			"failure_reason": "Dibatalkan saat proses berjalan",
+			"updated_at":     now,
+		})
+
+	// Generate or sync report if findings were discovered prior to cancellation
+	var fCount int64
+	h.db.Model(&models.Finding{}).Where("scan_job_id = ?", job.ID).Count(&fCount)
+	if fCount > 0 {
+		scanner.CreateOrSyncReport(h.db, &job)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "Pemindaian keamanan berhasil dibatalkan.",
+		"scan_job": job,
+	})
+}
+
 

@@ -285,3 +285,4 @@ func (s *NeurolinkService) ListSynapses(search string, category string, limit in
 	}
 	return synapses, nil
 }
+

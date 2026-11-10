@@ -876,7 +876,40 @@ async function confirmAndExecuteRerun() {
 }
 
 // -------------------------------------------------------------
-// Detail & Findings Modal
+// Cancel Scan Confirmation & Action
+// -------------------------------------------------------------
+const isCancellingId = ref<number | null>(null)
+const cancelConfirmRequest = ref<ScanRequest | null>(null)
+
+function promptCancel(req: ScanRequest) {
+  cancelConfirmRequest.value = req
+}
+
+function closeCancelModal(force: boolean = false) {
+  if (!force && isCancellingId.value !== null) return
+  cancelConfirmRequest.value = null
+}
+
+async function confirmAndExecuteCancel() {
+  const req = cancelConfirmRequest.value
+  if (!req) return
+
+  isCancellingId.value = req.id
+  try {
+    const res = await apiFetch(`/api/my/scan-requests/${req.id}/cancel`, {
+      method: 'POST'
+    })
+    showAlert('success', `Pemindaian #${req.code} berhasil dihentikan dan dibatalkan.`)
+    cancelConfirmRequest.value = null
+    await loadMyScanRequests(false)
+  } catch (err: any) {
+    showAlert('danger', err?.message || 'Gagal membatalkan pemindaian.')
+  } finally {
+    isCancellingId.value = null
+    cancelConfirmRequest.value = null
+  }
+}
+
 // -------------------------------------------------------------
 // Detail & Findings Modal
 // -------------------------------------------------------------
@@ -2305,6 +2338,18 @@ onUnmounted(() => {
 
                         <!-- Standard Action Buttons -->
                         <template v-else>
+                          <!-- Cancel Button if running or queued -->
+                          <button
+                            v-if="job.status === 'running' || job.status === 'queued'"
+                            class="btn btn-sm btn-outline-danger"
+                            :disabled="isCancellingId === job.id"
+                            @click.stop="promptCancel(job)"
+                            title="Batalkan proses pemindaian ini"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="icon" width="18" height="18" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                            <span class="d-none d-lg-inline ms-1">Batalkan</span>
+                          </button>
+
                           <!-- Rerun Button -->
                           <button
                             class="btn btn-sm btn-secondary"
@@ -2576,6 +2621,18 @@ onUnmounted(() => {
                 </div>
 
                 <template v-else>
+                  <button
+                    v-if="job.status === 'running' || job.status === 'queued'"
+                    type="button"
+                    class="btn btn-sm btn-outline-danger flex-fill d-flex align-items-center justify-content-center gap-1"
+                    :disabled="isCancellingId === job.id"
+                    @click.stop="promptCancel(job)"
+                    title="Batalkan proses pemindaian"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></svg>
+                    <span>Batal</span>
+                  </button>
+
                   <button
                     type="button"
                     class="btn btn-sm flex-fill"
@@ -3216,6 +3273,93 @@ onUnmounted(() => {
                       <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
                     </svg>
                     <span>{{ isRerunningId !== null ? 'Memproses...' : 'Ya, Rerun' }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- MODAL KONFIRMASI PEMBATALAN SCAN                          -->
+    <!-- ========================================================= -->
+    <div
+      v-if="cancelConfirmRequest"
+      class="modal modal-blur fade show d-block"
+      tabindex="-1"
+      style="background-color: rgba(0, 0, 0, 0.65); z-index: 1060;"
+      @click.self="closeCancelModal"
+    >
+      <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+        <div class="modal-content shadow-lg border-0">
+          <button type="button" class="btn-close" aria-label="Close" @click="closeCancelModal"></button>
+          <div class="modal-status bg-danger"></div>
+          <div class="modal-body text-center py-4">
+            <div class="avatar avatar-lg bg-danger-lt rounded-circle mx-auto mb-3 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-lg text-danger" width="28" height="28" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+            </div>
+            <h3 class="modal-title mb-1 text-danger">Batalkan Pemindaian?</h3>
+            <div class="text-secondary small mb-3">
+              Proses pemindaian yang sedang berjalan akan dihentikan dan seluruh eksekutor mesin akan dibatalkan.
+            </div>
+
+            <div class="card card-sm bg-body text-start border mb-0">
+              <div class="card-body p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                  <span class="text-secondary small">Kode Scan:</span>
+                  <span class="font-monospace fw-bold small text-danger">#{{ cancelConfirmRequest.code }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                  <span class="text-secondary small">Proyek:</span>
+                  <span class="fw-medium small text-truncate" style="max-width: 170px;">{{ cancelConfirmRequest.project?.name || '-' }}</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-secondary small">Target:</span>
+                  <span class="fw-medium small font-monospace text-truncate" style="max-width: 170px;">{{ cancelConfirmRequest.repository?.name || cancelConfirmRequest.target?.name || '-' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer bg-transparent border-top-0 pt-0">
+            <div class="w-100">
+              <div class="row g-2">
+                <div class="col-6">
+                  <button
+                    type="button"
+                    class="btn btn-secondary w-100"
+                    :disabled="isCancellingId !== null"
+                    @click="closeCancelModal"
+                  >
+                    Batal
+                  </button>
+                </div>
+                <div class="col-6">
+                  <button
+                    type="button"
+                    class="btn btn-danger w-100"
+                    :disabled="isCancellingId !== null"
+                    @click="confirmAndExecuteCancel"
+                  >
+                    <svg
+                      v-if="isCancellingId !== null"
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="icon animate-spin me-1"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      stroke-width="2"
+                      stroke="currentColor"
+                      fill="none"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                      <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+                      <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+                    </svg>
+                    <span>{{ isCancellingId !== null ? 'Membatalkan...' : 'Ya, Hentikan' }}</span>
                   </button>
                 </div>
               </div>

@@ -78,3 +78,4 @@ func (h *NeurolinkHandler) SubmitFeedback(c *gin.Context) {
 		"synapse": synapse,
 	})
 }
+

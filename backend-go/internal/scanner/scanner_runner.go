@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"tameng-backend-go/internal/models"
@@ -18,18 +19,28 @@ import (
 )
 
 type Runner struct {
-	db *gorm.DB
+	db         *gorm.DB
+	activeJobs sync.Map
 }
 
 func NewRunner(db *gorm.DB) *Runner {
-	return &Runner{db: db}
+	return &Runner{
+		db:         db,
+		activeJobs: sync.Map{},
+	}
 }
 
-// StartWorker initiates the background polling loop for queued scan jobs.
+// StartWorker initiates the background polling loop for queued scan jobs and stale watchdog.
 func (r *Runner) StartWorker(ctx context.Context) {
 	log.Println("[SCANNER WORKER] Native Golang Docker Scanner Runner initialized and active.")
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
+
+	watchdogTicker := time.NewTicker(15 * time.Second)
+	defer watchdogTicker.Stop()
+
+	// Initial stale/orphaned job recovery on startup
+	go r.recoverStaleJobs()
 
 	for {
 		select {
@@ -38,7 +49,28 @@ func (r *Runner) StartWorker(ctx context.Context) {
 			return
 		case <-ticker.C:
 			r.pollAndProcess()
+		case <-watchdogTicker.C:
+			r.recoverStaleJobs()
 		}
+	}
+}
+
+func (r *Runner) recoverStaleJobs() {
+	var staleJobs []models.ScanJob
+	// Stale threshold: jobs marked running older than 2 minutes ago or with no started_at
+	threshold := time.Now().Add(-2 * time.Minute)
+	if err := r.db.Where("status = ? AND (started_at IS NULL OR started_at < ?)", "running", threshold).
+		Order("id ASC").Limit(3).Find(&staleJobs).Error; err != nil {
+		return
+	}
+
+	for _, job := range staleJobs {
+		if _, loaded := r.activeJobs.Load(job.ID); loaded {
+			continue // Already actively being processed by a worker goroutine
+		}
+		log.Printf("[SCANNER WATCHDOG] Detected stale/orphaned running ScanJob #%d (%s, started at %v). Recovering and resuming execution...",
+			job.ID, job.Code, job.StartedAt)
+		go r.processJob(job.ID)
 	}
 }
 
@@ -54,6 +86,11 @@ func (r *Runner) pollAndProcess() {
 }
 
 func (r *Runner) processJob(jobID uint64) {
+	if _, loaded := r.activeJobs.LoadOrStore(jobID, true); loaded {
+		return
+	}
+	defer r.activeJobs.Delete(jobID)
+
 	var job models.ScanJob
 	if err := r.db.Preload("Project").
 		Preload("Repository").
@@ -63,12 +100,23 @@ func (r *Runner) processJob(jobID uint64) {
 		return
 	}
 
-	// Claim job
+	// If job was cancelled, do not process
+	if job.Status == "cancelled" {
+		log.Printf("[SCANNER] ScanJob #%d (%s) is cancelled. Skipping execution.", job.ID, job.Code)
+		return
+	}
+
+	// Claim job if queued
 	now := time.Now()
-	job.Status = "running"
-	job.StartedAt = &now
-	job.Progress = 5
-	r.db.Save(&job)
+	if job.Status == "queued" {
+		job.Status = "running"
+		job.StartedAt = &now
+		job.Progress = 5
+		r.db.Save(&job)
+	} else if job.Status == "running" && job.StartedAt == nil {
+		job.StartedAt = &now
+		r.db.Save(&job)
+	}
 
 	log.Printf("[SCANNER] Processing ScanJob #%d (%s) for Project %s", job.ID, job.Code, job.Project.Name)
 
@@ -166,7 +214,37 @@ func (r *Runner) processJob(jobID uint64) {
 
 	// 3. Execute Each Engine in the Plan
 	for i, item := range planItems {
+		// Check if job was cancelled
+		var checkJob models.ScanJob
+		if err := r.db.Select("status").First(&checkJob, job.ID).Error; err == nil && checkJob.Status == "cancelled" {
+			log.Printf("[SCANNER] ScanJob #%d was cancelled by user. Halting execution loop.", job.ID)
+			return
+		}
+
 		engineKey := strings.ToLower(item.EngineKey)
+
+		// Check if this engine was ALREADY completed previously (e.g. before worker restart)
+		var existingRun models.ScanRun
+		if err := r.db.Where("scan_job_id = ? AND engine_key = ? AND status = 'completed'", job.ID, engineKey).First(&existingRun).Error; err == nil {
+			log.Printf("[SCANNER] ScanJob #%d: Engine [%s] already completed previously. Resuming and skipping redundant execution.", job.ID, engineKey)
+			completedEngines++
+			var fCount int64
+			r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND scan_run_id = ?", job.ID, existingRun.ID).Count(&fCount)
+			planItems[i].Status = "completed"
+			planItems[i].FindingCount = int(fCount)
+
+			prog := uint8(((i + 1) * 100) / totalEngines)
+			if prog > 95 && i < totalEngines-1 {
+				prog = 95
+			}
+			job.Progress = prog
+			job.CompletedEngineCount = completedEngines
+			updatedPlanBytes, _ := json.Marshal(planItems)
+			job.EnginePlan = string(updatedPlanBytes)
+			r.db.Save(&job)
+			continue
+		}
+
 		log.Printf("[SCANNER] Job #%d: Executing engine [%s] (%d/%d)...", job.ID, engineKey, i+1, totalEngines)
 
 		runStart := time.Now()
@@ -223,6 +301,8 @@ func (r *Runner) processJob(jobID uint64) {
 			prog = 95
 		}
 		job.Progress = prog
+		job.CompletedEngineCount = completedEngines
+		job.FailedEngineCount = failedEngines
 		updatedPlanBytes, _ := json.Marshal(planItems)
 		job.EnginePlan = string(updatedPlanBytes)
 		r.db.Save(&job)
@@ -332,6 +412,77 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 			"-h", targetURL, "-Format", "json", "-o", "/out/report.json",
 		)
 
+	case "osv":
+		if workspacePath != "" && dirExists(workspacePath) {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--net=none", "--cpus=1.5", "-m=2048m",
+				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
+				"-v", fmt.Sprintf("%s:/out:rw", outDir),
+				"ghcr.io/google/osv-scanner:latest",
+				"--format", "json", "--output", "/out/report.json", "--recursive", "/src",
+			)
+		} else {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "OSV scan complete")
+		}
+
+	case "syft":
+		if workspacePath != "" && dirExists(workspacePath) {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--net=none", "--cpus=1.5", "-m=2048m",
+				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
+				"-v", fmt.Sprintf("%s:/out:rw", outDir),
+				"anchore/syft:latest",
+				"dir:/src", "-o", "json", "--file", "/out/report.json",
+			)
+		} else {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "Syft scan complete")
+		}
+
+	case "hadolint":
+		hasDockerfile := false
+		if workspacePath != "" && dirExists(workspacePath) {
+			matches, _ := filepath.Glob(filepath.Join(workspacePath, "*Dockerfile*"))
+			if len(matches) > 0 {
+				hasDockerfile = true
+			}
+		}
+		if hasDockerfile {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--net=none", "--cpus=1.5", "-m=1024m",
+				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
+				"hadolint/hadolint:v2.12.0",
+				"hadolint", "-f", "json", "/src/Dockerfile",
+			)
+		} else {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "No Dockerfile found to lint")
+		}
+
+	case "grype":
+		if workspacePath != "" && dirExists(workspacePath) {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--net=none", "--cpus=1.5", "-m=2048m",
+				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
+				"-v", fmt.Sprintf("%s:/out:rw", outDir),
+				"anchore/grype:v0.74.0",
+				"dir:/src", "-o", "json", "--file", "/out/report.json",
+			)
+		} else {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "Grype scan complete")
+		}
+
+	case "checkov":
+		if workspacePath != "" && dirExists(workspacePath) {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+				"--net=none", "--cpus=1.5", "-m=2048m",
+				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
+				"-v", fmt.Sprintf("%s:/out:rw", outDir),
+				"bridgecrew/checkov:3.2.35",
+				"-d", "/src", "--output", "json", "--output-file-path", "/out/report.json", "--soft-fail",
+			)
+		} else {
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "Checkov scan complete")
+		}
+
 	default:
 		// Generic or mock execution for other engines
 		cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", fmt.Sprintf("TAMENG scan complete for %s", engineKey))
@@ -346,6 +497,11 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 	// Read generated report file if present
 	if data, readErr := os.ReadFile(reportFile); readErr == nil && len(data) > 0 {
 		return exitCode, data, nil
+	}
+
+	// Security scanners often exit with code 1 when findings are present (not fatal engine crash)
+	if exitCode == 0 || exitCode == 1 {
+		return exitCode, output, nil
 	}
 
 	return exitCode, output, err
@@ -371,8 +527,12 @@ func (r *Runner) parseFindings(engineKey string, data []byte) []NormalizedFindin
 }
 
 func (r *Runner) createOrSyncReport(job *models.ScanJob) {
+	CreateOrSyncReport(r.db, job)
+}
+
+func CreateOrSyncReport(db *gorm.DB, job *models.ScanJob) {
 	var findings []models.Finding
-	r.db.Preload("Evidences").Where("scan_job_id = ?", job.ID).
+	db.Preload("Evidences").Where("scan_job_id = ?", job.ID).
 		Order("FIELD(severity, 'critical', 'high', 'medium', 'low', 'informational') ASC").
 		Order("id DESC").
 		Find(&findings)
@@ -428,7 +588,7 @@ func (r *Runner) createOrSyncReport(job *models.ScanJob) {
 
 	now := time.Now()
 	var report models.Report
-	if err := r.db.Where("scan_job_id = ?", job.ID).First(&report).Error; err != nil {
+	if err := db.Where("scan_job_id = ?", job.ID).First(&report).Error; err != nil {
 		report = models.Report{
 			ScanJobID:   job.ID,
 			Type:        "standard",
@@ -440,12 +600,12 @@ func (r *Runner) createOrSyncReport(job *models.ScanJob) {
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-		r.db.Create(&report)
+		db.Create(&report)
 	} else {
 		report.Metadata = &metaStr
 		report.Status = "completed"
 		report.UpdatedAt = now
-		r.db.Save(&report)
+		db.Save(&report)
 	}
 }
 

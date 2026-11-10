@@ -128,6 +128,7 @@ func main() {
 		protected.GET("/my/scan-requests", scanJobHandler.MyScanRequests)
 		protected.POST("/my/scan-requests", scanJobHandler.StoreMyScanRequest)
 		protected.POST("/my/scan-requests/:id/rerun", scanJobHandler.Rerun)
+		protected.POST("/my/scan-requests/:id/cancel", scanJobHandler.Cancel)
 		protected.POST("/my/scan-requests/:id/approve", scanJobHandler.ApproveMyScanRequest)
 		protected.POST("/my/scan-requests/:id/reject", scanJobHandler.RejectMyScanRequest)
 
@@ -194,6 +195,7 @@ func main() {
 		protected.GET("/scan-jobs", scanJobHandler.List)
 		protected.POST("/scan-jobs", scanJobHandler.Store)
 		protected.POST("/scan-jobs/:id/rerun", scanJobHandler.Rerun)
+		protected.POST("/scan-jobs/:id/cancel", scanJobHandler.Cancel)
 		protected.POST("/scan-jobs/:id/process-simulated", scanJobHandler.ProcessSimulated)
 
 		// 15. Findings
