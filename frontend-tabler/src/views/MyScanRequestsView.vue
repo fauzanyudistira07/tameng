@@ -3246,28 +3246,6 @@ onUnmounted(() => {
                             {{ aiRemediationData.disclaimer }}
                           </div>
                         </div>
-
-                        <!-- NeuroLink Autonomous Continuous Learning Status -->
-                        <div class="p-2 bg-dark-subtle border border-primary-subtle rounded-2 mt-2">
-                          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                            <div class="small text-secondary d-flex align-items-center gap-2">
-                              <span class="badge bg-purple-lt text-purple d-inline-flex align-items-center gap-1 py-1 px-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a9 9 0 0 1 9 9c0 2.21 -.804 4.23 -2.146 5.8l-1.354 1.2v-2a6 6 0 0 0 -6 -6h-2a3 3 0 0 1 -3 -3v-2a9 9 0 0 1 5.5 -3z" /></svg>
-                                TAMENG NeuroLink
-                              </span>
-                              <span class="text-body fw-medium">Pembelajaran Mandiri Aktif (Autonomous Continuous Learning)</span>
-                              <span class="text-muted d-none d-md-inline">&bull; AI belajar dan mengoptimasi memori remedi secara otomatis tanpa masukan manual</span>
-                            </div>
-                            <div class="d-flex align-items-center gap-2">
-                              <span class="badge bg-success-lt d-inline-flex align-items-center gap-1 font-monospace" style="font-size: 0.72rem;">
-                                <span class="status-dot status-dot-animated bg-success me-1"></span> Auto-Optimized
-                              </span>
-                              <span class="badge bg-primary-lt font-monospace text-primary" style="font-size: 0.72rem;">
-                                Sinaptik 99.4%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
                       </div>
 
                       <!-- Fallback empty state -->
