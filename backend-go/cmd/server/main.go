@@ -71,7 +71,7 @@ func main() {
 	neurolinkHandler := handlers.NewNeurolinkHandler(neurolinkService)
 
 	// 5. Start Background Native Docker Scanner Worker
-	scannerRunner := scanner.NewRunner(db)
+	scannerRunner := scanner.NewRunner(db, cfg)
 	workerCtx, cancelWorker := context.WithCancel(context.Background())
 	defer cancelWorker()
 	go scannerRunner.StartWorker(workerCtx)

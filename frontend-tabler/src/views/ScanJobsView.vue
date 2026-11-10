@@ -404,9 +404,9 @@ function parsePlannedEngines(job: ScanJob): Array<{ engine_key: string, status: 
     })
   }
 
-  // 2. Fallback to scan_profile.engine_keys if plan was empty
+  // 2. Merge all engines defined in scan_profile.engine_keys
   const profileObj = job.scan_profile || (job as any).scanProfile
-  if (list.length === 0 && profileObj) {
+  if (profileObj) {
     let profKeys: any = profileObj.engine_keys || profileObj.engines
     if (typeof profKeys === 'string' && profKeys.trim()) {
       try { profKeys = JSON.parse(profKeys) } catch (e) {}
@@ -424,7 +424,7 @@ function parsePlannedEngines(job: ScanJob): Array<{ engine_key: string, status: 
     } else if (job.target?.type === 'container' || profName.includes('container') || profName.includes('docker')) {
       ['trivy', 'grype', 'hadolint', 'syft'].forEach(k => addEngine(k, 'queued'))
     } else {
-      ['zap', 'nuclei', 'testssl'].forEach(k => addEngine(k, 'queued'))
+      ['zap', 'nuclei', 'testssl', 'nikto'].forEach(k => addEngine(k, 'queued'))
     }
   }
 
@@ -436,6 +436,9 @@ function parsePlannedEngines(job: ScanJob): Array<{ engine_key: string, status: 
       }
     })
   }
+
+  // 5. Always include TAMENG Neural AI Auditor in engine roster
+  addEngine('tameng_ai', 'queued')
 
   return list
 }
@@ -468,7 +471,7 @@ function getEngineStatus(job: ScanJob, engineKey: string, plannedStatus: string 
 function getEngineBadgeClass(status: string): string {
   switch (status) {
     case 'completed':
-      return 'bg-success-lt text-success border border-success-subtle'
+      return 'bg-success-lt text-success border border-success-subtle font-weight-bold'
     case 'running':
       return 'bg-primary text-white shadow-sm border border-primary animate-pulse'
     case 'failed':
@@ -477,7 +480,7 @@ function getEngineBadgeClass(status: string): string {
       return 'bg-secondary-lt text-secondary text-decoration-line-through'
     case 'queued':
     default:
-      return 'bg-secondary-lt text-secondary opacity-75'
+      return 'bg-dark-lt text-light border border-secondary shadow-sm'
   }
 }
 

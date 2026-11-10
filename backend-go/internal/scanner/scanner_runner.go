@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"tameng-backend-go/internal/config"
 	"tameng-backend-go/internal/models"
 
 	"gorm.io/gorm"
@@ -20,19 +21,23 @@ import (
 
 type Runner struct {
 	db         *gorm.DB
+	cfg        *config.Config
+	aiScanner  *AIDeepScanner
 	activeJobs sync.Map
 }
 
-func NewRunner(db *gorm.DB) *Runner {
+func NewRunner(db *gorm.DB, cfg *config.Config) *Runner {
 	return &Runner{
 		db:         db,
+		cfg:        cfg,
+		aiScanner:  NewAIDeepScanner(cfg),
 		activeJobs: sync.Map{},
 	}
 }
 
 // StartWorker initiates the background polling loop for queued scan jobs and stale watchdog.
 func (r *Runner) StartWorker(ctx context.Context) {
-	log.Println("[SCANNER WORKER] Native Golang Docker Scanner Runner initialized and active.")
+	log.Println("[SCANNER WORKER] Native Golang Docker Scanner Runner initialized and active with AI Deep Semantic Auditor.")
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
@@ -172,41 +177,56 @@ func (r *Runner) processJob(jobID uint64) {
 		_ = json.Unmarshal([]byte(job.EnginePlan), &planItems)
 	}
 
+	// If plan is empty, populate from scan profile or standard full-suite engines
 	if len(planItems) == 0 {
-		// Default to source_code_scan or web_safe_scan
-		if job.RepositoryID != nil {
-			planItems = append(planItems,
-				struct {
-					EngineKey    string `json:"engine_key"`
-					Status       string `json:"status"`
-					FindingCount int    `json:"finding_count"`
-				}{EngineKey: "semgrep", Status: "queued"},
-				struct {
-					EngineKey    string `json:"engine_key"`
-					Status       string `json:"status"`
-					FindingCount int    `json:"finding_count"`
-				}{EngineKey: "gitleaks", Status: "queued"},
-				struct {
-					EngineKey    string `json:"engine_key"`
-					Status       string `json:"status"`
-					FindingCount int    `json:"finding_count"`
-				}{EngineKey: "trivy", Status: "queued"},
-			)
-		} else {
-			planItems = append(planItems,
-				struct {
-					EngineKey    string `json:"engine_key"`
-					Status       string `json:"status"`
-					FindingCount int    `json:"finding_count"`
-				}{EngineKey: "nuclei", Status: "queued"},
-				struct {
-					EngineKey    string `json:"engine_key"`
-					Status       string `json:"status"`
-					FindingCount int    `json:"finding_count"`
-				}{EngineKey: "nikto", Status: "queued"},
-			)
+		var engineKeys []string
+		if job.ScanProfile != nil && job.ScanProfile.EngineKeys != "" {
+			_ = json.Unmarshal([]byte(job.ScanProfile.EngineKeys), &engineKeys)
+		}
+
+		if len(engineKeys) == 0 {
+			if job.RepositoryID != nil {
+				engineKeys = []string{"semgrep", "gitleaks", "trivy", "osv", "syft", "hadolint", "checkov", "grype"}
+			} else if job.Target != nil && job.Target.Type == "container" {
+				engineKeys = []string{"trivy", "grype", "hadolint", "syft"}
+			} else {
+				engineKeys = []string{"zap", "nuclei", "testssl", "nikto"}
+			}
+		}
+
+		for _, k := range engineKeys {
+			planItems = append(planItems, struct {
+				EngineKey    string `json:"engine_key"`
+				Status       string `json:"status"`
+				FindingCount int    `json:"finding_count"`
+			}{EngineKey: strings.ToLower(k), Status: "queued", FindingCount: 0})
 		}
 	}
+
+	// Ensure TAMENG AI Deep Semantic Scanner is part of the plan
+	hasAI := false
+	for _, item := range planItems {
+		if strings.ToLower(item.EngineKey) == "tameng_ai" {
+			hasAI = true
+			break
+		}
+	}
+	if !hasAI {
+		planItems = append(planItems, struct {
+			EngineKey    string `json:"engine_key"`
+			Status       string `json:"status"`
+			FindingCount int    `json:"finding_count"`
+		}{EngineKey: "tameng_ai", Status: "queued", FindingCount: 0})
+	}
+
+	// Persist the full planned list to DB immediately so the UI displays all engines from the first second
+	initPlanBytes, _ := json.Marshal(planItems)
+	job.EnginePlan = string(initPlanBytes)
+	job.RequiredEngineCount = len(planItems)
+	r.db.Model(&models.ScanJob{}).Where("id = ?", job.ID).Updates(map[string]interface{}{
+		"engine_plan":           job.EnginePlan,
+		"required_engine_count": job.RequiredEngineCount,
+	})
 
 	completedEngines := 0
 	failedEngines := 0
@@ -267,6 +287,45 @@ func (r *Runner) processJob(jobID uint64) {
 		planStartBytes, _ := json.Marshal(planItems)
 		job.EnginePlan = string(planStartBytes)
 		r.db.Save(&job)
+
+		if engineKey == "tameng_ai" {
+			findingCount := 0
+			if r.aiScanner != nil {
+				log.Printf("[SCANNER] Job #%d: Running TAMENG Neural AI Deep Semantic Vulnerability Audit...", job.ID)
+				aiFindings, aiErr := r.aiScanner.RunDeepAudit(workspacePath, &job)
+				if aiErr != nil {
+					log.Printf("[SCANNER] AI Deep Audit warning: %v", aiErr)
+				} else {
+					log.Printf("[SCANNER] TAMENG Neural AI discovered %d deep semantic vulnerabilities!", len(aiFindings))
+					findingCount = len(aiFindings)
+					for _, f := range aiFindings {
+						_ = IngestFinding(r.db, &job, &scanRun, "tameng_ai", f)
+					}
+				}
+			}
+			completedEngines++
+			scanRun.Status = "completed"
+			zeroExit := 0
+			scanRun.ExitCode = &zeroExit
+			runEnd := time.Now()
+			scanRun.FinishedAt = &runEnd
+			scanRun.UpdatedAt = runEnd
+			r.db.Save(&scanRun)
+
+			planItems[i].Status = "completed"
+			planItems[i].FindingCount = findingCount
+
+			prog := uint8(((i + 1) * 100) / totalEngines)
+			if prog > 95 && i < totalEngines-1 {
+				prog = 95
+			}
+			job.Progress = prog
+			job.CompletedEngineCount = completedEngines
+			updatedPlanBytes, _ := json.Marshal(planItems)
+			job.EnginePlan = string(updatedPlanBytes)
+			r.db.Save(&job)
+			continue
+		}
 
 		outDir := fmt.Sprintf("/tmp/tameng-scan/%d/%s", job.ID, engineKey)
 		_ = os.MkdirAll(outDir, 0777)
@@ -350,33 +409,53 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 			return 1, nil, fmt.Errorf("workspace directory tidak ditemukan untuk SAST semgrep")
 		}
 		cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
-			"--net=none", "--cpus=1.5", "-m=2048m",
+			"--cpus=2.0", "-m=2048m",
 			"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 			"-v", fmt.Sprintf("%s:/out:rw", outDir),
 			"semgrep/semgrep:1.74.0",
-			"semgrep", "scan", "--config=auto", "--json", "-o", "/out/report.json", "/src",
+			"semgrep", "scan",
+			"--config=p/default",
+			"--config=p/security-audit",
+			"--config=p/owasp-top-ten",
+			"--config=p/cwe-top-25",
+			"--config=p/secrets",
+			"--exclude=vendor",
+			"--exclude=node_modules",
+			"--exclude=.git",
+			"--metrics=off",
+			"--json", "-o", "/out/report.json", "/src",
 		)
 
 	case "gitleaks":
 		if workspacePath == "" || !dirExists(workspacePath) {
 			return 1, nil, fmt.Errorf("workspace directory tidak ditemukan untuk gitleaks")
 		}
-		cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+		hasGit := dirExists(filepath.Join(workspacePath, ".git"))
+		args := []string{"run", "--rm",
 			"--net=none", "--cpus=1.5", "-m=2048m",
 			"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 			"-v", fmt.Sprintf("%s:/out:rw", outDir),
 			"zricethezav/gitleaks:v8.28.0",
-			"detect", "--source=/src", "--report-format=json", "--report-path=/out/report.json", "--no-git",
-		)
+			"detect", "--source=/src", "--report-format=json", "--report-path=/out/report.json",
+		}
+		if !hasGit {
+			args = append(args, "--no-git")
+		}
+		cmd = exec.CommandContext(ctx, "docker", args...)
 
 	case "trivy":
+		cacheDir := "/var/cache/tameng/trivy"
+		_ = os.MkdirAll(cacheDir, 0777)
 		if workspacePath != "" && dirExists(workspacePath) {
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
-				"--net=none", "--cpus=1.5", "-m=2048m",
+				"--cpus=1.5", "-m=2048m",
+				"-v", fmt.Sprintf("%s:/root/.cache/", cacheDir),
 				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 				"-v", fmt.Sprintf("%s:/out:rw", outDir),
 				"aquasec/trivy:latest",
-				"fs", "--format", "json", "-o", "/out/report.json", "/src",
+				"fs", "--scanners", "vuln,misconfig,secret",
+				"--severity", "CRITICAL,HIGH,MEDIUM,LOW",
+				"--format", "json", "-o", "/out/report.json", "/src",
 			)
 		} else if job.Target != nil && job.Target.Type == "container" {
 			imageTag := "alpine:latest"
@@ -385,9 +464,12 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 			}
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
 				"-v", "/var/run/docker.sock:/var/run/docker.sock",
+				"-v", fmt.Sprintf("%s:/root/.cache/", cacheDir),
 				"-v", fmt.Sprintf("%s:/out:rw", outDir),
 				"aquasec/trivy:latest",
-				"image", "--format", "json", "-o", "/out/report.json", imageTag,
+				"image", "--scanners", "vuln,misconfig,secret",
+				"--severity", "CRITICAL,HIGH,MEDIUM,LOW",
+				"--format", "json", "-o", "/out/report.json", imageTag,
 			)
 		} else {
 			return 1, nil, fmt.Errorf("target tidak valid untuk trivy scan")
@@ -403,7 +485,9 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 			"--cpus=1.5", "-m=2048m",
 			"-v", fmt.Sprintf("%s:/out:rw", outDir),
 			"projectdiscovery/nuclei:v3.1.8",
-			"-u", targetURL, "-jsonl", "-o", "/out/report.jsonl", "-silent",
+			"-u", targetURL,
+			"-tags", "cve,misconfig,vuln,exposure,panel,tech,ssl,token",
+			"-jsonl", "-o", "/out/report.jsonl", "-silent",
 		)
 
 	case "nikto":
@@ -421,7 +505,7 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 	case "osv":
 		if workspacePath != "" && dirExists(workspacePath) {
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
-				"--net=none", "--cpus=1.5", "-m=2048m",
+				"--cpus=1.5", "-m=2048m",
 				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 				"-v", fmt.Sprintf("%s:/out:rw", outDir),
 				"ghcr.io/google/osv-scanner:latest",
@@ -446,27 +530,33 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 
 	case "hadolint":
 		hasDockerfile := false
+		dockerfilePath := ""
 		if workspacePath != "" && dirExists(workspacePath) {
 			matches, _ := filepath.Glob(filepath.Join(workspacePath, "*Dockerfile*"))
 			if len(matches) > 0 {
 				hasDockerfile = true
+				rel, _ := filepath.Rel(workspacePath, matches[0])
+				dockerfilePath = "/src/" + rel
 			}
 		}
 		if hasDockerfile {
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
-				"--net=none", "--cpus=1.5", "-m=1024m",
+				"--net=none", "--cpus=1.0", "-m=1024m",
 				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 				"hadolint/hadolint:v2.12.0",
-				"hadolint", "-f", "json", "/src/Dockerfile",
+				"hadolint", "-f", "json", dockerfilePath,
 			)
 		} else {
-			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "No Dockerfile found to lint")
+			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "[]")
 		}
 
 	case "grype":
+		cacheDir := "/var/cache/tameng/grype"
+		_ = os.MkdirAll(cacheDir, 0777)
 		if workspacePath != "" && dirExists(workspacePath) {
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
-				"--net=none", "--cpus=1.5", "-m=2048m",
+				"--cpus=1.5", "-m=2048m",
+				"-v", fmt.Sprintf("%s:/root/.cache/grype", cacheDir),
 				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 				"-v", fmt.Sprintf("%s:/out:rw", outDir),
 				"anchore/grype:v0.74.0",
@@ -479,18 +569,47 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 	case "checkov":
 		if workspacePath != "" && dirExists(workspacePath) {
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
-				"--net=none", "--cpus=1.5", "-m=2048m",
+				"--cpus=1.5", "-m=2048m",
 				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 				"-v", fmt.Sprintf("%s:/out:rw", outDir),
 				"bridgecrew/checkov:3.2.35",
-				"-d", "/src", "--output", "json", "--output-file-path", "/out/report.json", "--soft-fail",
+				"-d", "/src",
+				"--skip-path", "/src/vendor",
+				"--skip-path", "/src/node_modules",
+				"--output", "json",
+				"--output-file-path", "/out/report.json",
+				"--soft-fail",
 			)
 		} else {
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "Checkov scan complete")
 		}
 
+	case "testssl":
+		targetURL := "localhost"
+		if job.Target != nil && job.Target.BaseURL != nil && *job.Target.BaseURL != "" {
+			targetURL = *job.Target.BaseURL
+		}
+		cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+			"--cpus=1.5", "-m=2048m",
+			"-v", fmt.Sprintf("%s:/out:rw", outDir),
+			"drwetter/testssl.sh:latest",
+			"--jsonfile", "/out/report.json", "--fast", targetURL,
+		)
+
+	case "zap":
+		targetURL := "http://localhost"
+		if job.Target != nil && job.Target.BaseURL != nil && *job.Target.BaseURL != "" {
+			targetURL = *job.Target.BaseURL
+		}
+		cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+			"--cpus=1.5", "-m=2048m",
+			"-v", fmt.Sprintf("%s:/zap/wrk/:rw", outDir),
+			"zaproxy/zap-stable:latest",
+			"zap-baseline.py", "-t", targetURL, "-J", "report.json",
+		)
+
 	default:
-		// Generic or mock execution for other engines
+		// Generic execution for custom/other engines
 		cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", fmt.Sprintf("TAMENG scan complete for %s", engineKey))
 	}
 
@@ -525,8 +644,22 @@ func (r *Runner) parseFindings(engineKey string, data []byte) []NormalizedFindin
 		return ParseGitleaksOutput(data)
 	case "trivy":
 		return ParseTrivyOutput(data)
+	case "osv":
+		return ParseOsvOutput(data)
+	case "checkov":
+		return ParseCheckovOutput(data)
+	case "hadolint":
+		return ParseHadolintOutput(data)
+	case "grype":
+		return ParseGrypeOutput(data)
 	case "nuclei":
 		return ParseNucleiOutput(data)
+	case "nikto":
+		return ParseNiktoOutput(data)
+	case "testssl":
+		return ParseTestsslOutput(data)
+	case "zap":
+		return ParseZapOutput(data)
 	default:
 		return nil
 	}

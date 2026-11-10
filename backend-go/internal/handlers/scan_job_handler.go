@@ -97,8 +97,9 @@ func (h *ScanJobHandler) Store(c *gin.Context) {
 	_ = json.Unmarshal([]byte(profile.EngineKeys), &engineKeys)
 	var enginePlan []gin.H
 	for _, k := range engineKeys {
-		enginePlan = append(enginePlan, gin.H{"engine_key": k, "status": "queued"})
+		enginePlan = append(enginePlan, gin.H{"engine_key": strings.ToLower(k), "status": "queued", "finding_count": 0})
 	}
+	enginePlan = append(enginePlan, gin.H{"engine_key": "tameng_ai", "status": "queued", "finding_count": 0})
 	enginePlanBytes, _ := json.Marshal(enginePlan)
 
 	var auth models.Authorization
@@ -176,32 +177,64 @@ func (h *ScanJobHandler) Rerun(c *gin.Context) {
 		policySnap = *orig.ExecutionPolicySnapshot
 	}
 
-	resetEnginePlan := orig.EnginePlan
-	if resetEnginePlan != "" {
-		var planItems []map[string]interface{}
-		if err := json.Unmarshal([]byte(resetEnginePlan), &planItems); err == nil {
-			for idx := range planItems {
-				planItems[idx]["status"] = "queued"
-				planItems[idx]["finding_count"] = 0
-			}
-			b, _ := json.Marshal(planItems)
-			resetEnginePlan = string(b)
-		}
-	} else if orig.ScanProfile != nil && orig.ScanProfile.EngineKeys != "" {
-		var keys []string
-		if err := json.Unmarshal([]byte(orig.ScanProfile.EngineKeys), &keys); err == nil {
-			var planItems []map[string]interface{}
-			for _, k := range keys {
-				planItems = append(planItems, map[string]interface{}{
-					"engine_key":    k,
-					"status":        "queued",
-					"finding_count": 0,
-				})
-			}
-			b, _ := json.Marshal(planItems)
-			resetEnginePlan = string(b)
+	var planItems []map[string]interface{}
+	seenEngines := make(map[string]bool)
+
+	// 1. Prefer fresh engines from scan profile
+	var profileKeys []string
+	if orig.ScanProfile != nil && orig.ScanProfile.EngineKeys != "" {
+		_ = json.Unmarshal([]byte(orig.ScanProfile.EngineKeys), &profileKeys)
+	}
+	if len(profileKeys) == 0 {
+		var prof models.ScanProfile
+		if err := h.db.First(&prof, orig.ScanProfileID).Error; err == nil && prof.EngineKeys != "" {
+			_ = json.Unmarshal([]byte(prof.EngineKeys), &profileKeys)
 		}
 	}
+
+	for _, k := range profileKeys {
+		kClean := strings.ToLower(strings.TrimSpace(k))
+		if kClean != "" && !seenEngines[kClean] {
+			seenEngines[kClean] = true
+			planItems = append(planItems, map[string]interface{}{
+				"engine_key":    kClean,
+				"status":        "queued",
+				"finding_count": 0,
+			})
+		}
+	}
+
+	// 2. Fallback to orig.EnginePlan if profile had no keys
+	if len(planItems) == 0 && orig.EnginePlan != "" {
+		var oldItems []map[string]interface{}
+		if err := json.Unmarshal([]byte(orig.EnginePlan), &oldItems); err == nil {
+			for _, item := range oldItems {
+				if k, ok := item["engine_key"].(string); ok {
+					kClean := strings.ToLower(strings.TrimSpace(k))
+					if kClean != "" && !seenEngines[kClean] {
+						seenEngines[kClean] = true
+						planItems = append(planItems, map[string]interface{}{
+							"engine_key":    kClean,
+							"status":        "queued",
+							"finding_count": 0,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Always include TAMENG Neural AI Deep Semantic Auditor
+	if !seenEngines["tameng_ai"] {
+		planItems = append(planItems, map[string]interface{}{
+			"engine_key":    "tameng_ai",
+			"status":        "queued",
+			"finding_count": 0,
+		})
+	}
+
+	b, _ := json.Marshal(planItems)
+	resetEnginePlan := string(b)
 
 	newJob := models.ScanJob{
 		Code:                    jobCode,
@@ -542,8 +575,9 @@ func (h *ScanJobHandler) StoreMyScanRequest(c *gin.Context) {
 	_ = json.Unmarshal([]byte(profile.EngineKeys), &engineKeys)
 	var enginePlan []gin.H
 	for _, k := range engineKeys {
-		enginePlan = append(enginePlan, gin.H{"engine_key": k, "status": "queued"})
+		enginePlan = append(enginePlan, gin.H{"engine_key": strings.ToLower(k), "status": "queued", "finding_count": 0})
 	}
+	enginePlan = append(enginePlan, gin.H{"engine_key": "tameng_ai", "status": "queued", "finding_count": 0})
 	enginePlanBytes, _ := json.Marshal(enginePlan)
 
 	jobCode := fmt.Sprintf("SCAN-%s-REQ-%04X", now.Format("20060102150405"), rand.Intn(0xFFFF))

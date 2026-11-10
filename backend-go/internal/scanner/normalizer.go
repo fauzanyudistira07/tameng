@@ -144,11 +144,16 @@ func IngestFinding(db *gorm.DB, scanJob *models.ScanJob, scanRun *models.ScanRun
 	metaBytes, _ := json.Marshal(metaMap)
 	metaStr := string(metaBytes)
 
+	var scanRunID *uint64
+	if scanRun != nil {
+		scanRunID = &scanRun.ID
+	}
+
 	finding := models.Finding{
 		Code:                  findingCode,
 		ProjectID:             scanJob.ProjectID,
 		ScanJobID:             scanJob.ID,
-		ScanRunID:             &scanRun.ID,
+		ScanRunID:             scanRunID,
 		EngineKey:             engineKey,
 		RuleID:                ruleIDPtr,
 		Title:                 f.Title,
@@ -446,6 +451,449 @@ func ParseNucleiOutput(data []byte) []NormalizedFinding {
 		})
 	}
 
+	return results
+}
+
+// ParseOsvOutput parses Google OSV-Scanner JSON format.
+func ParseOsvOutput(data []byte) []NormalizedFinding {
+	var parsed struct {
+		Results []struct {
+			Source struct {
+				Path string `json:"path"`
+			} `json:"source"`
+			PackageSource struct {
+				Path string `json:"path"`
+			} `json:"packageSource"`
+			Packages []struct {
+				Package struct {
+					Name      string `json:"name"`
+					Version   string `json:"version"`
+					Ecosystem string `json:"ecosystem"`
+				} `json:"package"`
+				Vulnerabilities []struct {
+					ID               string   `json:"id"`
+					Summary          string   `json:"summary"`
+					Details          string   `json:"details"`
+					Aliases          []string `json:"aliases"`
+					DatabaseSpecific struct {
+						Severity string   `json:"severity"`
+						CweIDs   []string `json:"cwe_ids"`
+					} `json:"database_specific"`
+				} `json:"vulnerabilities"`
+			} `json:"packages"`
+		} `json:"results"`
+	}
+
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil
+	}
+
+	var results []NormalizedFinding
+	for _, res := range parsed.Results {
+		filePath := res.Source.Path
+		if filePath == "" {
+			filePath = res.PackageSource.Path
+		}
+		filePath = strings.TrimPrefix(filePath, "/src/")
+
+		for _, pkg := range res.Packages {
+			for _, v := range pkg.Vulnerabilities {
+				sev := "medium"
+				if v.DatabaseSpecific.Severity != "" {
+					sev = strings.ToLower(v.DatabaseSpecific.Severity)
+				}
+				if sev == "moderate" {
+					sev = "medium"
+				}
+
+				cveStr := v.ID
+				for _, alias := range v.Aliases {
+					if strings.HasPrefix(alias, "CVE-") {
+						cveStr = alias
+						break
+					}
+				}
+
+				cweStr := ""
+				if len(v.DatabaseSpecific.CweIDs) > 0 {
+					cweStr = v.DatabaseSpecific.CweIDs[0]
+				}
+
+				title := v.Summary
+				if title == "" {
+					title = fmt.Sprintf("%s in %s (%s)", v.ID, pkg.Package.Name, pkg.Package.Version)
+				}
+				if len(title) > 250 {
+					title = title[:247] + "..."
+				}
+
+				evidence := v.Details
+				if evidence == "" {
+					evidence = fmt.Sprintf("Package: %s, Ecosystem: %s, Installed Version: %s", pkg.Package.Name, pkg.Package.Ecosystem, pkg.Package.Version)
+				}
+				if len(evidence) > 1000 {
+					evidence = evidence[:1000] + "..."
+				}
+
+				results = append(results, NormalizedFinding{
+					RuleID:     v.ID,
+					Title:      title,
+					Severity:   sev,
+					Confidence: 0.95,
+					FilePath:   filePath,
+					CVE:        cveStr,
+					CWE:        cweStr,
+					OWASP:      "A06:2021-Vulnerable and Outdated Components",
+					Evidence:   evidence,
+				})
+			}
+		}
+	}
+	return results
+}
+
+// ParseCheckovOutput parses Bridgecrew Checkov JSON format (handles both array and object root).
+func ParseCheckovOutput(data []byte) []NormalizedFinding {
+	type CheckItem struct {
+		CheckID       string        `json:"check_id"`
+		CheckName     string        `json:"check_name"`
+		FilePath      string        `json:"file_path"`
+		FileLineRange []int         `json:"file_line_range"`
+		Severity      string        `json:"severity"`
+		Guideline     string        `json:"guideline"`
+		CodeBlock     []interface{} `json:"code_block"`
+	}
+
+	var checks []CheckItem
+
+	// Try unmarshaling as array of framework results
+	var arrayRoot []struct {
+		Results struct {
+			FailedChecks []CheckItem `json:"failed_checks"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(data, &arrayRoot); err == nil && len(arrayRoot) > 0 {
+		for _, frame := range arrayRoot {
+			checks = append(checks, frame.Results.FailedChecks...)
+		}
+	} else {
+		// Try unmarshaling as single object root
+		var objRoot struct {
+			Results struct {
+				FailedChecks []CheckItem `json:"failed_checks"`
+			} `json:"results"`
+		}
+		if err := json.Unmarshal(data, &objRoot); err == nil {
+			checks = append(checks, objRoot.Results.FailedChecks...)
+		}
+	}
+
+	var results []NormalizedFinding
+	for _, c := range checks {
+		sev := strings.ToLower(c.Severity)
+		if sev == "" {
+			sev = "medium"
+		}
+		var lineStart, lineEnd uint32
+		if len(c.FileLineRange) >= 2 {
+			lineStart = uint32(c.FileLineRange[0])
+			lineEnd = uint32(c.FileLineRange[1])
+		} else if len(c.FileLineRange) == 1 {
+			lineStart = uint32(c.FileLineRange[0])
+			lineEnd = lineStart
+		}
+
+		filePath := strings.TrimPrefix(c.FilePath, "/src/")
+
+		evidence := c.Guideline
+		if evidence == "" {
+			evidence = fmt.Sprintf("Failed check: %s (%s)", c.CheckName, c.CheckID)
+		}
+
+		results = append(results, NormalizedFinding{
+			RuleID:     c.CheckID,
+			Title:      c.CheckName,
+			Severity:   sev,
+			Confidence: 0.90,
+			FilePath:   filePath,
+			LineStart:  lineStart,
+			LineEnd:    lineEnd,
+			CWE:        "CWE-1188: Insecure Default Initialization of Resource",
+			OWASP:      "A05:2021-Security Misconfiguration",
+			Evidence:   evidence,
+		})
+	}
+	return results
+}
+
+// ParseHadolintOutput parses Hadolint Dockerfile linter JSON.
+func ParseHadolintOutput(data []byte) []NormalizedFinding {
+	var items []struct {
+		Code    string `json:"code"`
+		Level   string `json:"level"`
+		Message string `json:"message"`
+		Line    int    `json:"line"`
+		File    string `json:"file"`
+	}
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil
+	}
+
+	var results []NormalizedFinding
+	for _, item := range items {
+		sev := "medium"
+		switch strings.ToLower(item.Level) {
+		case "error":
+			sev = "high"
+		case "warning":
+			sev = "medium"
+		case "info", "style":
+			sev = "low"
+		}
+
+		filePath := strings.TrimPrefix(item.File, "/src/")
+		if filePath == "" {
+			filePath = "Dockerfile"
+		}
+
+		results = append(results, NormalizedFinding{
+			RuleID:     item.Code,
+			Title:      item.Message,
+			Severity:   sev,
+			Confidence: 0.92,
+			FilePath:   filePath,
+			LineStart:  uint32(item.Line),
+			LineEnd:    uint32(item.Line),
+			CWE:        "CWE-250: Execution with Unnecessary Privileges",
+			OWASP:      "A05:2021-Security Misconfiguration",
+			Evidence:   fmt.Sprintf("Dockerfile Line %d: %s (%s)", item.Line, item.Message, item.Code),
+		})
+	}
+	return results
+}
+
+// ParseGrypeOutput parses Anchore Grype JSON format.
+func ParseGrypeOutput(data []byte) []NormalizedFinding {
+	var parsed struct {
+		Matches []struct {
+			Vulnerability struct {
+				ID          string `json:"id"`
+				Severity    string `json:"severity"`
+				Description string `json:"description"`
+				Fix         struct {
+					Versions []string `json:"versions"`
+				} `json:"fix"`
+			} `json:"vulnerability"`
+			Artifact struct {
+				Name      string `json:"name"`
+				Version   string `json:"version"`
+				Locations []struct {
+					Path string `json:"path"`
+				} `json:"locations"`
+			} `json:"artifact"`
+		} `json:"matches"`
+	}
+
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil
+	}
+
+	var results []NormalizedFinding
+	for _, m := range parsed.Matches {
+		sev := strings.ToLower(m.Vulnerability.Severity)
+		if sev == "" {
+			sev = "medium"
+		}
+
+		filePath := ""
+		if len(m.Artifact.Locations) > 0 {
+			filePath = strings.TrimPrefix(m.Artifact.Locations[0].Path, "/src/")
+		}
+
+		title := fmt.Sprintf("%s in %s %s", m.Vulnerability.ID, m.Artifact.Name, m.Artifact.Version)
+		if m.Vulnerability.Description != "" {
+			title = m.Vulnerability.Description
+			if len(title) > 250 {
+				title = title[:247] + "..."
+			}
+		}
+
+		evidence := fmt.Sprintf("Package: %s, Version: %s", m.Artifact.Name, m.Artifact.Version)
+		if len(m.Vulnerability.Fix.Versions) > 0 {
+			evidence += fmt.Sprintf(", Fix Available: %s", strings.Join(m.Vulnerability.Fix.Versions, ", "))
+		}
+
+		results = append(results, NormalizedFinding{
+			RuleID:     m.Vulnerability.ID,
+			Title:      title,
+			Severity:   sev,
+			Confidence: 0.90,
+			FilePath:   filePath,
+			CVE:        m.Vulnerability.ID,
+			OWASP:      "A06:2021-Vulnerable and Outdated Components",
+			Evidence:   evidence,
+		})
+	}
+	return results
+}
+
+// ParseNiktoOutput parses Nikto JSON format.
+func ParseNiktoOutput(data []byte) []NormalizedFinding {
+	var parsed struct {
+		Host            string `json:"host"`
+		Port            string `json:"port"`
+		Vulnerabilities []struct {
+			ID     string `json:"id"`
+			OSVDB  string `json:"OSVDB"`
+			Msg    string `json:"msg"`
+			Method string `json:"method"`
+			URL    string `json:"url"`
+		} `json:"vulnerabilities"`
+	}
+
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil
+	}
+
+	var results []NormalizedFinding
+	for _, v := range parsed.Vulnerabilities {
+		sev := "medium"
+		msgLower := strings.ToLower(v.Msg)
+		if strings.Contains(msgLower, "critical") || strings.Contains(msgLower, "remote code") || strings.Contains(msgLower, "sql") {
+			sev = "critical"
+		} else if strings.Contains(msgLower, "vulnerability") || strings.Contains(msgLower, "traversal") {
+			sev = "high"
+		} else if strings.Contains(msgLower, "header") || strings.Contains(msgLower, "options") {
+			sev = "low"
+		}
+
+		ruleID := v.ID
+		if ruleID == "" {
+			ruleID = v.OSVDB
+		}
+		if ruleID == "" {
+			ruleID = "NIKTO-VULN"
+		}
+
+		results = append(results, NormalizedFinding{
+			RuleID:     ruleID,
+			Title:      v.Msg,
+			Severity:   sev,
+			Confidence: 0.85,
+			Endpoint:   v.URL,
+			HTTPMethod: v.Method,
+			CWE:        "CWE-16: Configuration",
+			OWASP:      "A05:2021-Security Misconfiguration",
+			Evidence:   v.Msg,
+		})
+	}
+	return results
+}
+
+// ParseTestsslOutput parses testssl.sh JSON format.
+func ParseTestsslOutput(data []byte) []NormalizedFinding {
+	var items []struct {
+		ID       string `json:"id"`
+		Severity string `json:"severity"`
+		Finding  string `json:"finding"`
+		CWE      string `json:"cwe"`
+	}
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil
+	}
+
+	var results []NormalizedFinding
+	for _, item := range items {
+		sev := strings.ToLower(item.Severity)
+		if sev == "ok" || sev == "info" || sev == "" {
+			continue
+		}
+		if sev == "warn" {
+			sev = "medium"
+		} else if sev == "fatal" {
+			sev = "critical"
+		}
+
+		cweStr := item.CWE
+		if cweStr == "" {
+			cweStr = "CWE-326: Inadequate Encryption Strength"
+		}
+
+		results = append(results, NormalizedFinding{
+			RuleID:     "TLS-" + item.ID,
+			Title:      item.Finding,
+			Severity:   sev,
+			Confidence: 0.95,
+			CWE:        cweStr,
+			OWASP:      "A02:2021-Cryptographic Failures",
+			Evidence:   item.Finding,
+		})
+	}
+	return results
+}
+
+// ParseZapOutput parses OWASP ZAP JSON format.
+func ParseZapOutput(data []byte) []NormalizedFinding {
+	var parsed struct {
+		Site []struct {
+			Alerts []struct {
+				PluginID string `json:"pluginId"`
+				Alert    string `json:"alert"`
+				RiskDesc string `json:"riskdesc"`
+				Desc     string `json:"desc"`
+				CWEID    string `json:"cweid"`
+				Instances []struct {
+					URI    string `json:"uri"`
+					Method string `json:"method"`
+				} `json:"instances"`
+			} `json:"alerts"`
+		} `json:"site"`
+	}
+
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil
+	}
+
+	var results []NormalizedFinding
+	for _, site := range parsed.Site {
+		for _, a := range site.Alerts {
+			sev := "medium"
+			riskLower := strings.ToLower(a.RiskDesc)
+			if strings.HasPrefix(riskLower, "high") {
+				sev = "high"
+			} else if strings.HasPrefix(riskLower, "critical") {
+				sev = "critical"
+			} else if strings.HasPrefix(riskLower, "low") {
+				sev = "low"
+			} else if strings.HasPrefix(riskLower, "informational") {
+				sev = "informational"
+			}
+
+			cweStr := ""
+			if a.CWEID != "" && a.CWEID != "0" {
+				cweStr = "CWE-" + a.CWEID
+			}
+
+			endpoint := ""
+			method := ""
+			if len(a.Instances) > 0 {
+				endpoint = a.Instances[0].URI
+				method = a.Instances[0].Method
+			}
+
+			results = append(results, NormalizedFinding{
+				RuleID:     "ZAP-" + a.PluginID,
+				Title:      a.Alert,
+				Severity:   sev,
+				Confidence: 0.90,
+				Endpoint:   endpoint,
+				HTTPMethod: method,
+				CWE:        cweStr,
+				OWASP:      "A05:2021-Security Misconfiguration",
+				Evidence:   a.Desc,
+			})
+		}
+	}
 	return results
 }
 
