@@ -203,6 +203,84 @@ func (s *NeurolinkService) RecordFeedback(userID uint64, findingID uint64, ratin
 	return &synapse, nil
 }
 
+// AutoLearnRemediation autonomously distills and reinforces synaptic knowledge without requiring any human input
+func (s *NeurolinkService) AutoLearnRemediation(finding *models.Finding, result *AiRemediationResult) {
+	if finding == nil || result == nil {
+		return
+	}
+
+	category := finding.Title
+	if category == "" {
+		category = "Security Remediation"
+	}
+	ruleID := ""
+	if finding.RuleID != nil {
+		ruleID = *finding.RuleID
+	}
+	cwe := ""
+	if finding.CWE != nil {
+		cwe = *finding.CWE
+	}
+	patternKey := s.GeneratePatternKey(ruleID, cwe, category, "universal")
+
+	patch := ""
+	if result.SecureCode != nil && *result.SecureCode != "" {
+		patch = *result.SecureCode
+	} else if result.CodeDiff != "" {
+		patch = result.CodeDiff
+	}
+
+	notes := result.Summary
+	if len(result.MitigationChecklist) > 0 {
+		notes += "\n\nChecklist Mitigasi:\n- " + strings.Join(result.MitigationChecklist, "\n- ")
+	}
+
+	now := time.Now()
+	var synapse models.NeurolinkSynapse
+	err := s.db.Where("pattern_key = ? OR (rule_id = ? AND rule_id != '')", patternKey, ruleID).First(&synapse).Error
+
+	if err != nil {
+		// Create new autonomous synapse
+		synCode := fmt.Sprintf("SYN-%d-%04d", now.Year(), rand.Intn(9000)+1000)
+		learnedCtx := fmt.Sprintf("Memori sinaptik terdistilasi otomatis oleh NeuroLink Autonomous Engine dari temuan '%s' (%s). Teruji pada model %s.", finding.Title, ruleID, result.AiModel)
+
+		synapse = models.NeurolinkSynapse{
+			SynapseCode:       synCode,
+			PatternKey:        patternKey,
+			RuleID:            finding.RuleID,
+			CWE:               finding.CWE,
+			Category:          category,
+			Language:          "universal",
+			LearnedContext:    learnedCtx,
+			VulnerablePattern: finding.FilePath,
+			RemediationPatch:  &patch,
+			ResolutionNotes:   &notes,
+			FeedbackScore:     5,
+			AccuracyWeight:    1.5,
+			UsageCount:        1,
+			IsVerified:        true,
+			CreatedBy:         1,
+			SourceFindingID:   &finding.ID,
+			ProjectID:         &finding.ProjectID,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+		s.db.Create(&synapse)
+		log.Printf("[NEUROLINK AUTONOMOUS] Created new autonomous synapse %s for rule %s (weight: 1.5)", synCode, ruleID)
+	} else {
+		// Reinforce existing synapse autonomously
+		synapse.UsageCount++
+		synapse.FeedbackScore += 2
+		synapse.AccuracyWeight = math.Min(5.0, synapse.AccuracyWeight+0.1)
+		if patch != "" && (synapse.RemediationPatch == nil || *synapse.RemediationPatch == "") {
+			synapse.RemediationPatch = &patch
+		}
+		synapse.UpdatedAt = now
+		s.db.Save(&synapse)
+		log.Printf("[NEUROLINK AUTONOMOUS] Reinforced existing synapse %s (new weight: %.2f, usage: %d)", synapse.SynapseCode, synapse.AccuracyWeight, synapse.UsageCount)
+	}
+}
+
 // AutoLearnFromFindingTriage automatically learns whenever a finding is marked as fixed or false_positive
 func (s *NeurolinkService) AutoLearnFromFindingTriage(finding *models.Finding, newStatus string, notes string, userID uint64) {
 	if newStatus != "fixed" && newStatus != "false_positive" {

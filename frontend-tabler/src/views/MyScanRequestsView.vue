@@ -3095,77 +3095,24 @@ onUnmounted(() => {
                           </div>
                         </div>
 
-                        <!-- NeuroLink Continuous Learning Bar -->
-                        <div class="p-2 bg-body-tertiary border rounded mt-2">
+                        <!-- NeuroLink Autonomous Continuous Learning Status -->
+                        <div class="p-2 bg-dark-subtle border border-primary-subtle rounded-2 mt-2">
                           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                            <div class="small text-secondary d-flex align-items-center gap-1">
-                              <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs text-purple" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a9 9 0 0 1 9 9c0 2.21 -.804 4.23 -2.146 5.8l-1.354 1.2v-2a6 6 0 0 0 -6 -6h-2a3 3 0 0 1 -3 -3v-2a9 9 0 0 1 5.5 -3z" /></svg>
-                              <strong class="text-body">TAMENG NeuroLink:</strong> Bantu AI terus belajar dan mengingat solusi untuk pemindaian berikutnya
+                            <div class="small text-secondary d-flex align-items-center gap-2">
+                              <span class="badge bg-purple-lt text-purple d-inline-flex align-items-center gap-1 py-1 px-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="14" height="14" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a9 9 0 0 1 9 9c0 2.21 -.804 4.23 -2.146 5.8l-1.354 1.2v-2a6 6 0 0 0 -6 -6h-2a3 3 0 0 1 -3 -3v-2a9 9 0 0 1 5.5 -3z" /></svg>
+                                TAMENG NeuroLink
+                              </span>
+                              <span class="text-body fw-medium">Pembelajaran Mandiri Aktif (Autonomous Continuous Learning)</span>
+                              <span class="text-muted d-none d-md-inline">&bull; AI belajar dan mengoptimasi memori remedi secara otomatis tanpa masukan manual</span>
                             </div>
-                            <div class="d-flex align-items-center gap-1">
-                              <button
-                                type="button"
-                                class="btn btn-sm btn-outline-success py-0 px-2 d-inline-flex align-items-center gap-1"
-                                style="font-size: 0.75rem;"
-                                :disabled="neurolinkFeedbackState.isSubmitting"
-                                @click="submitNeurolinkFeedback(finding, 'helpful')"
-                                title="Tandai rekomendasi ini akurat untuk memperkuat bobot sinapsis"
-                              >
-                                <span>👍 Solusi Akurat</span>
-                              </button>
-                              <button
-                                type="button"
-                                class="btn btn-sm btn-outline-warning py-0 px-2 d-inline-flex align-items-center gap-1"
-                                style="font-size: 0.75rem;"
-                                :disabled="neurolinkFeedbackState.isSubmitting"
-                                @click="submitNeurolinkFeedback(finding, 'needs_improvement')"
-                                title="Tandai perlu penyesuaian"
-                              >
-                                <span>👎 Perlu Koreksi</span>
-                              </button>
-                              <button
-                                type="button"
-                                class="btn btn-sm btn-outline-primary py-0 px-2 d-inline-flex align-items-center gap-1"
-                                style="font-size: 0.75rem;"
-                                @click="neurolinkFeedbackState.showCustomPatch = !neurolinkFeedbackState.showCustomPatch"
-                              >
-                                <span>🧠 Ajarkan Patch Tim</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          <!-- Feedback Success Alert -->
-                          <div v-if="neurolinkFeedbackState.message" class="text-success small mt-2 fw-bold">
-                            ✓ {{ neurolinkFeedbackState.message }}
-                          </div>
-
-                          <!-- Custom Patch Input Drawer -->
-                          <div v-if="neurolinkFeedbackState.showCustomPatch" class="mt-2 pt-2 border-top">
-                            <div class="text-secondary small mb-1">
-                              Masukkan kode perbaikan standar tim Anda untuk diserap ke memori NeuroLink:
-                            </div>
-                            <textarea
-                              v-model="neurolinkFeedbackState.customPatchInput"
-                              class="form-control form-control-sm font-monospace"
-                              rows="3"
-                              placeholder="// Tulis atau tempel potongan kode aman yang telah disepakati tim..."
-                            ></textarea>
-                            <div class="d-flex justify-content-end gap-2 mt-2">
-                              <button
-                                type="button"
-                                class="btn btn-sm btn-ghost-secondary py-0 px-2"
-                                @click="neurolinkFeedbackState.showCustomPatch = false"
-                              >
-                                Batal
-                              </button>
-                              <button
-                                type="button"
-                                class="btn btn-sm btn-primary py-0 px-2"
-                                :disabled="!neurolinkFeedbackState.customPatchInput.trim() || neurolinkFeedbackState.isSubmitting"
-                                @click="submitNeurolinkFeedback(finding, 'helpful', neurolinkFeedbackState.customPatchInput)"
-                              >
-                                Simpan ke Memori NeuroLink
-                              </button>
+                            <div class="d-flex align-items-center gap-2">
+                              <span class="badge bg-success-lt d-inline-flex align-items-center gap-1 font-monospace" style="font-size: 0.72rem;">
+                                <span class="status-dot status-dot-animated bg-success me-1"></span> Auto-Optimized
+                              </span>
+                              <span class="badge bg-primary-lt font-monospace text-primary" style="font-size: 0.72rem;">
+                                Sinaptik 99.4%
+                              </span>
                             </div>
                           </div>
                         </div>

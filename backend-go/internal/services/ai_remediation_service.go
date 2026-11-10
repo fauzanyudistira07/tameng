@@ -103,6 +103,11 @@ func (s *AiRemediationService) GenerateGuidance(finding *models.Finding) (*AiRem
 		result.NeurolinkSynapses = synapses
 		result.NeurolinkMemoryApplied = len(synapses) > 0
 		result.SynapseMatchCount = len(synapses)
+
+		// Autonomous Continuous Learning: System auto-learns and distills synaptic memory without user input
+		if s.neurolink != nil {
+			go s.neurolink.AutoLearnRemediation(finding, result)
+		}
 	}
 
 	// 4. Save to Redis Cache (24 hours TTL)
