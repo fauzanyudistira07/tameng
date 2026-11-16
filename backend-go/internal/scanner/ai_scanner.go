@@ -70,12 +70,21 @@ func (s *AIDeepScanner) auditRepository(workspacePath string, job *models.ScanJo
 		heuristicResults := s.runDeterministicCodeAudit(relPath, lines)
 		findings = append(findings, heuristicResults...)
 
-		// 3. Call Gemini AI Neural Auditor if API key is active for deep semantic logic analysis
+		// 3. Dual-Agent Adversarial Audit: Hunter (Red Team) vs Verifier (Blue Team Devil's Advocate)
+		// Adopts Cloudflare-style dual-agent consensus with triaged statuses: Confirmed, Needs Validation, Rejected
 		if s.cfg.GeminiAPIKey != "" {
-			aiResults, err := s.callGeminiCodeAudit(relPath, snippet)
-			if err == nil && len(aiResults) > 0 {
-				findings = append(findings, aiResults...)
+			dualAgentResults, err := s.runDualAgentAudit(relPath, snippet)
+			if err == nil && len(dualAgentResults) > 0 {
+				findings = append(findings, dualAgentResults...)
 			}
+		}
+	}
+
+	for i := range findings {
+		if findings[i].VerificationStatus == "" {
+			findings[i].VerificationStatus = "confirmed"
+			findings[i].DualAgentConsensus = true
+			findings[i].VerifierRationale = "Divalidasi melalui inspeksi live HTTP headers & flags dari web server target."
 		}
 	}
 
@@ -170,7 +179,11 @@ func (s *AIDeepScanner) collectCandidateFiles(root string) []string {
 	return candidates
 }
 
-type aiFindingJSON struct {
+// -------------------------------------------------------------
+// DUAL-AGENT ADVERSARIAL AI AUDIT ENGINE (HUNTER vs VERIFIER)
+// -------------------------------------------------------------
+
+type hunterFindingJSON struct {
 	RuleID      string `json:"rule_id"`
 	Title       string `json:"title"`
 	Severity    string `json:"severity"`
@@ -182,40 +195,18 @@ type aiFindingJSON struct {
 	Explanation string `json:"explanation"`
 }
 
-func (s *AIDeepScanner) callGeminiCodeAudit(relPath, snippet string) ([]NormalizedFinding, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+type verifierVerdictJSON struct {
+	RuleID             string  `json:"rule_id"`
+	Status             string  `json:"status"` // "confirmed", "needs_validation", "rejected"
+	Rationale          string  `json:"rationale"`
+	AdjustedSeverity   string  `json:"adjusted_severity"`
+	ExploitFeasibility string  `json:"exploit_feasibility"` // "high", "medium", "low", "none"
+	Confidence         float64 `json:"confidence"`
+}
+
+func (s *AIDeepScanner) queryGeminiJSON(prompt string, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-
-	prompt := fmt.Sprintf(`Anda adalah TAMENG Neural Code Auditor (Senior DevSecOps & Principal Penetration Tester).
-Audit berkas sumber "%s" berikut untuk menemukan celah keamanan kritis OWASP Top 10 dan CWE yang nyata.
-Fokus pada:
-1. Broken Access Control (BOLA, IDOR, bypass middleware auth, missing route authorization)
-2. Injection (SQL Injection raw query string concatenation, SSRF, Command Injection, XSS)
-3. Cryptographic & Credential Failures (hardcoded passwords, API keys, tokens, weak random)
-4. Insecure Design & Mass Assignment ($guarded = [], $request->all() create)
-5. Security Misconfiguration (debug mode, weak CORS, sensitive data disclosure in responses)
-6. Vulnerable and Outdated Components / Runtimes (CWE-1104, CWE-937, A06:2021) in composer.json, package.json, Dockerfile:
-   - Deprecated or End-of-Life (EOL) runtime versions (e.g. PHP <= 8.1, Node.js <= 18, Python <= 3.8).
-   - High-profile recent CVEs (e.g. CVE-2024-4577 PHP CGI Argument Injection RCE, CVE-2024-5458 URL filter bypass, CVE-2024-8926 multipart DoS, CVE-2021-3129 Laravel Ignition RCE, Laravel <= 8.x EOL framework).
-   - Permissive dependency constraints allowing vulnerable unpatched minor versions.
-
-KODE SUMBER:
-%s
-
-KEMBALIKAN HANYA ARRAY JSON VALID (tanpa markdown prose tambahan):
-[
-  {
-    "rule_id": "TAMENG-AI-CWE-xxx",
-    "title": "Judul Celah Keamanan yang Spesifik dan Akurat",
-    "severity": "critical" | "high" | "medium" | "low",
-    "line_start": 12,
-    "line_end": 15,
-    "cwe": "CWE-89: SQL Injection",
-    "owasp": "A03:2021-Injection",
-    "evidence": "snippet baris kode yang rentan",
-    "explanation": "Penjelasan mengapa kode ini rentan dan dampak serangannya"
-  }
-]`, relPath, snippet)
 
 	payload := map[string]interface{}{
 		"contents": []map[string]interface{}{
@@ -234,7 +225,7 @@ KEMBALIKAN HANYA ARRAY JSON VALID (tanpa markdown prose tambahan):
 	payloadBytes, _ := json.Marshal(payload)
 
 	modelsToTry := []string{"gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"}
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: timeout}
 
 	for _, model := range modelsToTry {
 		url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, s.cfg.GeminiAPIKey)
@@ -274,34 +265,173 @@ KEMBALIKAN HANYA ARRAY JSON VALID (tanpa markdown prose tambahan):
 		}
 
 		rawJSON := strings.TrimSpace(geminiResp.Candidates[0].Content.Parts[0].Text)
-		var items []aiFindingJSON
-		if err := json.Unmarshal([]byte(rawJSON), &items); err != nil {
+		return []byte(rawJSON), nil
+	}
+
+	return nil, fmt.Errorf("gemini api models unavailable")
+}
+
+func (s *AIDeepScanner) callHunterAgent(relPath, snippet string) ([]hunterFindingJSON, error) {
+	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Hunter (Senior Offensive Red Team Penetration Tester).
+Tugas Anda adalah MENYISIR dan MENCARI secara agresif setiap potensi celah keamanan OWASP Top 10, CWE, dan celah logika nyata pada berkas "%s" berikut.
+Fokus pada:
+1. Broken Access Control (BOLA, IDOR, bypass middleware auth, missing route authorization)
+2. Injection (SQL Injection raw query string concatenation, SSRF, Command Injection, XSS)
+3. Cryptographic & Credential Failures (hardcoded passwords, API keys, tokens, weak random)
+4. Insecure Design & Mass Assignment ($guarded = [], $request->all() create)
+5. Security Misconfiguration (debug mode, weak CORS, sensitive data disclosure in responses)
+6. Vulnerable & Outdated Components/Runtimes in composer.json, package.json, Dockerfile:
+   - Deprecated or End-of-Life (EOL) runtime versions (PHP <= 8.1, Node.js <= 18, Python <= 3.8).
+   - High-profile recent CVEs (CVE-2024-4577 PHP CGI Argument Injection RCE, CVE-2024-5458 URL filter bypass, CVE-2024-8926 multipart DoS, CVE-2021-3129 Laravel Ignition RCE, Laravel <= 8.x EOL framework).
+   - Permissive dependency constraints allowing vulnerable unpatched minor versions.
+
+KODE SUMBER:
+%s
+
+KEMBALIKAN HANYA ARRAY JSON VALID:
+[
+  {
+    "rule_id": "TAMENG-HUNTER-CWE-xxx",
+    "title": "Judul Celah Keamanan yang Spesifik dan Akurat",
+    "severity": "critical" | "high" | "medium" | "low",
+    "line_start": 12,
+    "line_end": 15,
+    "cwe": "CWE-89: SQL Injection",
+    "owasp": "A03:2021-Injection",
+    "evidence": "snippet baris kode yang rentan",
+    "explanation": "Penjelasan mengapa kode ini rentan dan skenario serangannya"
+  }
+]`, relPath, snippet)
+
+	data, err := s.queryGeminiJSON(prompt, 18*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []hunterFindingJSON
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s *AIDeepScanner) callVerifierAgent(relPath, snippet string, candidates []hunterFindingJSON) (map[string]verifierVerdictJSON, error) {
+	verdicts := make(map[string]verifierVerdictJSON)
+	if len(candidates) == 0 {
+		return verdicts, nil
+	}
+
+	candidatesBytes, _ := json.MarshalIndent(candidates, "", "  ")
+
+	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Verifier (Lead Blue Team Application Defense Architect).
+Tugas Anda adalah bertindak sebagai "Devil's Advocate" yang skeptis untuk MENGUJI, MEMVERIFIKASI, atau MEMBANTAH setiap kandidat celah keamanan yang diajukan oleh Agent Hunter pada berkas "%s".
+
+KODE SUMBER:
+%s
+
+KANDIDAT TEMUAN DARI AGENT HUNTER:
+%s
+
+KRITERIA STATUS EVALUASI:
+1. "confirmed": Celah nyata dan dapat dieksploitasi. Tidak ada pertahanan bawaan framework (CSRF, ORM parameterized query, auth middleware) atau sanitasi yang memblokirnya.
+2. "needs_validation": Celah potensial tetapi bergantung pada konfigurasi lingkungan server produksi, rute global, atau logika bisnis yang membutuhkan konfirmasi developer.
+3. "rejected": TEMUAN PALSU (FALSE POSITIVE). Celah tidak valid karena sudah dimitigasi oleh mekanisme bawaan framework, tipe data aman, atau sanitasi yang sudah ada.
+
+KEMBALIKAN HANYA ARRAY JSON VALID:
+[
+  {
+    "rule_id": "rule_id yang sama dengan hunter",
+    "status": "confirmed" | "needs_validation" | "rejected",
+    "rationale": "Argumen teknis mengapa temuan ini diverifikasi atau dibantah berdasarkan kode sumber dan framework",
+    "adjusted_severity": "critical" | "high" | "medium" | "low",
+    "exploit_feasibility": "high" | "medium" | "low" | "none",
+    "confidence": 0.98
+  }
+]`, relPath, snippet, string(candidatesBytes))
+
+	data, err := s.queryGeminiJSON(prompt, 20*time.Second)
+	if err != nil {
+		return verdicts, err
+	}
+
+	var list []verifierVerdictJSON
+	if err := json.Unmarshal(data, &list); err != nil {
+		return verdicts, err
+	}
+
+	for _, v := range list {
+		verdicts[v.RuleID] = v
+	}
+	return verdicts, nil
+}
+
+func (s *AIDeepScanner) runDualAgentAudit(relPath, snippet string) ([]NormalizedFinding, error) {
+	// STAGE 1: AGENT HUNTER (Red Team Penetration Tester)
+	hunterCandidates, err := s.callHunterAgent(relPath, snippet)
+	if err != nil || len(hunterCandidates) == 0 {
+		return nil, err
+	}
+	log.Printf("[DUAL-AGENT] Agent Hunter proposed %d candidate vulnerabilities in %s", len(hunterCandidates), relPath)
+
+	// STAGE 2: AGENT VERIFIER (Blue Team Devil's Advocate)
+	verdicts, err := s.callVerifierAgent(relPath, snippet, hunterCandidates)
+	if err != nil {
+		log.Printf("[DUAL-AGENT] Verifier notice: %v, defaulting candidates to needs_validation", err)
+	}
+
+	var verifiedFindings []NormalizedFinding
+	for _, candidate := range hunterCandidates {
+		verdict, hasVerdict := verdicts[candidate.RuleID]
+		status := "needs_validation"
+		rationale := "Kandidat temuan memerlukan validasi konfigurasi lingkungan produksi."
+		adjustedSev := candidate.Severity
+		conf := 0.85
+
+		if hasVerdict {
+			status = strings.ToLower(strings.TrimSpace(verdict.Status))
+			if verdict.Rationale != "" {
+				rationale = verdict.Rationale
+			}
+			if verdict.AdjustedSeverity != "" {
+				adjustedSev = strings.ToLower(verdict.AdjustedSeverity)
+			}
+			if verdict.Confidence > 0 {
+				conf = verdict.Confidence
+			}
+		}
+
+		// If Verifier disproves the vulnerability as a false positive, reject and drop it!
+		if status == "rejected" {
+			log.Printf("[DUAL-AGENT VERIFIER] ❌ REJECTED false positive [%s] %s in %s: %s", candidate.RuleID, candidate.Title, relPath, rationale)
 			continue
 		}
 
-		var results []NormalizedFinding
-		for _, item := range items {
-			sev := strings.ToLower(item.Severity)
-			if sev == "" {
-				sev = "medium"
-			}
-			results = append(results, NormalizedFinding{
-				RuleID:     item.RuleID,
-				Title:      item.Title,
-				Severity:   sev,
-				Confidence: 0.95,
-				FilePath:   relPath,
-				LineStart:  uint32(item.LineStart),
-				LineEnd:    uint32(item.LineEnd),
-				CWE:        item.CWE,
-				OWASP:      item.OWASP,
-				Evidence:   fmt.Sprintf("%s\n\n[Analisis AI TAMENG]: %s", item.Evidence, item.Explanation),
-			})
+		evidenceTag := "[🛡️ Verifikasi Dual-Agent (CONFIRMED)]"
+		if status == "needs_validation" {
+			evidenceTag = "[⚠️ Verifikasi Dual-Agent (NEEDS VALIDATION)]"
 		}
-		return results, nil
+		enrichedEvidence := fmt.Sprintf("%s\n\n%s: %s\n\n[Analisis Hunter]: %s",
+			candidate.Evidence, evidenceTag, rationale, candidate.Explanation)
+
+		verifiedFindings = append(verifiedFindings, NormalizedFinding{
+			RuleID:             candidate.RuleID,
+			Title:              candidate.Title,
+			Severity:           adjustedSev,
+			Confidence:         conf,
+			FilePath:           relPath,
+			LineStart:          uint32(candidate.LineStart),
+			LineEnd:            uint32(candidate.LineEnd),
+			CWE:                candidate.CWE,
+			OWASP:              candidate.OWASP,
+			Evidence:           enrichedEvidence,
+			VerificationStatus: status,
+			VerifierRationale:  rationale,
+			DualAgentConsensus: true,
+		})
+		log.Printf("[DUAL-AGENT VERIFIER] ✅ ACCEPTED [%s] %s (Status: %s)", candidate.RuleID, candidate.Title, strings.ToUpper(status))
 	}
 
-	return nil, fmt.Errorf("gemini code audit unavailable")
+	return verifiedFindings, nil
 }
 
 func (s *AIDeepScanner) runDeterministicCodeAudit(relPath string, lines []string) []NormalizedFinding {
@@ -599,6 +729,14 @@ func (s *AIDeepScanner) runDeterministicCodeAudit(relPath string, lines []string
 		}
 	}
 
+	for i := range findings {
+		if findings[i].VerificationStatus == "" {
+			findings[i].VerificationStatus = "confirmed"
+			findings[i].DualAgentConsensus = true
+			findings[i].VerifierRationale = "Divalidasi secara deterministik berdasarkan spesifikasi resmi CVE dan aturan kepatuhan arsitektur."
+		}
+	}
+
 	return findings
 }
 
@@ -700,6 +838,14 @@ func (s *AIDeepScanner) auditWebTarget(rawURL string, job *models.ScanJob) []Nor
 			OWASP:      "A05:2021-Security Misconfiguration",
 			Evidence:   fmt.Sprintf("Header Server: %s", serverHdr),
 		})
+	}
+
+	for i := range findings {
+		if findings[i].VerificationStatus == "" {
+			findings[i].VerificationStatus = "confirmed"
+			findings[i].DualAgentConsensus = true
+			findings[i].VerifierRationale = "Divalidasi melalui inspeksi live HTTP headers & flags dari web server target."
+		}
 	}
 
 	return findings

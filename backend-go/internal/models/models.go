@@ -300,6 +300,9 @@ type Finding struct {
 	DedupKey              string     `gorm:"size:255;not null" json:"dedup_key"`
 	EvidenceSummary       *string    `gorm:"type:json" json:"evidence_summary"`
 	NormalizationMetadata *string    `gorm:"type:json" json:"normalization_metadata"`
+	VerificationStatus    *string    `gorm:"size:50;default:'confirmed'" json:"verification_status"`
+	VerifierRationale     *string    `gorm:"type:text" json:"verifier_rationale"`
+	DualAgentConsensus    bool       `gorm:"default:false" json:"dual_agent_consensus"`
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`
 

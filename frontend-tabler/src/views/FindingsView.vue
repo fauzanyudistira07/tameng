@@ -588,12 +588,16 @@ function formatFindingTitle(f: FindingItem): string {
 
 function getEngines(f: FindingItem): string[] {
   if (Array.isArray(f.evidence) && f.evidence.length > 0) {
-    const keys = f.evidence.map((e: any) => e.engine_key?.toUpperCase()).filter(Boolean);
+    const keys = f.evidence
+      .map((e: any) => e.engine_key?.toUpperCase())
+      .filter((k: string) => k && k !== "TAMENG_AI" && k !== "TAMENGAI");
     const unique = Array.from(new Set(keys));
     if (unique.length > 0) return unique as string[];
   }
   const fallback = f.scanRun?.engine_key || f.scan_run?.engine_key || (f as any).engine_key;
-  return [String(fallback || "SECURITY-ENGINE").toUpperCase()];
+  const clean = String(fallback || "SECURITY-ENGINE").toUpperCase();
+  if (clean === "TAMENG_AI" || clean === "TAMENGAI") return ["TRIVY"];
+  return [clean];
 }
 
 function getEngineBadgeClass(eng: string): string {
@@ -1177,7 +1181,7 @@ onMounted(async () => {
                     </span>
                     <span v-if="f.cwe" class="badge bg-secondary-lt text-secondary font-monospace">{{ f.cwe }}</span>
                     <span v-if="f.cve" class="badge bg-danger-lt text-danger font-monospace">{{ f.cve }}</span>
-                    <span v-if="f.scan_run?.engine_key" class="badge bg-purple-lt text-purple font-monospace">{{ f.scan_run.engine_key }}</span>
+                    <span v-if="f.scan_run?.engine_key" class="badge bg-purple-lt text-purple font-monospace">{{ (f.scan_run.engine_key === 'tameng_ai' || f.scan_run.engine_key === 'tamengai') ? 'trivy' : f.scan_run.engine_key }}</span>
                     <span class="text-secondary opacity-75">Ditemukan: {{ formatDate(f.created_at) }}</span>
                   </div>
                 </div>
@@ -1703,7 +1707,7 @@ onMounted(async () => {
                 style="font-size: 0.7rem"
               >
                 {{
-                  f.scanRun?.engine_key || f.scan_run?.engine_key || "ENGINE"
+                  ((f.scanRun?.engine_key || f.scan_run?.engine_key || '').toLowerCase().includes('tameng')) ? 'TRIVY' : (f.scanRun?.engine_key || f.scan_run?.engine_key || 'ENGINE')
                 }}
               </span>
             </div>

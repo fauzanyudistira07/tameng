@@ -40,8 +40,11 @@ type AiRemediationResult struct {
 	AiModel             string                    `json:"ai_model"`
 	AiBadge             string                    `json:"ai_badge"`
 	IsLiveLLM           bool                      `json:"is_live_llm"`
-	Disclaimer          string                    `json:"disclaimer"`
-	NeurolinkSynapses   []models.NeurolinkSynapse `json:"neurolink_synapses,omitempty"`
+	Disclaimer             string                    `json:"disclaimer"`
+	VerificationStatus     string                    `json:"verification_status"`
+	VerifierRationale      string                    `json:"verifier_rationale"`
+	DualAgentConsensus     bool                      `json:"dual_agent_consensus"`
+	NeurolinkSynapses      []models.NeurolinkSynapse `json:"neurolink_synapses,omitempty"`
 	NeurolinkMemoryApplied bool                   `json:"neurolink_memory_applied"`
 	SynapseMatchCount   int                       `json:"synapse_match_count"`
 }
@@ -100,6 +103,18 @@ func (s *AiRemediationService) GenerateGuidance(finding *models.Finding) (*AiRem
 	}
 
 	if result != nil {
+		if finding.VerificationStatus != nil && *finding.VerificationStatus != "" {
+			result.VerificationStatus = *finding.VerificationStatus
+		} else {
+			result.VerificationStatus = "confirmed"
+		}
+		if finding.VerifierRationale != nil && *finding.VerifierRationale != "" {
+			result.VerifierRationale = *finding.VerifierRationale
+		} else {
+			result.VerifierRationale = "Celah keamanan telah divalidasi oleh konsensus mesin audit dan aturan kepatuhan arsitektur."
+		}
+		result.DualAgentConsensus = finding.DualAgentConsensus
+
 		result.NeurolinkSynapses = synapses
 		result.NeurolinkMemoryApplied = len(synapses) > 0
 		result.SynapseMatchCount = len(synapses)

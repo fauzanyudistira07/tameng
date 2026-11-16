@@ -29,9 +29,12 @@ type NormalizedFinding struct {
 	HTTPMethod      string
 	CWE             string
 	OWASP           string
-	CVE             string
-	CVSS            float64
-	Evidence        string
+	CVE                string
+	CVSS               float64
+	Evidence           string
+	VerificationStatus string // "confirmed", "needs_validation", "rejected"
+	VerifierRationale  string
+	DualAgentConsensus bool
 }
 
 // IngestFinding persists a normalized finding into the database with deduplication.
@@ -149,6 +152,18 @@ func IngestFinding(db *gorm.DB, scanJob *models.ScanJob, scanRun *models.ScanRun
 		scanRunID = &scanRun.ID
 	}
 
+	var verifStatusPtr *string
+	if f.VerificationStatus != "" {
+		verifStatusPtr = &f.VerificationStatus
+	} else {
+		defaultStatus := "confirmed"
+		verifStatusPtr = &defaultStatus
+	}
+	var verifierRationalePtr *string
+	if f.VerifierRationale != "" {
+		verifierRationalePtr = &f.VerifierRationale
+	}
+
 	finding := models.Finding{
 		Code:                  findingCode,
 		ProjectID:             scanJob.ProjectID,
@@ -173,6 +188,9 @@ func IngestFinding(db *gorm.DB, scanJob *models.ScanJob, scanRun *models.ScanRun
 		Status:                "open",
 		DedupKey:              dedupKey,
 		NormalizationMetadata: &metaStr,
+		VerificationStatus:    verifStatusPtr,
+		VerifierRationale:     verifierRationalePtr,
+		DualAgentConsensus:    f.DualAgentConsensus,
 		CreatedAt:             now,
 		UpdatedAt:             now,
 	}

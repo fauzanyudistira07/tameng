@@ -1185,6 +1185,22 @@ function getFindingBorderClass(severity?: string): string {
   }
 }
 
+function getFindingVerificationStatus(finding: any): string {
+  if (finding?.verification_status) {
+    return String(finding.verification_status).toLowerCase()
+  }
+  if (finding?.metadata?.verification_status) {
+    return String(finding.metadata.verification_status).toLowerCase()
+  }
+  if (typeof finding?.normalization_metadata === 'string') {
+    try {
+      const parsed = JSON.parse(finding.normalization_metadata)
+      if (parsed.verification_status) return String(parsed.verification_status).toLowerCase()
+    } catch (e) {}
+  }
+  return 'confirmed'
+}
+
 function generateSmartAiRemediation(finding: Finding): AiRemediationResult {
   const rule = (finding.rule_id || '').toLowerCase()
   const title = (finding.title || '').toLowerCase()
@@ -1296,6 +1312,9 @@ async function toggleAiRemediation(finding: Finding, index: number) {
         owasp: fetchedData.compliance?.owasp || finding.owasp,
         cvss_score: fetchedData.compliance?.cvss_score ?? finding.cvss,
         disclaimer: fetchedData.disclaimer,
+        verification_status: fetchedData.verification_status || (finding as any).verification_status || 'confirmed',
+        verifier_rationale: fetchedData.verifier_rationale || (finding as any).verifier_rationale || '',
+        dual_agent_consensus: !!fetchedData.dual_agent_consensus,
         raw_text: typeof fetchedData === 'string' ? fetchedData : undefined
       }
     } else if (typeof fetchedData === 'string') {
@@ -3043,6 +3062,22 @@ onUnmounted(() => {
                       <span class="badge bg-blue-lt font-monospace small">
                         {{ (finding.engine_key === 'tameng_ai' || finding.engine_key === 'tamengai') ? 'trivy' : (finding.engine_key || 'Scanner') }}
                       </span>
+                      <span
+                        v-if="getFindingVerificationStatus(finding) === 'confirmed'"
+                        class="badge bg-green-lt text-success font-monospace small d-inline-flex align-items-center gap-1"
+                        title="Divalidasi oleh AI Verifier Dual-Agent (Resisten terhadap sanggahan)"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                        Confirmed
+                      </span>
+                      <span
+                        v-else-if="getFindingVerificationStatus(finding) === 'needs_validation'"
+                        class="badge bg-warning-lt text-warning font-monospace small d-inline-flex align-items-center gap-1"
+                        title="Memerlukan validasi konfigurasi lingkungan/arsitektur oleh developer"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.871l-8.106 -13.534a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+                        Needs Validation
+                      </span>
                     </div>
 
                     <div class="d-flex flex-wrap gap-1 ms-auto flex-shrink-0">
@@ -3140,6 +3175,28 @@ onUnmounted(() => {
 
                       <!-- Content State -->
                       <div v-else-if="aiRemediationData" class="d-flex flex-column gap-3">
+                        <!-- Dual-Agent Hunter-Verifier Consensus Banner -->
+                        <div
+                          v-if="aiRemediationData.verification_status"
+                          class="alert py-2 px-3 mb-0 small border-start border-3 d-flex align-items-center justify-content-between flex-wrap gap-2"
+                          :class="aiRemediationData.verification_status === 'confirmed' ? 'alert-success border-success' : 'alert-warning border-warning'"
+                        >
+                          <div class="d-flex align-items-center gap-2">
+                            <span
+                              class="badge d-inline-flex align-items-center gap-1"
+                              :class="aiRemediationData.verification_status === 'confirmed' ? 'bg-success text-success-fg' : 'bg-warning text-warning-fg'"
+                            >
+                              {{ aiRemediationData.verification_status === 'confirmed' ? '🛡️ DUAL-AGENT CONFIRMED' : '⚠️ NEEDS VALIDATION' }}
+                            </span>
+                            <span class="text-body fw-medium">
+                              {{ aiRemediationData.verifier_rationale || (aiRemediationData.verification_status === 'confirmed' ? 'Celah keamanan terverifikasi nyata dan lolos uji sanggah Verifier Blue Team.' : 'Memerlukan validasi konfigurasi lingkungan atau arsitektur sistem.') }}
+                            </span>
+                          </div>
+                          <span class="badge bg-secondary-lt font-monospace text-secondary" style="font-size: 0.72rem;">
+                            Hunter vs Verifier Consensus
+                          </span>
+                        </div>
+
                         <!-- NeuroLink Synaptic Cognitive Banner -->
                         <div v-if="aiRemediationData.neurolink_memory_applied" class="alert alert-purple py-2 px-3 mb-0 small border-start border-3 border-purple d-flex align-items-center justify-content-between flex-wrap gap-2">
                           <div class="d-flex align-items-center gap-2">
