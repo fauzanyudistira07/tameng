@@ -60,8 +60,8 @@ func (s *AIDeepScanner) auditRepository(workspacePath string, job *models.ScanJo
 
 		lines := strings.Split(string(contentBytes), "\n")
 		cappedLines := lines
-		if len(cappedLines) > 300 {
-			cappedLines = cappedLines[:300]
+		if len(cappedLines) > 1200 {
+			cappedLines = cappedLines[:1200]
 		}
 		snippet := strings.Join(cappedLines, "\n")
 
@@ -224,7 +224,7 @@ func (s *AIDeepScanner) queryGeminiJSON(prompt string, timeout time.Duration) ([
 	}
 	payloadBytes, _ := json.Marshal(payload)
 
-	modelsToTry := []string{"gemini-3.5-flash-lite", "gemini-flash-latest", "gemini-3.8-flash"}
+	modelsToTry := []string{"gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"}
 	client := &http.Client{Timeout: timeout}
 
 	for _, model := range modelsToTry {
@@ -272,18 +272,26 @@ func (s *AIDeepScanner) queryGeminiJSON(prompt string, timeout time.Duration) ([
 }
 
 func (s *AIDeepScanner) callHunterAgent(relPath, snippet string) ([]hunterFindingJSON, error) {
-	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Hunter (Senior Offensive Red Team Penetration Tester).
+	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Hunter (Cloudflare-style Offensive Red Team Security Auditor).
 Tugas Anda adalah MENYISIR dan MENCARI secara agresif setiap potensi celah keamanan OWASP Top 10, CWE, dan celah logika nyata pada berkas "%s" berikut.
 Fokus pada:
-1. Broken Access Control (BOLA, IDOR, bypass middleware auth, missing route authorization)
-2. Injection (SQL Injection raw query string concatenation, SSRF, Command Injection, XSS)
-3. Cryptographic & Credential Failures (hardcoded passwords, API keys, tokens, weak random)
-4. Insecure Design & Mass Assignment ($guarded = [], $request->all() create)
-5. Security Misconfiguration (debug mode, weak CORS, sensitive data disclosure in responses)
+1. Broken Access Control & IDOR/BOLA:
+   - Route/method yang melakukan update, edit, atau delete tanpa memvalidasi kepemilikan resource (misal: mencari via ID input tanpa membatasi user yang sedang login).
+   - Melewati otorisasi atau route yang tidak dilindungi middleware yang sesuai.
+2. Insecure File Upload & Path Traversal:
+   - Penggunaan getClientOriginalExtension() tanpa whitelist ekstensi server-side atau tanpa validasi MIME type / magic bytes.
+   - Penulisan berkas langsung ke storage publik (public/uploads/) dengan nama atau ekstensi yang ditentukan user.
+3. Cryptographic & Credential Failures:
+   - Hardcoded password, default static credentials (contoh: Hash::make('1') atau kata sandi statis saat create/update karyawan).
+   - Hardcoded API keys, JWT secret, atau database credentials.
+4. Injection (SQL Injection, Command Injection, XSS, SSRF):
+   - Raw query string concatenation (DB::raw, whereRaw, DB::statement).
+   - Unescaped output rendering atau reflected user input.
+5. Insecure Design & Mass Assignment:
+   - $request->all() pada model Eloquent tanpa proteksi $fillable atau $guarded.
 6. Vulnerable & Outdated Components/Runtimes in composer.json, package.json, Dockerfile:
-   - Deprecated or End-of-Life (EOL) runtime versions (PHP <= 8.1, Node.js <= 18, Python <= 3.8).
-   - High-profile recent CVEs (CVE-2024-4577 PHP CGI Argument Injection RCE, CVE-2024-5458 URL filter bypass, CVE-2024-8926 multipart DoS, CVE-2021-3129 Laravel Ignition RCE, Laravel <= 8.x EOL framework).
-   - Permissive dependency constraints allowing vulnerable unpatched minor versions.
+   - Deprecated or End-of-Life (EOL) runtime versions (PHP <= 8.1, Laravel <= 8.x, Node <= 18).
+   - High-profile recent CVEs (CVE-2024-4577 PHP CGI Argument Injection RCE, CVE-2024-5458 URL filter bypass, CVE-2024-8926 multipart DoS, CVE-2021-3129 Laravel Ignition RCE).
 
 KODE SUMBER:
 %s
@@ -323,8 +331,20 @@ func (s *AIDeepScanner) callVerifierAgent(relPath, snippet string, candidates []
 
 	candidatesBytes, _ := json.MarshalIndent(candidates, "", "  ")
 
-	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Verifier (Lead Blue Team Application Defense Architect).
-Tugas Anda adalah bertindak sebagai "Devil's Advocate" yang skeptis untuk MENGUJI, MEMVERIFIKASI, atau MEMBANTAH setiap kandidat celah keamanan yang diajukan oleh Agent Hunter pada berkas "%s".
+	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Verifier (Cloudflare-style Lead Blue Team Application Defense Architect).
+Tugas Anda adalah bertindak sebagai "Devil's Advocate" yang sangat skeptis untuk MENGUJI, MEMVERIFIKASI, atau MEMBANTAH (REFUTE) setiap kandidat celah keamanan yang diajukan oleh Agent Hunter pada berkas "%s".
+
+ATURAN VERIFIKASI SKEPTIS:
+1. Anda TIDAK menulis temuan ini. Buktikan secara objektif apakah celah ini nyata atau FALSE POSITIVE.
+2. Periksa apakah mekanisme keamanan framework memblokir celah ini:
+   - Parameter Binding: Eloquent/Query Builder PDO parameter binding secara default kebal dari SQL Injection.
+   - Session Binding: Jika kode menggunakan Auth::guard()->user()->id/nis dan mengabaikan parameter URL {id}, maka BUKAN IDOR -> REJECTED.
+   - CSRF Protection: Route web Laravel secara otomatis dilindungi middleware VerifyCsrfToken.
+   - Role Authorization: Jika endpoint hanya dapat diakses oleh Admin (auth:user) dan aksi tersebut adalah kapabilitas normal admin, sesuaikan keparahan atau reject jika itu fitur desain yang disengaja.
+3. Kriteria Status:
+   - "confirmed": Celah nyata, jalur eksploitasi terbukti ada, dan TIDAK ADA pertahanan framework atau sanitasi yang menghalanginya (Confidence >= 0.95).
+   - "needs_validation": Potensi celah masuk akal tetapi pembuktian akhirnya bergantung pada konfigurasi server di luar kode (misal konfigurasi Nginx/Apache FastCGI, .htaccess, atau environment production) (Confidence ~0.80).
+   - "rejected": TEMUAN PALSU (FALSE POSITIVE). Terbukti dibantah oleh mekanisme framework atau salah tafsir kode sumber. Temuan ini akan otomatis disingkirkan agar tidak membingungkan pengguna.
 
 KODE SUMBER:
 %s
@@ -332,17 +352,12 @@ KODE SUMBER:
 KANDIDAT TEMUAN DARI AGENT HUNTER:
 %s
 
-KRITERIA STATUS EVALUASI:
-1. "confirmed": Celah nyata dan dapat dieksploitasi. Tidak ada pertahanan bawaan framework (CSRF, ORM parameterized query, auth middleware) atau sanitasi yang memblokirnya.
-2. "needs_validation": Celah potensial tetapi bergantung pada konfigurasi lingkungan server produksi, rute global, atau logika bisnis yang membutuhkan konfirmasi developer.
-3. "rejected": TEMUAN PALSU (FALSE POSITIVE). Celah tidak valid karena sudah dimitigasi oleh mekanisme bawaan framework, tipe data aman, atau sanitasi yang sudah ada.
-
 KEMBALIKAN HANYA ARRAY JSON VALID:
 [
   {
     "rule_id": "rule_id yang sama dengan hunter",
     "status": "confirmed" | "needs_validation" | "rejected",
-    "rationale": "Argumen teknis mengapa temuan ini diverifikasi atau dibantah berdasarkan kode sumber dan framework",
+    "rationale": "Argumen teknis detail mengapa temuan ini dikonfirmasi, butuh validasi server, atau DIBANTAH (rejected) sebagai false positive",
     "adjusted_severity": "critical" | "high" | "medium" | "low",
     "exploit_feasibility": "high" | "medium" | "low" | "none",
     "confidence": 0.98
