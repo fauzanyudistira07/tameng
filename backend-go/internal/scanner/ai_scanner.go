@@ -243,9 +243,14 @@ func (s *AIDeepScanner) auditRepository(workspacePath string, job *models.ScanJo
 		findings = append(findings, heuristicResults...)
 
 		// 3. Phase 2 & 3: Cloudflare Dual-Agent Adversarial Audit (Hunter vs Verifier)
-		// Skip massive lockfiles from LLM token spend (already handled by Trivy/OSV/Deterministic)
+		// Skip massive lockfiles and empty Laravel framework boilerplate stubs to avoid burning LLM RPM quota
 		base := filepath.Base(relPath)
-		if s.cfg.GeminiAPIKey != "" && base != "composer.lock" && base != "package-lock.json" {
+		isBoilerplate := base == "composer.lock" || base == "package-lock.json" ||
+			base == "Controller.php" || base == "TrustHosts.php" || base == "TrustProxies.php" ||
+			base == "EncryptCookies.php" || base == "TrimStrings.php" || base == "PreventRequestsDuringMaintenance.php" ||
+			base == "RedirectIfAuthenticated.php" || base == "Authenticate.php"
+		if s.cfg.GeminiAPIKey != "" && !isBoilerplate {
+			time.Sleep(600 * time.Millisecond)
 			dualAgentResults, stats, err := s.runDualAgentAudit(relPath, snippet, archContext, companionHints)
 			if err == nil {
 				totalProposed += stats.Proposed
@@ -422,42 +427,54 @@ func (s *AIDeepScanner) queryGeminiJSON(prompt string, timeout time.Duration) ([
 
 	for _, model := range modelsToTry {
 		url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, s.cfg.GeminiAPIKey)
-		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payloadBytes))
-		if err != nil {
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
+		for attempt := 0; attempt < 2; attempt++ {
+			req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payloadBytes))
+			if err != nil {
+				break
+			}
+			req.Header.Set("Content-Type", "application/json")
 
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		bodyBytes, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
+			resp, err := client.Do(req)
+			if err != nil {
+				break
+			}
+			bodyBytes, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK || readErr != nil {
-			continue
-		}
+			if (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable) && attempt == 0 {
+				log.Printf("[CLOUDFLARE DUAL-AGENT] Model %s returned HTTP %d; backing off 2.5s before retry...", model, resp.StatusCode)
+				select {
+				case <-time.After(2500 * time.Millisecond):
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
 
-		var geminiResp struct {
-			Candidates []struct {
-				Content struct {
-					Parts []struct {
-						Text string `json:"text"`
-					} `json:"parts"`
-				} `json:"content"`
-			} `json:"candidates"`
-		}
+			if resp.StatusCode != http.StatusOK || readErr != nil {
+				break
+			}
 
-		if err := json.Unmarshal(bodyBytes, &geminiResp); err != nil || len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-			continue
-		}
+			var geminiResp struct {
+				Candidates []struct {
+					Content struct {
+						Parts []struct {
+							Text string `json:"text"`
+						} `json:"parts"`
+					} `json:"content"`
+				} `json:"candidates"`
+			}
 
-		rawJSON := strings.TrimSpace(geminiResp.Candidates[0].Content.Parts[0].Text)
-		rawJSON = strings.TrimPrefix(rawJSON, "```json")
-		rawJSON = strings.TrimPrefix(rawJSON, "```")
-		rawJSON = strings.TrimSuffix(rawJSON, "```")
-		return []byte(strings.TrimSpace(rawJSON)), nil
+			if err := json.Unmarshal(bodyBytes, &geminiResp); err != nil || len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+				break
+			}
+
+			rawJSON := strings.TrimSpace(geminiResp.Candidates[0].Content.Parts[0].Text)
+			rawJSON = strings.TrimPrefix(rawJSON, "```json")
+			rawJSON = strings.TrimPrefix(rawJSON, "```")
+			rawJSON = strings.TrimSuffix(rawJSON, "```")
+			return []byte(strings.TrimSpace(rawJSON)), nil
+		}
 	}
 
 	return nil, fmt.Errorf("gemini api models unavailable")

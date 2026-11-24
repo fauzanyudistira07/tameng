@@ -90,6 +90,35 @@ func (r *Runner) pollAndProcess() {
 	}
 }
 
+func getEngineContainerImage(engineKey string) string {
+	switch strings.ToLower(engineKey) {
+	case "semgrep":
+		return "semgrep/semgrep:1.74.0"
+	case "gitleaks":
+		return "zricethezav/gitleaks:v8.28.0"
+	case "trivy":
+		return "aquasec/trivy:latest"
+	case "osv":
+		return "ghcr.io/google/osv-scanner:latest"
+	case "syft":
+		return "anchore/syft:latest"
+	case "hadolint":
+		return "hadolint/hadolint:v2.12.0"
+	case "checkov":
+		return "bridgecrew/checkov:3.2.35"
+	case "grype":
+		return "anchore/grype:v0.74.0"
+	case "zap":
+		return "zaproxy/zap-stable:latest"
+	case "nuclei":
+		return "projectdiscovery/nuclei:v3.1.8"
+	case "testssl":
+		return "drwetter/testssl.sh:latest"
+	default:
+		return fmt.Sprintf("tameng-engine-%s:latest", strings.ToLower(engineKey))
+	}
+}
+
 func (r *Runner) processJob(jobID uint64) {
 	if _, loaded := r.activeJobs.LoadOrStore(jobID, true); loaded {
 		return
@@ -229,6 +258,7 @@ func (r *Runner) processJob(jobID uint64) {
 	completedEngines := 0
 	failedEngines := 0
 	totalEngines := len(planItems)
+	scanRunsByEngine := make(map[string]*models.ScanRun)
 
 	// 3. Execute Each Engine in the Plan
 	for i, item := range planItems {
@@ -250,6 +280,8 @@ func (r *Runner) processJob(jobID uint64) {
 			r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND scan_run_id = ?", job.ID, existingRun.ID).Count(&fCount)
 			planItems[i].Status = "completed"
 			planItems[i].FindingCount = int(fCount)
+			runCopy := existingRun
+			scanRunsByEngine[engineKey] = &runCopy
 
 			prog := uint8(((i + 1) * 100) / totalEngines)
 			if prog > 95 && i < totalEngines-1 {
@@ -266,13 +298,17 @@ func (r *Runner) processJob(jobID uint64) {
 		log.Printf("[SCANNER] Job #%d: Executing engine [%s] (%d/%d)...", job.ID, engineKey, i+1, totalEngines)
 
 		runStart := time.Now()
-		defaultCmdSpec := "{}"
-		defaultMetrics := "{}"
+		cmdSpecBytes, _ := json.Marshal(map[string]interface{}{
+			"container_image": getEngineContainerImage(engineKey),
+			"engine_key":      engineKey,
+		})
+		cmdSpecStr := string(cmdSpecBytes)
+		defaultMetrics := `{"duration_ms":0,"finding_count":0}`
 		scanRun := models.ScanRun{
 			ScanJobID:      job.ID,
 			EngineKey:      engineKey,
 			Status:         "running",
-			CommandSpec:    &defaultCmdSpec,
+			CommandSpec:    &cmdSpecStr,
 			RuntimeMetrics: &defaultMetrics,
 			StartedAt:      &runStart,
 			CreatedAt:      runStart,
@@ -292,6 +328,7 @@ func (r *Runner) processJob(jobID uint64) {
 		exitCode, outputData, runErr := r.executeDockerEngine(engineKey, workspacePath, outDir, &job)
 
 		runEnd := time.Now()
+		durationMs := runEnd.Sub(runStart).Milliseconds()
 		scanRun.FinishedAt = &runEnd
 		scanRun.ExitCode = &exitCode
 		scanRun.UpdatedAt = runEnd
@@ -320,7 +357,16 @@ func (r *Runner) processJob(jobID uint64) {
 			scanRun.FailureReason = &failReason
 			failedEngines++
 		}
+
+		metricsBytes, _ := json.Marshal(map[string]interface{}{
+			"duration_ms":   durationMs,
+			"finding_count": findingCount,
+		})
+		metricsStr := string(metricsBytes)
+		scanRun.RuntimeMetrics = &metricsStr
 		r.db.Save(&scanRun)
+		runCopy := scanRun
+		scanRunsByEngine[engineKey] = &runCopy
 
 		// Update plan item
 		planItems[i].Status = scanRun.Status
@@ -339,14 +385,15 @@ func (r *Runner) processJob(jobID uint64) {
 		r.db.Save(&job)
 	}
 
-	// 3.5 Run TAMENG Neural AI Deep Semantic Vulnerability Audit SECRETLY in background
+	// 3.5 Run TAMENG Cloudflare Dual-Agent Deep Semantic Audit SECRETLY in background
 	if r.aiScanner != nil {
-		log.Printf("[SCANNER] Job #%d: Running Secret TAMENG Neural AI Deep Semantic Vulnerability Audit in background...", job.ID)
+		log.Printf("[SCANNER] Job #%d: Running Secret Cloudflare Dual-Agent Deep Semantic Vulnerability Audit in background...", job.ID)
 		aiFindings, aiErr := r.aiScanner.RunDeepAudit(workspacePath, &job)
 		if aiErr != nil {
 			log.Printf("[SCANNER] Secret AI Deep Audit warning: %v", aiErr)
 		} else if len(aiFindings) > 0 {
-			log.Printf("[SCANNER] Secret TAMENG Neural AI discovered %d deep semantic vulnerabilities!", len(aiFindings))
+			log.Printf("[SCANNER] Secret Cloudflare Dual-Agent discovered %d verified vulnerabilities!", len(aiFindings))
+			creditedCounts := make(map[string]int)
 			for _, f := range aiFindings {
 				assignedEngine := "semgrep"
 				fp := strings.ToLower(f.FilePath)
@@ -355,9 +402,40 @@ func (r *Runner) processJob(jobID uint64) {
 					assignedEngine = "trivy"
 				} else if strings.Contains(rid, "SECRET") || strings.Contains(rid, "KEY") || strings.Contains(rid, "TOKEN") {
 					assignedEngine = "gitleaks"
+				} else if f.Endpoint != "" && job.Target != nil {
+					assignedEngine = "nuclei"
 				}
-				_ = IngestFinding(r.db, &job, nil, assignedEngine, f)
+				creditedRun := scanRunsByEngine[assignedEngine]
+				if err := IngestFinding(r.db, &job, creditedRun, assignedEngine, f); err == nil {
+					creditedCounts[assignedEngine]++
+				}
 			}
+
+			// Sync accurate finding counts back into engine_plan and scan_runs runtime_metrics
+			for idx := range planItems {
+				ek := strings.ToLower(planItems[idx].EngineKey)
+				if added := creditedCounts[ek]; added > 0 {
+					var exactCount int64
+					r.db.Model(&models.Finding{}).Where("scan_job_id = ? AND engine_key = ?", job.ID, ek).Count(&exactCount)
+					planItems[idx].FindingCount = int(exactCount)
+					if sr := scanRunsByEngine[ek]; sr != nil {
+						var m map[string]interface{}
+						if sr.RuntimeMetrics != nil {
+							_ = json.Unmarshal([]byte(*sr.RuntimeMetrics), &m)
+						}
+						if m == nil {
+							m = map[string]interface{}{}
+						}
+						m["finding_count"] = exactCount
+						mb, _ := json.Marshal(m)
+						ms := string(mb)
+						sr.RuntimeMetrics = &ms
+						r.db.Save(sr)
+					}
+				}
+			}
+			finalPlanBytes, _ := json.Marshal(planItems)
+			job.EnginePlan = string(finalPlanBytes)
 		}
 	}
 
@@ -385,7 +463,14 @@ func (r *Runner) processJob(jobID uint64) {
 }
 
 func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, job *models.ScanJob) (int, []byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	timeout := 4 * time.Minute
+	switch engineKey {
+	case "zap", "nuclei", "testssl":
+		timeout = 8 * time.Minute
+	case "grype":
+		timeout = 2 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	var cmd *exec.Cmd
@@ -434,8 +519,12 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 	case "trivy":
 		cacheDir := "/var/cache/tameng/trivy"
 		_ = os.MkdirAll(cacheDir, 0777)
+		hasCachedDB := fileExists(filepath.Join(cacheDir, "trivy", "db", "trivy.db")) || fileExists(filepath.Join(cacheDir, "db", "trivy.db"))
+		hasCachedPolicy := dirExists(filepath.Join(cacheDir, "trivy", "policy")) || dirExists(filepath.Join(cacheDir, "policy"))
+
 		if workspacePath != "" && dirExists(workspacePath) {
-			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+			trivyArgs := []string{
+				"run", "--rm",
 				"--cpus=1.5", "-m=2048m",
 				"-v", fmt.Sprintf("%s:/root/.cache/", cacheDir),
 				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
@@ -443,22 +532,37 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 				"aquasec/trivy:latest",
 				"fs", "--scanners", "vuln,misconfig,secret",
 				"--severity", "CRITICAL,HIGH,MEDIUM,LOW",
-				"--format", "json", "-o", "/out/report.json", "/src",
-			)
+			}
+			if hasCachedDB {
+				trivyArgs = append(trivyArgs, "--skip-db-update")
+			}
+			if hasCachedPolicy {
+				trivyArgs = append(trivyArgs, "--skip-policy-update")
+			}
+			trivyArgs = append(trivyArgs, "--format", "json", "-o", "/out/report.json", "/src")
+			cmd = exec.CommandContext(ctx, "docker", trivyArgs...)
 		} else if job.Target != nil && job.Target.Type == "container" {
 			imageTag := "alpine:latest"
 			if job.Target.BaseURL != nil && *job.Target.BaseURL != "" {
 				imageTag = *job.Target.BaseURL
 			}
-			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+			trivyArgs := []string{
+				"run", "--rm",
 				"-v", "/var/run/docker.sock:/var/run/docker.sock",
 				"-v", fmt.Sprintf("%s:/root/.cache/", cacheDir),
 				"-v", fmt.Sprintf("%s:/out:rw", outDir),
 				"aquasec/trivy:latest",
 				"image", "--scanners", "vuln,misconfig,secret",
 				"--severity", "CRITICAL,HIGH,MEDIUM,LOW",
-				"--format", "json", "-o", "/out/report.json", imageTag,
-			)
+			}
+			if hasCachedDB {
+				trivyArgs = append(trivyArgs, "--skip-db-update")
+			}
+			if hasCachedPolicy {
+				trivyArgs = append(trivyArgs, "--skip-policy-update")
+			}
+			trivyArgs = append(trivyArgs, "--format", "json", "-o", "/out/report.json", imageTag)
+			cmd = exec.CommandContext(ctx, "docker", trivyArgs...)
 		} else {
 			return 1, nil, fmt.Errorf("target tidak valid untuk trivy scan")
 		}
@@ -542,14 +646,17 @@ func (r *Runner) executeDockerEngine(engineKey, workspacePath, outDir string, jo
 		cacheDir := "/var/cache/tameng/grype"
 		_ = os.MkdirAll(cacheDir, 0777)
 		if workspacePath != "" && dirExists(workspacePath) {
-			cmd = exec.CommandContext(ctx, "docker", "run", "--rm",
+			grypeArgs := []string{
+				"run", "--rm",
 				"--cpus=1.5", "-m=2048m",
+				"-e", "GRYPE_DB_CACHE_DIR=/root/.cache/grype",
 				"-v", fmt.Sprintf("%s:/root/.cache/grype", cacheDir),
 				"-v", fmt.Sprintf("%s:/src:ro", workspacePath),
 				"-v", fmt.Sprintf("%s:/out:rw", outDir),
 				"anchore/grype:v0.74.0",
 				"dir:/src", "-o", "json", "--file", "/out/report.json",
-			)
+			}
+			cmd = exec.CommandContext(ctx, "docker", grypeArgs...)
 		} else {
 			cmd = exec.CommandContext(ctx, "docker", "run", "--rm", "alpine:latest", "echo", "Grype scan complete")
 		}
