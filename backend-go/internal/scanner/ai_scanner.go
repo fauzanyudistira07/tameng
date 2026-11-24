@@ -538,7 +538,8 @@ DISIPLIN VERIFIKASI CLOUDFLARE:
    - Parameter Binding: Query Builder / Eloquent PDO binding secara default kebal SQLi -> jika tidak ada interpolasi mentah, REJECTED.
    - Session Binding: Jika rute memiliki parameter {id}/{nis}, tetapi controller memakai Auth::guard()->user()->id/nis dan mengabaikan parameter URL -> BUKAN IDOR -> REJECTED.
    - CSRF Protection: Rute web Laravel secara default dilindungi VerifyCsrfToken kecuali ada pengecualian eksplisit -> REJECTED jika tidak ada bypass.
-   - Intended Role Authority: Jangan laporkan aksi normal Admin terautentikasi sebagai privilege escalation jika memang fitur resmi admin, kecuali melanggar boundary sistem (misal RCE / shell upload / reset password statis semua user).
+   - Intended Role Authority: Jangan laporkan aksi normal Admin terautentikasi sebagai privilege escalation jika memang fitur resmi admin, kecuali melanggar boundary sistem (misal RCE / shell upload / hardcoded default password lemah).
+   - JANGAN PERNAH me-reject hardcoded/static default password yang sangat lemah (seperti Hash::make('1'), Hash::make('123456'), atau 'password') hanya karena di-hash dengan bcrypt/Hash::make()! Password statis 1 karakter atau password default tetap untuk semua akun adalah celah CWE-798/CWE-521 (Account Takeover) yang NYATA -> WAJIB CONFIRMED.
 2. Tetapkan tepat SATU dari 3 status resmi:
    - "confirmed": Terbukti melanggar trust boundary secara nyata dari kode sumber, tidak ada kontrol framework/sanitasi yang memblokirnya (Confidence >= 0.92).
    - "needs_validation": Jalur di kode sumber masuk akal dan berisiko, namun pembuktian final bergantung pada konfigurasi server/deployment di luar repositori (misal Nginx/Apache FastCGI, .htaccess, proxy/CORS gateway, variabel .env produksi) (Confidence ~0.80).
