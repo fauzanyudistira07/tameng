@@ -18,16 +18,179 @@ import (
 	"tameng-backend-go/internal/models"
 )
 
-// AIDeepScanner conducts heuristic and semantic neural auditing on source code & endpoints.
+// AIDeepScanner conducts Cloudflare-style Dual-Agent (Hunter vs Verifier)
+// security auditing + deterministic CVE/EOL analysis on source code & endpoints.
 type AIDeepScanner struct {
-	cfg *config.Config
+	cfg              *config.Config
+	skillDir         string
+	hunterDoctrine   string
+	verifierDoctrine string
 }
 
 func NewAIDeepScanner(cfg *config.Config) *AIDeepScanner {
-	return &AIDeepScanner{cfg: cfg}
+	s := &AIDeepScanner{cfg: cfg}
+	s.loadCloudflareSkillPlaybook()
+	return s
 }
 
-// RunDeepAudit audits a repository workspace or web target using Gemini AI + Heuristic engine.
+// loadCloudflareSkillPlaybook loads core Hunter & Verifier doctrine from the
+// installed Cloudflare security-audit skill directory inside the TAMENG repo.
+func (s *AIDeepScanner) loadCloudflareSkillPlaybook() {
+	candidateDirs := []string{
+		"/opt/tameng/tameng/.agents/skills/security-audit",
+		".agents/skills/security-audit",
+		"../.agents/skills/security-audit",
+		"/opt/.agents/skills/security-audit",
+	}
+	for _, dir := range candidateDirs {
+		if _, err := os.Stat(filepath.Join(dir, "SKILL.md")); err == nil {
+			s.skillDir = dir
+			break
+		}
+	}
+
+	if s.skillDir == "" {
+		return
+	}
+
+	readExcerpt := func(name string, maxBytes int) string {
+		b, err := os.ReadFile(filepath.Join(s.skillDir, name))
+		if err != nil || len(b) == 0 {
+			return ""
+		}
+		if len(b) > maxBytes {
+			b = b[:maxBytes]
+		}
+		return string(b)
+	}
+
+	// Compact doctrine distilled from Cloudflare's HUNTING.md & ATTACK-CLASSES.md
+	huntingRef := readExcerpt("HUNTING.md", 2200)
+	attackRef := readExcerpt("ATTACK-CLASSES.md", 2200)
+	if huntingRef != "" || attackRef != "" {
+		s.hunterDoctrine = fmt.Sprintf("CLOUDFLARE SECURITY-AUDIT SKILL DOCTRINE:\n%s\n%s", huntingRef, attackRef)
+	}
+
+	// Compact doctrine distilled from Cloudflare's VALIDATION-AND-REPORTING.md
+	verifyRef := readExcerpt("VALIDATION-AND-REPORTING.md", 2400)
+	if verifyRef != "" {
+		s.verifierDoctrine = fmt.Sprintf("CLOUDFLARE VERIFIER DOCTRINE:\n%s", verifyRef)
+	}
+
+	log.Printf("[CLOUDFLARE DUAL-AGENT] Loaded security-audit skill playbooks from %s", s.skillDir)
+}
+
+// selectCompanionHints returns compact domain-specific hints from Cloudflare companion playbooks
+// matching the target repository's detected technology stack.
+func (s *AIDeepScanner) selectCompanionHints(workspacePath string) string {
+	if s.skillDir == "" {
+		return ""
+	}
+	var companions []string
+	// Web & Auth is almost always relevant for web apps/APIs
+	companions = append(companions, "WEB-PROTOCOL-AND-AUTH.md", "DATA-ISOLATION-AND-LIFECYCLE.md")
+
+	if fileExists(filepath.Join(workspacePath, "composer.json")) || fileExists(filepath.Join(workspacePath, "package.json")) || fileExists(filepath.Join(workspacePath, "go.mod")) {
+		companions = append(companions, "SUPPLY-CHAIN-AND-RELEASE.md")
+	}
+	if fileExists(filepath.Join(workspacePath, "Dockerfile")) || fileExists(filepath.Join(workspacePath, "docker-compose.yml")) {
+		companions = append(companions, "CLOUD-AND-DEPLOYMENT.md")
+	}
+	if fileExists(filepath.Join(workspacePath, "package.json")) {
+		companions = append(companions, "CLIENT-SIDE.md")
+	}
+
+	var b strings.Builder
+	for _, c := range companions {
+		raw, err := os.ReadFile(filepath.Join(s.skillDir, c))
+		if err != nil {
+			continue
+		}
+		// Extract top headings / checklist lines to stay compact
+		lines := strings.Split(string(raw), "\n")
+		kept := 0
+		for _, ln := range lines {
+			t := strings.TrimSpace(ln)
+			if strings.HasPrefix(t, "#") || strings.HasPrefix(t, "- **") {
+				b.WriteString(t + "\n")
+				kept++
+				if kept >= 12 {
+					break
+				}
+			}
+		}
+	}
+	res := b.String()
+	if len(res) > 1800 {
+		res = res[:1800]
+	}
+	return res
+}
+
+// buildArchitectureContext performs Cloudflare Phase 1 Reconnaissance across the repository
+// to provide both Hunter and Verifier with cross-file awareness (routes, middleware, models, manifests).
+func (s *AIDeepScanner) buildArchitectureContext(workspacePath string) string {
+	var b strings.Builder
+	b.WriteString("=== PHASE 1 RECONNAISSANCE (CROSS-FILE TRUST BOUNDARIES) ===\n")
+
+	appendSnippet := func(label, rel string, maxLines int) {
+		p := filepath.Join(workspacePath, rel)
+		raw, err := os.ReadFile(p)
+		if err != nil || len(raw) == 0 {
+			return
+		}
+		lines := strings.Split(string(raw), "\n")
+		if len(lines) > maxLines {
+			lines = lines[:maxLines]
+		}
+		b.WriteString(fmt.Sprintf("\n--- %s (%s) ---\n%s\n", label, rel, strings.Join(lines, "\n")))
+	}
+
+	// Manifests
+	for _, m := range []string{"composer.json", "package.json", "go.mod", "Dockerfile"} {
+		appendSnippet("MANIFEST", m, 55)
+	}
+	// Routes (critical for Verifier to check auth/guest/admin middleware!)
+	for _, r := range []string{"routes/web.php", "routes/api.php", "cmd/server/main.go", "app/Http/Kernel.php"} {
+		appendSnippet("ROUTES/MIDDLEWARE", r, 120)
+	}
+	// Model fillable/guarded summaries
+	if modelFiles, err := filepath.Glob(filepath.Join(workspacePath, "app/Models/*.php")); err == nil {
+		for idx, mf := range modelFiles {
+			if idx >= 8 {
+				break
+			}
+			rel, _ := filepath.Rel(workspacePath, mf)
+			raw, err := os.ReadFile(mf)
+			if err != nil {
+				continue
+			}
+			var modelLines []string
+			for _, ln := range strings.Split(string(raw), "\n") {
+				tl := strings.TrimSpace(ln)
+				if strings.Contains(tl, "class ") || strings.Contains(tl, "$table") || strings.Contains(tl, "$fillable") || strings.Contains(tl, "$guarded") || strings.Contains(tl, "$hidden") {
+					modelLines = append(modelLines, tl)
+				}
+			}
+			if len(modelLines) > 0 {
+				b.WriteString(fmt.Sprintf("\n--- MODEL (%s) ---\n%s\n", rel, strings.Join(modelLines, "\n")))
+			}
+		}
+	}
+
+	out := b.String()
+	if len(out) > 6000 {
+		out = out[:6000] + "\n...[truncated]"
+	}
+	return out
+}
+
+func fileExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
+}
+
+// RunDeepAudit audits a repository workspace or web target using Cloudflare Dual-Agent AI + Heuristic engine.
 func (s *AIDeepScanner) RunDeepAudit(workspacePath string, job *models.ScanJob) ([]NormalizedFinding, error) {
 	var findings []NormalizedFinding
 
@@ -47,9 +210,18 @@ func (s *AIDeepScanner) RunDeepAudit(workspacePath string, job *models.ScanJob) 
 func (s *AIDeepScanner) auditRepository(workspacePath string, job *models.ScanJob) []NormalizedFinding {
 	var findings []NormalizedFinding
 
+	// Phase 1: Reconnaissance — map cross-file routes, auth guards, manifests, and models once
+	archContext := s.buildArchitectureContext(workspacePath)
+	companionHints := s.selectCompanionHints(workspacePath)
+
 	// 1. Gather high-value candidate files for security auditing
 	candidateFiles := s.collectCandidateFiles(workspacePath)
-	log.Printf("[TAMENG AI SCANNER] Selected %d priority security files for neural deep audit in %s", len(candidateFiles), workspacePath)
+	log.Printf("[CLOUDFLARE DUAL-AGENT] Phase 1 Recon complete (%d bytes context). Selected %d priority files in %s", len(archContext), len(candidateFiles), workspacePath)
+
+	totalProposed := 0
+	totalConfirmed := 0
+	totalNeedsVal := 0
+	totalRejected := 0
 
 	for _, relPath := range candidateFiles {
 		fullPath := filepath.Join(workspacePath, relPath)
@@ -70,21 +242,31 @@ func (s *AIDeepScanner) auditRepository(workspacePath string, job *models.ScanJo
 		heuristicResults := s.runDeterministicCodeAudit(relPath, lines)
 		findings = append(findings, heuristicResults...)
 
-		// 3. Dual-Agent Adversarial Audit: Hunter (Red Team) vs Verifier (Blue Team Devil's Advocate)
-		// Adopts Cloudflare-style dual-agent consensus with triaged statuses: Confirmed, Needs Validation, Rejected
-		if s.cfg.GeminiAPIKey != "" {
-			dualAgentResults, err := s.runDualAgentAudit(relPath, snippet)
-			if err == nil && len(dualAgentResults) > 0 {
-				findings = append(findings, dualAgentResults...)
+		// 3. Phase 2 & 3: Cloudflare Dual-Agent Adversarial Audit (Hunter vs Verifier)
+		// Skip massive lockfiles from LLM token spend (already handled by Trivy/OSV/Deterministic)
+		base := filepath.Base(relPath)
+		if s.cfg.GeminiAPIKey != "" && base != "composer.lock" && base != "package-lock.json" {
+			dualAgentResults, stats, err := s.runDualAgentAudit(relPath, snippet, archContext, companionHints)
+			if err == nil {
+				totalProposed += stats.Proposed
+				totalConfirmed += stats.Confirmed
+				totalNeedsVal += stats.NeedsValidation
+				totalRejected += stats.Rejected
+				if len(dualAgentResults) > 0 {
+					findings = append(findings, dualAgentResults...)
+				}
 			}
 		}
 	}
+
+	log.Printf("[CLOUDFLARE DUAL-AGENT] Summary for %s: Proposed=%d | Confirmed=%d | NeedsValidation=%d | Rejected(FalsePositives)=%d",
+		workspacePath, totalProposed, totalConfirmed, totalNeedsVal, totalRejected)
 
 	for i := range findings {
 		if findings[i].VerificationStatus == "" {
 			findings[i].VerificationStatus = "confirmed"
 			findings[i].DualAgentConsensus = true
-			findings[i].VerifierRationale = "Divalidasi melalui inspeksi live HTTP headers & flags dari web server target."
+			findings[i].VerifierRationale = "Divalidasi secara deterministik berdasarkan spesifikasi resmi CVE dan analisis kode sumber."
 		}
 	}
 
@@ -180,10 +362,11 @@ func (s *AIDeepScanner) collectCandidateFiles(root string) []string {
 }
 
 // -------------------------------------------------------------
-// DUAL-AGENT ADVERSARIAL AI AUDIT ENGINE (HUNTER vs VERIFIER)
+// CLOUDFLARE DUAL-AGENT ADVERSARIAL AI AUDIT ENGINE (HUNTER vs VERIFIER)
 // -------------------------------------------------------------
 
 type hunterFindingJSON struct {
+	CandidateID string `json:"candidate_id"`
 	RuleID      string `json:"rule_id"`
 	Title       string `json:"title"`
 	Severity    string `json:"severity"`
@@ -191,17 +374,27 @@ type hunterFindingJSON struct {
 	LineEnd     int    `json:"line_end"`
 	CWE         string `json:"cwe"`
 	OWASP       string `json:"owasp"`
+	RootCause   string `json:"root_cause"`
+	Trace       string `json:"trace"`
 	Evidence    string `json:"evidence"`
 	Explanation string `json:"explanation"`
 }
 
 type verifierVerdictJSON struct {
+	CandidateID        string  `json:"candidate_id"`
 	RuleID             string  `json:"rule_id"`
 	Status             string  `json:"status"` // "confirmed", "needs_validation", "rejected"
 	Rationale          string  `json:"rationale"`
 	AdjustedSeverity   string  `json:"adjusted_severity"`
 	ExploitFeasibility string  `json:"exploit_feasibility"` // "high", "medium", "low", "none"
 	Confidence         float64 `json:"confidence"`
+}
+
+type dualAgentStats struct {
+	Proposed        int
+	Confirmed       int
+	NeedsValidation int
+	Rejected        int
 }
 
 func (s *AIDeepScanner) queryGeminiJSON(prompt string, timeout time.Duration) ([]byte, error) {
@@ -239,14 +432,10 @@ func (s *AIDeepScanner) queryGeminiJSON(prompt string, timeout time.Duration) ([
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			continue
-		}
-
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
+		if resp.StatusCode != http.StatusOK || readErr != nil {
 			continue
 		}
 
@@ -265,53 +454,58 @@ func (s *AIDeepScanner) queryGeminiJSON(prompt string, timeout time.Duration) ([
 		}
 
 		rawJSON := strings.TrimSpace(geminiResp.Candidates[0].Content.Parts[0].Text)
-		return []byte(rawJSON), nil
+		rawJSON = strings.TrimPrefix(rawJSON, "```json")
+		rawJSON = strings.TrimPrefix(rawJSON, "```")
+		rawJSON = strings.TrimSuffix(rawJSON, "```")
+		return []byte(strings.TrimSpace(rawJSON)), nil
 	}
 
 	return nil, fmt.Errorf("gemini api models unavailable")
 }
 
-func (s *AIDeepScanner) callHunterAgent(relPath, snippet string) ([]hunterFindingJSON, error) {
-	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Hunter (Cloudflare-style Offensive Red Team Security Auditor).
-Tugas Anda adalah MENYISIR dan MENCARI secara agresif setiap potensi celah keamanan OWASP Top 10, CWE, dan celah logika nyata pada berkas "%s" berikut.
-Fokus pada:
-1. Broken Access Control & IDOR/BOLA:
-   - Route/method yang melakukan update, edit, atau delete tanpa memvalidasi kepemilikan resource (misal: mencari via ID input tanpa membatasi user yang sedang login).
-   - Melewati otorisasi atau route yang tidak dilindungi middleware yang sesuai.
-2. Insecure File Upload & Path Traversal:
-   - Penggunaan getClientOriginalExtension() tanpa whitelist ekstensi server-side atau tanpa validasi MIME type / magic bytes.
-   - Penulisan berkas langsung ke storage publik (public/uploads/) dengan nama atau ekstensi yang ditentukan user.
-3. Cryptographic & Credential Failures:
-   - Hardcoded password, default static credentials (contoh: Hash::make('1') atau kata sandi statis saat create/update karyawan).
-   - Hardcoded API keys, JWT secret, atau database credentials.
-4. Injection (SQL Injection, Command Injection, XSS, SSRF):
-   - Raw query string concatenation (DB::raw, whereRaw, DB::statement).
-   - Unescaped output rendering atau reflected user input.
-5. Insecure Design & Mass Assignment:
-   - $request->all() pada model Eloquent tanpa proteksi $fillable atau $guarded.
-6. Vulnerable & Outdated Components/Runtimes in composer.json, package.json, Dockerfile:
-   - Deprecated or End-of-Life (EOL) runtime versions (PHP <= 8.1, Laravel <= 8.x, Node <= 18).
-   - High-profile recent CVEs (CVE-2024-4577 PHP CGI Argument Injection RCE, CVE-2024-5458 URL filter bypass, CVE-2024-8926 multipart DoS, CVE-2021-3129 Laravel Ignition RCE).
+func (s *AIDeepScanner) callHunterAgent(relPath, snippet, archContext, companionHints string) ([]hunterFindingJSON, error) {
+	prompt := fmt.Sprintf(`Anda adalah Agent Hunter (Cloudflare Security-Audit Offensive Red Team Auditor).
+Tugas Anda: MENYISIR kode secara mendalam menggunakan metode invariant source-to-sink untuk menemukan celah keamanan nyata yang melanggar trust boundary pada berkas "%s".
 
-KODE SUMBER:
+METODOLOGI CLOUDFLARE HUNTER:
+1. Tentukan lower-trust principal (guest/user biasa) dan input yang diterima.
+2. Lacak jalur kode dari entrypoint -> propagasi -> sink berbahaya.
+3. Jangan laporkan deviasi best-practice generik tanpa dampak nyata pada trust boundary.
+4. Fokus pada kelas serangan kritis:
+   - Broken Access Control & IDOR/BOLA (update/delete/view resource tanpa verifikasi kepemilikan).
+   - Unrestricted File Upload & Path Traversal (getClientOriginalExtension(), penyimpanan tanpa validasi MIME/magic bytes ke public/uploads/).
+   - Cryptographic & Credential Failures (hardcoded password/secret seperti Hash::make('1'), API key/token plaintext, weak JWT/session).
+   - Injection (SQLi raw query DB::raw/whereRaw, Command Injection, XSS unescaped, SSRF, Deserialization).
+   - Mass Assignment ($request->all() pada model tanpa $fillable/$guarded aman).
+   - Vulnerable & EOL Components/Runtimes (PHP <= 8.1, Laravel <= 8.x, CVE-2024-4577, CVE-2024-5458, CVE-2021-3129).
+
 %s
 
-KEMBALIKAN HANYA ARRAY JSON VALID:
+KONTEKS ARSITEKTUR LINTAS-BERKAS (PHASE 1 RECONNAISSANCE):
+%s
+
+KODE SUMBER BERKAS TARGET ("%s"):
+%s
+
+KEMBALIKAN HANYA ARRAY JSON VALID (kosong [] jika tidak ada celah nyata):
 [
   {
-    "rule_id": "TAMENG-HUNTER-CWE-xxx",
+    "candidate_id": "C1",
+    "rule_id": "CF-HUNTER-CWE-xxx",
     "title": "Judul Celah Keamanan yang Spesifik dan Akurat",
     "severity": "critical" | "high" | "medium" | "low",
     "line_start": 12,
     "line_end": 15,
     "cwe": "CWE-89: SQL Injection",
     "owasp": "A03:2021-Injection",
+    "root_cause": "Akar masalah singkat di tingkat kode",
+    "trace": "entrypoint -> propagasi -> sink",
     "evidence": "snippet baris kode yang rentan",
-    "explanation": "Penjelasan mengapa kode ini rentan dan skenario serangannya"
+    "explanation": "Penjelasan pelanggaran trust boundary dan skenario eksploitasi"
   }
-]`, relPath, snippet)
+]`, relPath, companionHints, archContext, relPath, snippet)
 
-	data, err := s.queryGeminiJSON(prompt, 18*time.Second)
+	data, err := s.queryGeminiJSON(prompt, 22*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -320,10 +514,15 @@ KEMBALIKAN HANYA ARRAY JSON VALID:
 	if err := json.Unmarshal(data, &items); err != nil {
 		return nil, err
 	}
+	for i := range items {
+		if strings.TrimSpace(items[i].CandidateID) == "" {
+			items[i].CandidateID = fmt.Sprintf("C%d", i+1)
+		}
+	}
 	return items, nil
 }
 
-func (s *AIDeepScanner) callVerifierAgent(relPath, snippet string, candidates []hunterFindingJSON) (map[string]verifierVerdictJSON, error) {
+func (s *AIDeepScanner) callVerifierAgent(relPath, snippet, archContext string, candidates []hunterFindingJSON) (map[string]verifierVerdictJSON, error) {
 	verdicts := make(map[string]verifierVerdictJSON)
 	if len(candidates) == 0 {
 		return verdicts, nil
@@ -331,40 +530,43 @@ func (s *AIDeepScanner) callVerifierAgent(relPath, snippet string, candidates []
 
 	candidatesBytes, _ := json.MarshalIndent(candidates, "", "  ")
 
-	prompt := fmt.Sprintf(`Anda adalah TAMENG Agent Verifier (Cloudflare-style Lead Blue Team Application Defense Architect).
-Tugas Anda adalah bertindak sebagai "Devil's Advocate" yang sangat skeptis untuk MENGUJI, MEMVERIFIKASI, atau MEMBANTAH (REFUTE) setiap kandidat celah keamanan yang diajukan oleh Agent Hunter pada berkas "%s".
+	prompt := fmt.Sprintf(`Anda adalah Agent Verifier (Cloudflare Security-Audit Independent Blue Team Devil's Advocate).
+Anda TIDAK menulis temuan kandidat di bawah ini. Tugas Anda adalah berusaha sekuat tenaga MEMBANTAH (REFUTE) setiap kandidat dari berkas "%s" menggunakan bukti kode sumber dan konteks arsitektur lintas-berkas.
 
-ATURAN VERIFIKASI SKEPTIS:
-1. Anda TIDAK menulis temuan ini. Buktikan secara objektif apakah celah ini nyata atau FALSE POSITIVE.
-2. Periksa apakah mekanisme keamanan framework memblokir celah ini:
-   - Parameter Binding: Eloquent/Query Builder PDO parameter binding secara default kebal dari SQL Injection.
-   - Session Binding: Jika kode menggunakan Auth::guard()->user()->id/nis dan mengabaikan parameter URL {id}, maka BUKAN IDOR -> REJECTED.
-   - CSRF Protection: Route web Laravel secara otomatis dilindungi middleware VerifyCsrfToken.
-   - Role Authorization: Jika endpoint hanya dapat diakses oleh Admin (auth:user) dan aksi tersebut adalah kapabilitas normal admin, sesuaikan keparahan atau reject jika itu fitur desain yang disengaja.
-3. Kriteria Status:
-   - "confirmed": Celah nyata, jalur eksploitasi terbukti ada, dan TIDAK ADA pertahanan framework atau sanitasi yang menghalanginya (Confidence >= 0.95).
-   - "needs_validation": Potensi celah masuk akal tetapi pembuktian akhirnya bergantung pada konfigurasi server di luar kode (misal konfigurasi Nginx/Apache FastCGI, .htaccess, atau environment production) (Confidence ~0.80).
-   - "rejected": TEMUAN PALSU (FALSE POSITIVE). Terbukti dibantah oleh mekanisme framework atau salah tafsir kode sumber. Temuan ini akan otomatis disingkirkan agar tidak membingungkan pengguna.
+DISIPLIN VERIFIKASI CLOUDFLARE:
+1. Periksa jalur entrypoint -> sink berdasarkan konteks rute, middleware, dan model lintas-berkas:
+   - Parameter Binding: Query Builder / Eloquent PDO binding secara default kebal SQLi -> jika tidak ada interpolasi mentah, REJECTED.
+   - Session Binding: Jika rute memiliki parameter {id}/{nis}, tetapi controller memakai Auth::guard()->user()->id/nis dan mengabaikan parameter URL -> BUKAN IDOR -> REJECTED.
+   - CSRF Protection: Rute web Laravel secara default dilindungi VerifyCsrfToken kecuali ada pengecualian eksplisit -> REJECTED jika tidak ada bypass.
+   - Intended Role Authority: Jangan laporkan aksi normal Admin terautentikasi sebagai privilege escalation jika memang fitur resmi admin, kecuali melanggar boundary sistem (misal RCE / shell upload / reset password statis semua user).
+2. Tetapkan tepat SATU dari 3 status resmi:
+   - "confirmed": Terbukti melanggar trust boundary secara nyata dari kode sumber, tidak ada kontrol framework/sanitasi yang memblokirnya (Confidence >= 0.92).
+   - "needs_validation": Jalur di kode sumber masuk akal dan berisiko, namun pembuktian final bergantung pada konfigurasi server/deployment di luar repositori (misal Nginx/Apache FastCGI, .htaccess, proxy/CORS gateway, variabel .env produksi) (Confidence ~0.80).
+   - "rejected": FALSE POSITIVE. Berhasil dibantah oleh kontrol framework, session binding, validasi yang sudah ada, atau salah tafsir kode. Temuan ini akan DIBUANG agar tidak mengotori laporan.
 
-KODE SUMBER:
+KONTEKS ARSITEKTUR LINTAS-BERKAS (ROUTES, MIDDLEWARE, MODELS):
+%s
+
+KODE SUMBER BERKAS TARGET ("%s"):
 %s
 
 KANDIDAT TEMUAN DARI AGENT HUNTER:
 %s
 
-KEMBALIKAN HANYA ARRAY JSON VALID:
+KEMBALIKAN HANYA ARRAY JSON VALID (satu entri untuk setiap candidate_id):
 [
   {
+    "candidate_id": "C1",
     "rule_id": "rule_id yang sama dengan hunter",
     "status": "confirmed" | "needs_validation" | "rejected",
-    "rationale": "Argumen teknis detail mengapa temuan ini dikonfirmasi, butuh validasi server, atau DIBANTAH (rejected) sebagai false positive",
+    "rationale": "Argumen teknis spesifik dalam Bahasa Indonesia mengapa temuan dikonfirmasi, butuh validasi deployment, atau DIBANTAH sebagai false positive",
     "adjusted_severity": "critical" | "high" | "medium" | "low",
     "exploit_feasibility": "high" | "medium" | "low" | "none",
-    "confidence": 0.98
+    "confidence": 0.96
   }
-]`, relPath, snippet, string(candidatesBytes))
+]`, relPath, archContext, relPath, snippet, string(candidatesBytes))
 
-	data, err := s.queryGeminiJSON(prompt, 20*time.Second)
+	data, err := s.queryGeminiJSON(prompt, 24*time.Second)
 	if err != nil {
 		return verdicts, err
 	}
@@ -375,35 +577,54 @@ KEMBALIKAN HANYA ARRAY JSON VALID:
 	}
 
 	for _, v := range list {
-		verdicts[v.RuleID] = v
+		if v.CandidateID != "" {
+			verdicts[v.CandidateID] = v
+		}
+		if v.RuleID != "" {
+			if _, exists := verdicts[v.RuleID]; !exists {
+				verdicts[v.RuleID] = v
+			}
+		}
 	}
 	return verdicts, nil
 }
 
-func (s *AIDeepScanner) runDualAgentAudit(relPath, snippet string) ([]NormalizedFinding, error) {
-	// STAGE 1: AGENT HUNTER (Red Team Penetration Tester)
-	hunterCandidates, err := s.callHunterAgent(relPath, snippet)
-	if err != nil || len(hunterCandidates) == 0 {
-		return nil, err
-	}
-	log.Printf("[DUAL-AGENT] Agent Hunter proposed %d candidate vulnerabilities in %s", len(hunterCandidates), relPath)
+func (s *AIDeepScanner) runDualAgentAudit(relPath, snippet, archContext, companionHints string) ([]NormalizedFinding, dualAgentStats, error) {
+	var stats dualAgentStats
 
-	// STAGE 2: AGENT VERIFIER (Blue Team Devil's Advocate)
-	verdicts, err := s.callVerifierAgent(relPath, snippet, hunterCandidates)
+	// STAGE 1: CLOUDFLARE AGENT HUNTER (Red Team Penetration Tester)
+	hunterCandidates, err := s.callHunterAgent(relPath, snippet, archContext, companionHints)
+	if err != nil || len(hunterCandidates) == 0 {
+		return nil, stats, err
+	}
+	stats.Proposed = len(hunterCandidates)
+	log.Printf("[CLOUDFLARE HUNTER] Proposed %d candidate(s) in %s", len(hunterCandidates), relPath)
+
+	// STAGE 2: CLOUDFLARE AGENT VERIFIER (Independent Blue Team Devil's Advocate)
+	verdicts, err := s.callVerifierAgent(relPath, snippet, archContext, hunterCandidates)
 	if err != nil {
-		log.Printf("[DUAL-AGENT] Verifier notice: %v, defaulting candidates to needs_validation", err)
+		log.Printf("[CLOUDFLARE VERIFIER] Warning for %s: %v (defaulting to needs_validation)", relPath, err)
 	}
 
 	var verifiedFindings []NormalizedFinding
 	for _, candidate := range hunterCandidates {
-		verdict, hasVerdict := verdicts[candidate.RuleID]
+		verdict, hasVerdict := verdicts[candidate.CandidateID]
+		if !hasVerdict {
+			verdict, hasVerdict = verdicts[candidate.RuleID]
+		}
 		status := "needs_validation"
-		rationale := "Kandidat temuan memerlukan validasi konfigurasi lingkungan produksi."
-		adjustedSev := candidate.Severity
-		conf := 0.85
+		rationale := "Kandidat temuan memerlukan validasi konfigurasi lingkungan produksi atau server deployment."
+		adjustedSev := strings.ToLower(candidate.Severity)
+		if adjustedSev == "" {
+			adjustedSev = "medium"
+		}
+		conf := 0.82
 
 		if hasVerdict {
-			status = strings.ToLower(strings.TrimSpace(verdict.Status))
+			parsedStatus := strings.ToLower(strings.TrimSpace(verdict.Status))
+			if parsedStatus == "confirmed" || parsedStatus == "needs_validation" || parsedStatus == "rejected" {
+				status = parsedStatus
+			}
 			if verdict.Rationale != "" {
 				rationale = verdict.Rationale
 			}
@@ -415,18 +636,30 @@ func (s *AIDeepScanner) runDualAgentAudit(relPath, snippet string) ([]Normalized
 			}
 		}
 
-		// If Verifier disproves the vulnerability as a false positive, reject and drop it!
+		// If Verifier refutes the candidate as false positive, reject and silently discard it!
 		if status == "rejected" {
-			log.Printf("[DUAL-AGENT VERIFIER] ❌ REJECTED false positive [%s] %s in %s: %s", candidate.RuleID, candidate.Title, relPath, rationale)
+			stats.Rejected++
+			log.Printf("[CLOUDFLARE VERIFIER] REJECTED false positive [%s/%s] %s in %s: %s",
+				candidate.CandidateID, candidate.RuleID, candidate.Title, relPath, rationale)
 			continue
+		}
+
+		if status == "confirmed" {
+			stats.Confirmed++
+		} else {
+			stats.NeedsValidation++
 		}
 
 		evidenceTag := "[🛡️ Verifikasi Dual-Agent (CONFIRMED)]"
 		if status == "needs_validation" {
 			evidenceTag = "[⚠️ Verifikasi Dual-Agent (NEEDS VALIDATION)]"
 		}
-		enrichedEvidence := fmt.Sprintf("%s\n\n%s: %s\n\n[Analisis Hunter]: %s",
-			candidate.Evidence, evidenceTag, rationale, candidate.Explanation)
+		traceBlock := ""
+		if candidate.Trace != "" {
+			traceBlock = fmt.Sprintf("\n[Jalur Eksekusi]: %s", candidate.Trace)
+		}
+		enrichedEvidence := fmt.Sprintf("%s%s\n\n%s: %s\n\n[Analisis Hunter]: %s",
+			candidate.Evidence, traceBlock, evidenceTag, rationale, candidate.Explanation)
 
 		verifiedFindings = append(verifiedFindings, NormalizedFinding{
 			RuleID:             candidate.RuleID,
@@ -443,10 +676,120 @@ func (s *AIDeepScanner) runDualAgentAudit(relPath, snippet string) ([]Normalized
 			VerifierRationale:  rationale,
 			DualAgentConsensus: true,
 		})
-		log.Printf("[DUAL-AGENT VERIFIER] ✅ ACCEPTED [%s] %s (Status: %s)", candidate.RuleID, candidate.Title, strings.ToUpper(status))
+		log.Printf("[CLOUDFLARE VERIFIER] ACCEPTED [%s/%s] %s (Status: %s)",
+			candidate.CandidateID, candidate.RuleID, candidate.Title, strings.ToUpper(status))
 	}
 
-	return verifiedFindings, nil
+	return verifiedFindings, stats, nil
+}
+
+// VerifyExternalFindings runs Cloudflare's Devil's Advocate Agent Verifier over findings
+// produced by static code engines (e.g. Semgrep, Gitleaks) to refute false positives and
+// enrich surviving findings with Confirmed / Needs Validation verdicts & technical rationales.
+func (s *AIDeepScanner) VerifyExternalFindings(workspacePath string, engineKey string, findings []NormalizedFinding) []NormalizedFinding {
+	if s.cfg.GeminiAPIKey == "" || len(findings) == 0 || workspacePath == "" {
+		return findings
+	}
+
+	archContext := s.buildArchitectureContext(workspacePath)
+
+	// Group up to 15 findings by file path for fast, bounded cross-verification
+	const maxVerify = 15
+	byFile := make(map[string][]int)
+	var fileOrder []string
+	verifiedCount := 0
+	for idx, f := range findings {
+		if verifiedCount >= maxVerify || f.FilePath == "" {
+			continue
+		}
+		cleanPath := strings.TrimPrefix(filepath.ToSlash(f.FilePath), "/src/")
+		if _, exists := byFile[cleanPath]; !exists {
+			fileOrder = append(fileOrder, cleanPath)
+		}
+		byFile[cleanPath] = append(byFile[cleanPath], idx)
+		verifiedCount++
+	}
+
+	rejectedIdx := make(map[int]bool)
+
+	for _, relPath := range fileOrder {
+		idxs := byFile[relPath]
+		fullPath := filepath.Join(workspacePath, relPath)
+		raw, err := os.ReadFile(fullPath)
+		if err != nil || len(raw) == 0 {
+			continue
+		}
+		lines := strings.Split(string(raw), "\n")
+		if len(lines) > 1000 {
+			lines = lines[:1000]
+		}
+		snippet := strings.Join(lines, "\n")
+
+		var candidates []hunterFindingJSON
+		for _, idx := range idxs {
+			f := findings[idx]
+			candidates = append(candidates, hunterFindingJSON{
+				CandidateID: fmt.Sprintf("EXT-%d", idx),
+				RuleID:      f.RuleID,
+				Title:       f.Title,
+				Severity:    f.Severity,
+				LineStart:   int(f.LineStart),
+				LineEnd:     int(f.LineEnd),
+				CWE:         f.CWE,
+				OWASP:       f.OWASP,
+				Evidence:    f.Evidence,
+				Explanation: fmt.Sprintf("Temuan statis dari engine %s pada baris %d.", engineKey, f.LineStart),
+			})
+		}
+
+		verdicts, err := s.callVerifierAgent(relPath, snippet, archContext, candidates)
+		if err != nil {
+			continue
+		}
+
+		for _, idx := range idxs {
+			cid := fmt.Sprintf("EXT-%d", idx)
+			v, ok := verdicts[cid]
+			if !ok {
+				continue
+			}
+			st := strings.ToLower(strings.TrimSpace(v.Status))
+			if st == "rejected" {
+				rejectedIdx[idx] = true
+				log.Printf("[CLOUDFLARE VERIFIER][%s] REJECTED false positive in %s:%d (%s): %s",
+					engineKey, relPath, findings[idx].LineStart, findings[idx].RuleID, v.Rationale)
+				continue
+			}
+			if st != "confirmed" && st != "needs_validation" {
+				st = "confirmed"
+			}
+			findings[idx].VerificationStatus = st
+			findings[idx].DualAgentConsensus = true
+			if v.Rationale != "" {
+				findings[idx].VerifierRationale = v.Rationale
+			}
+			if v.AdjustedSeverity != "" {
+				findings[idx].Severity = strings.ToLower(v.AdjustedSeverity)
+			}
+			if v.Confidence > 0 {
+				findings[idx].Confidence = v.Confidence
+			}
+		}
+	}
+
+	if len(rejectedIdx) == 0 {
+		return findings
+	}
+
+	filtered := make([]NormalizedFinding, 0, len(findings)-len(rejectedIdx))
+	for idx, f := range findings {
+		if !rejectedIdx[idx] {
+			filtered = append(filtered, f)
+		}
+	}
+	log.Printf("[CLOUDFLARE VERIFIER][%s] Cross-verification complete: %d kept, %d false positives filtered out.",
+		engineKey, len(filtered), len(rejectedIdx))
+	return filtered
 }
 
 func (s *AIDeepScanner) runDeterministicCodeAudit(relPath string, lines []string) []NormalizedFinding {

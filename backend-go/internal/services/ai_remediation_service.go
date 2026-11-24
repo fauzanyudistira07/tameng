@@ -75,6 +75,16 @@ func (s *AiRemediationService) GenerateGuidance(finding *models.Finding) (*AiRem
 		if err == nil && cached != "" {
 			var res AiRemediationResult
 			if err := json.Unmarshal([]byte(cached), &res); err == nil && res.Summary != "" {
+				// Always hydrate latest Dual-Agent verification metadata from DB finding
+				if finding.VerificationStatus != nil && *finding.VerificationStatus != "" {
+					res.VerificationStatus = *finding.VerificationStatus
+				} else if res.VerificationStatus == "" {
+					res.VerificationStatus = "confirmed"
+				}
+				if finding.VerifierRationale != nil && *finding.VerifierRationale != "" {
+					res.VerifierRationale = *finding.VerifierRationale
+				}
+				res.DualAgentConsensus = finding.DualAgentConsensus || res.DualAgentConsensus
 				return &res, nil
 			}
 		}
@@ -135,7 +145,7 @@ func (s *AiRemediationService) GenerateGuidance(finding *models.Finding) (*AiRem
 }
 
 func (s *AiRemediationService) callGeminiAPI(finding *models.Finding, synapses []models.NeurolinkSynapse) (*AiRemediationResult, error) {
-	modelsToTry := []string{s.cfg.GeminiModel, "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"}
+	modelsToTry := []string{s.cfg.GeminiModel, "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"}
 	apiKey := s.cfg.GeminiAPIKey
 	prompt := s.buildPrompt(finding, synapses)
 

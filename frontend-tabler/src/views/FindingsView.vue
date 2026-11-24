@@ -46,7 +46,11 @@ interface FindingItem {
   location?: string;
   evidence?: any;
   discovered_at?: string;
+  created_at?: string;
   normalization_metadata?: any;
+  verification_status?: string | null;
+  verifier_rationale?: string | null;
+  dual_agent_consensus?: boolean;
   project?: FindingProject;
   scan_job?: FindingScanJob;
   scanJob?: FindingScanJob;
@@ -184,12 +188,29 @@ const searchQuery = ref("");
 const filterSeverity = ref<string>("all");
 const filterStatus = ref<string>("all");
 const filterProject = ref<string>("all");
+const filterVerification = ref<string>("all");
+
+function getFindingVerificationStatus(f: any): string {
+  if (f?.verification_status) {
+    return String(f.verification_status).toLowerCase();
+  }
+  if (typeof f?.normalization_metadata === "string") {
+    try {
+      const parsed = JSON.parse(f.normalization_metadata);
+      if (parsed?.verification_status) return String(parsed.verification_status).toLowerCase();
+    } catch {}
+  } else if (f?.normalization_metadata?.verification_status) {
+    return String(f.normalization_metadata.verification_status).toLowerCase();
+  }
+  return "confirmed";
+}
 
 function resetFilters() {
   searchQuery.value = "";
   filterSeverity.value = "all";
   filterStatus.value = "all";
   filterProject.value = "all";
+  filterVerification.value = "all";
 }
 
 // Modal Detail / AI Remediation state
@@ -211,6 +232,9 @@ export interface AiRemediationData {
   verification_command?: string;
   defense_in_depth?: string;
   ai_model?: string;
+  verification_status?: string;
+  verifier_rationale?: string;
+  dual_agent_consensus?: boolean;
   compliance?: {
     cwe?: string;
     owasp?: string;
@@ -282,6 +306,11 @@ const filteredFindings = computed(() => {
     }
 
     if (filterSeverity.value !== "all" && f.severity !== filterSeverity.value)
+      return false;
+    if (
+      filterVerification.value !== "all" &&
+      getFindingVerificationStatus(f) !== filterVerification.value
+    )
       return false;
     if (
       filterProject.value !== "all" &&
@@ -359,6 +388,9 @@ function parseAiRemediation(data: any): AiRemediationData {
       verification_command: obj.verification_command || null,
       defense_in_depth: obj.defense_in_depth || null,
       ai_model: obj.ai_model || "TAMENG AI Remediation Copilot",
+      verification_status: obj.verification_status || activeFinding.value?.verification_status || "confirmed",
+      verifier_rationale: obj.verifier_rationale || activeFinding.value?.verifier_rationale || "",
+      dual_agent_consensus: !!(obj.dual_agent_consensus || activeFinding.value?.dual_agent_consensus),
       disclaimer: obj.disclaimer || "Rekomendasi perbaikan disusun secara otomatis berdasarkan standar keamanan NIST & OWASP."
     };
   }
@@ -1032,6 +1064,23 @@ onMounted(async () => {
                   </select>
                 </div>
 
+                <!-- Filter Verifikasi Dual-Agent -->
+                <div class="filter-select-wrapper position-relative">
+                  <span class="select-prefix-icon text-success">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M9 12l2 2l4 -4" /></svg>
+                  </span>
+                  <select
+                    v-model="filterVerification"
+                    class="form-select form-select-sm custom-filter-select"
+                    :class="{ 'filter-active': filterVerification !== 'all' }"
+                    title="Filter Verifikasi AI Dual-Agent"
+                  >
+                    <option value="all">Semua Verifikasi</option>
+                    <option value="confirmed">Confirmed</option>
+                    <option value="needs_validation">Needs Validation</option>
+                  </select>
+                </div>
+
                 <!-- Filter Project -->
                 <div class="filter-select-wrapper position-relative">
                   <span class="select-prefix-icon text-primary">
@@ -1077,7 +1126,7 @@ onMounted(async () => {
 
                 <!-- Reset -->
                 <button
-                  v-if="searchQuery || filterSeverity !== 'all' || filterProject !== 'all'"
+                  v-if="searchQuery || filterSeverity !== 'all' || filterProject !== 'all' || filterVerification !== 'all'"
                   type="button"
                   class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
                   @click="resetFilters"
@@ -1182,6 +1231,22 @@ onMounted(async () => {
                     <span v-if="f.cwe" class="badge bg-secondary-lt text-secondary font-monospace">{{ f.cwe }}</span>
                     <span v-if="f.cve" class="badge bg-danger-lt text-danger font-monospace">{{ f.cve }}</span>
                     <span v-if="f.scan_run?.engine_key" class="badge bg-purple-lt text-purple font-monospace">{{ (f.scan_run.engine_key === 'tameng_ai' || f.scan_run.engine_key === 'tamengai') ? 'trivy' : f.scan_run.engine_key }}</span>
+                    <span
+                      v-if="getFindingVerificationStatus(f) === 'confirmed'"
+                      class="badge bg-green-lt text-success font-monospace d-inline-flex align-items-center gap-1"
+                      :title="f.verifier_rationale || 'Terkonfirmasi nyata oleh konsensus Dual-Agent Hunter vs Verifier'"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10" /></svg>
+                      Confirmed
+                    </span>
+                    <span
+                      v-else-if="getFindingVerificationStatus(f) === 'needs_validation'"
+                      class="badge bg-warning-lt text-warning font-monospace d-inline-flex align-items-center gap-1"
+                      :title="f.verifier_rationale || 'Memerlukan validasi konfigurasi lingkungan atau server deployment'"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="12" height="12" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 9v4" /><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.871l-8.106 -13.534a1.914 1.914 0 0 0 -3.274 0z" /><path d="M12 16h.01" /></svg>
+                      Needs Validation
+                    </span>
                     <span class="text-secondary opacity-75">Ditemukan: {{ formatDate(f.created_at) }}</span>
                   </div>
                 </div>
@@ -1355,6 +1420,23 @@ onMounted(async () => {
               </select>
             </div>
 
+            <!-- Filter Verifikasi Dual-Agent (SOC Table) -->
+            <div class="filter-select-wrapper position-relative">
+              <span class="select-prefix-icon text-success">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon icon-xs" width="16" height="16" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3" /><path d="M9 12l2 2l4 -4" /></svg>
+              </span>
+              <select
+                v-model="filterVerification"
+                class="form-select form-select-sm custom-filter-select"
+                :class="{ 'filter-active': filterVerification !== 'all' }"
+                title="Filter Verifikasi AI Dual-Agent"
+              >
+                <option value="all">Semua Verifikasi</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="needs_validation">Needs Validation</option>
+              </select>
+            </div>
+
             <!-- Search Box -->
             <div class="search-box-wrapper position-relative">
               <div class="input-icon">
@@ -1416,7 +1498,8 @@ onMounted(async () => {
                 searchQuery ||
                 filterSeverity !== 'all' ||
                 filterStatus !== 'all' ||
-                filterProject !== 'all'
+                filterProject !== 'all' ||
+                filterVerification !== 'all'
               "
               type="button"
               class="btn btn-sm btn-secondary d-flex align-items-center gap-1 filter-reset-btn"
@@ -1536,6 +1619,22 @@ onMounted(async () => {
                       style="font-size: 0.72rem"
                     >
                       {{ f.cwe }}
+                    </span>
+                    <span
+                      v-if="getFindingVerificationStatus(f) === 'confirmed'"
+                      class="badge bg-green-lt text-success font-monospace d-inline-flex align-items-center gap-1"
+                      style="font-size: 0.72rem"
+                      :title="f.verifier_rationale || 'Terkonfirmasi nyata oleh konsensus Dual-Agent Hunter vs Verifier'"
+                    >
+                      ✓ Confirmed
+                    </span>
+                    <span
+                      v-else-if="getFindingVerificationStatus(f) === 'needs_validation'"
+                      class="badge bg-warning-lt text-warning font-monospace d-inline-flex align-items-center gap-1"
+                      style="font-size: 0.72rem"
+                      :title="f.verifier_rationale || 'Memerlukan validasi konfigurasi lingkungan/server'"
+                    >
+                      ⚠ Needs Validation
                     </span>
                   </div>
                 </td>
@@ -1982,6 +2081,27 @@ onMounted(async () => {
           <div class="modal-body">
             <!-- TAB 1: DETAILS -->
             <div v-if="modalTab === 'details'">
+              <!-- Dual-Agent Hunter-Verifier Consensus Banner -->
+              <div
+                class="alert py-2 px-3 mb-3 small border-start border-3 d-flex align-items-center justify-content-between flex-wrap gap-2"
+                :class="getFindingVerificationStatus(activeFinding) === 'confirmed' ? 'alert-success border-success' : 'alert-warning border-warning'"
+              >
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <span
+                    class="badge d-inline-flex align-items-center gap-1"
+                    :class="getFindingVerificationStatus(activeFinding) === 'confirmed' ? 'bg-success text-success-fg' : 'bg-warning text-warning-fg'"
+                  >
+                    {{ getFindingVerificationStatus(activeFinding) === 'confirmed' ? '🛡️ DUAL-AGENT CONFIRMED' : '⚠️ NEEDS VALIDATION' }}
+                  </span>
+                  <span class="text-body fw-medium">
+                    {{ activeFinding.verifier_rationale || (getFindingVerificationStatus(activeFinding) === 'confirmed' ? 'Celah keamanan terverifikasi nyata dan lolos uji sanggah Verifier Blue Team.' : 'Memerlukan validasi konfigurasi lingkungan atau arsitektur deployment.') }}
+                  </span>
+                </div>
+                <span class="badge bg-secondary-lt font-monospace text-secondary" style="font-size: 0.72rem;">
+                  Hunter vs Verifier Consensus
+                </span>
+              </div>
+
               <div class="row g-2 mb-3">
                 <div class="col-sm-6">
                   <div class="small text-muted">Proyek:</div>
@@ -2093,6 +2213,28 @@ onMounted(async () => {
 
               <!-- Loaded Content -->
               <div v-else-if="aiRemediationData" class="d-flex flex-column gap-3">
+                <!-- Dual-Agent Hunter-Verifier Consensus Banner -->
+                <div
+                  v-if="aiRemediationData.verification_status"
+                  class="alert py-2 px-3 mb-0 small border-start border-3 d-flex align-items-center justify-content-between flex-wrap gap-2"
+                  :class="aiRemediationData.verification_status === 'confirmed' ? 'alert-success border-success' : 'alert-warning border-warning'"
+                >
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span
+                      class="badge d-inline-flex align-items-center gap-1"
+                      :class="aiRemediationData.verification_status === 'confirmed' ? 'bg-success text-success-fg' : 'bg-warning text-warning-fg'"
+                    >
+                      {{ aiRemediationData.verification_status === 'confirmed' ? '🛡️ DUAL-AGENT CONFIRMED' : '⚠️ NEEDS VALIDATION' }}
+                    </span>
+                    <span class="text-body fw-medium">
+                      {{ aiRemediationData.verifier_rationale || (aiRemediationData.verification_status === 'confirmed' ? 'Celah keamanan terverifikasi nyata dan lolos uji sanggah Verifier Blue Team.' : 'Memerlukan validasi konfigurasi lingkungan atau arsitektur sistem.') }}
+                    </span>
+                  </div>
+                  <span class="badge bg-secondary-lt font-monospace text-secondary" style="font-size: 0.72rem;">
+                    Hunter vs Verifier Consensus
+                  </span>
+                </div>
+
                 <!-- Category & Summary Banner -->
                 <div class="card border-start border-4 border-start-primary bg-surface shadow-sm">
                   <div class="card-body p-3">

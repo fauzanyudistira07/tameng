@@ -303,6 +303,13 @@ func (r *Runner) processJob(jobID uint64) {
 
 			// Ingest Findings
 			findings := r.parseFindings(engineKey, outputData)
+
+			// Cloudflare Dual-Agent Cross-Verification for SAST/Secret code engines
+			// Refutes static-scanner false positives and annotates Confirmed vs Needs Validation
+			if r.aiScanner != nil && workspacePath != "" && (engineKey == "semgrep" || engineKey == "gitleaks") && len(findings) > 0 {
+				findings = r.aiScanner.VerifyExternalFindings(workspacePath, engineKey, findings)
+			}
+
 			findingCount = len(findings)
 			for _, f := range findings {
 				_ = IngestFinding(r.db, &job, &scanRun, engineKey, f)
