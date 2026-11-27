@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useTheme } from './composables/useTheme'
+import { useAuth } from './composables/useAuth'
+import { checkAuth } from './services/api'
 import AppSidebar from './components/layout/AppSidebar.vue'
 import AppHeader from './components/layout/AppHeader.vue'
 import AppFooter from './components/layout/AppFooter.vue'
@@ -11,9 +13,42 @@ import ModalProfile from './components/modals/ModalProfile.vue'
 
 const route = useRoute()
 const { initTheme } = useTheme()
+const { currentUser } = useAuth()
+
+async function enforcePostLogoutSessionGuard(event?: PageTransitionEvent) {
+  if (typeof window === 'undefined') return
+  const isBlankRoute = route.meta.layout === 'blank' || window.location.pathname === '/login'
+  if (isBlankRoute) return
+
+  const restoredFromBFCache = !!(event && event.persisted)
+  const loggedOutFlag = sessionStorage.getItem('tameng_logged_out') === '1'
+
+  if (restoredFromBFCache || loggedOutFlag || !currentUser.value) {
+    currentUser.value = null
+    const stillAuthed = await checkAuth()
+    if (!stillAuthed) {
+      window.location.replace('/login')
+    }
+  }
+}
+
+function handlePageShow(event: PageTransitionEvent) {
+  enforcePostLogoutSessionGuard(event)
+}
+
+function handlePopState() {
+  enforcePostLogoutSessionGuard()
+}
 
 onMounted(() => {
   initTheme()
+  window.addEventListener('pageshow', handlePageShow)
+  window.addEventListener('popstate', handlePopState)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pageshow', handlePageShow)
+  window.removeEventListener('popstate', handlePopState)
 })
 </script>
 
@@ -21,6 +56,13 @@ onMounted(() => {
   <!-- Full-page / Blank Layout (e.g. Login page) -->
   <template v-if="route.meta.layout === 'blank'">
     <router-view />
+  </template>
+
+  <!-- Gate authenticated layouts strictly on verified currentUser so Back button NEVER renders stale dashboard or fallback profile (BUG-002 / SEC-002) -->
+  <template v-else-if="!currentUser">
+    <div class="d-flex align-items-center justify-content-center min-vh-100">
+      <div class="spinner-border text-primary" role="status" aria-label="Memverifikasi sesi..."></div>
+    </div>
   </template>
 
   <!-- Dedicated User Portal Workspace Layout (Personal Workspace) -->
@@ -196,6 +238,35 @@ td.col-index,
     margin: 0.5rem auto !important;
     max-width: calc(100vw - 1rem) !important;
   }
+}
+
+/* BUG-003: Tingkatkan kontras WCAG AA (>= 4.5:1) untuk banner alert di Dark Mode */
+[data-bs-theme="dark"] .alert-danger {
+  background-color: rgba(214, 57, 57, 0.2) !important;
+  border-color: rgba(255, 107, 107, 0.55) !important;
+  color: #ffc9c9 !important;
+}
+[data-bs-theme="dark"] .alert-danger .alert-icon,
+[data-bs-theme="dark"] .alert-danger svg,
+[data-bs-theme="dark"] .alert-danger strong,
+[data-bs-theme="dark"] .alert-danger .fw-bold {
+  color: #ff8787 !important;
+  stroke: #ff8787 !important;
+}
+[data-bs-theme="dark"] .alert-success {
+  background-color: rgba(47, 179, 68, 0.18) !important;
+  border-color: rgba(81, 207, 102, 0.5) !important;
+  color: #d3f9d8 !important;
+}
+[data-bs-theme="dark"] .alert-success .alert-icon,
+[data-bs-theme="dark"] .alert-success svg {
+  color: #69db7c !important;
+  stroke: #69db7c !important;
+}
+[data-bs-theme="dark"] .alert-warning {
+  background-color: rgba(245, 159, 0, 0.18) !important;
+  border-color: rgba(255, 212, 59, 0.5) !important;
+  color: #fff3bf !important;
 }
 
 .table-responsive {

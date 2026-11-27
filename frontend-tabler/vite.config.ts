@@ -8,6 +8,11 @@ export default defineConfig({
     port: 5174,
     host: '0.0.0.0',
     strictPort: true,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    },
     watch: {
       usePolling: true,
       interval: 100

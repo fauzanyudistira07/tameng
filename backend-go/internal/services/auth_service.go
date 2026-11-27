@@ -166,17 +166,27 @@ func (s *AuthService) Logout(ctx context.Context, sessionToken string, user *mod
 }
 
 // ForgotPassword generates a 6-digit verification code, saves it, and emails the user.
+// Implements SEC-001 (anti-enumeration) and BUG-001 (never swallow SMTP failures).
 func (s *AuthService) ForgotPassword(ctx context.Context, email, ip, userAgent string) error {
+	startedAt := time.Now()
 	var user models.User
 	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrUserNotFound
+			// SEC-001: Do not reveal whether the email exists; add small constant-time floor
+			if elapsed := time.Since(startedAt); elapsed < 350*time.Millisecond {
+				time.Sleep(350*time.Millisecond - elapsed)
+			}
+			return nil
 		}
 		return err
 	}
 
 	if user.Status != "active" {
-		return ErrAccountInactive
+		// SEC-001: Do not reveal inactive account status to unauthenticated callers
+		if elapsed := time.Since(startedAt); elapsed < 350*time.Millisecond {
+			time.Sleep(350*time.Millisecond - elapsed)
+		}
+		return nil
 	}
 
 	// Generate 6-digit verification code (100000 - 999999)
@@ -203,13 +213,12 @@ func (s *AuthService) ForgotPassword(ctx context.Context, email, ip, userAgent s
 		return fmt.Errorf("failed to save reset token: %w", err)
 	}
 
-	// Send email
+	// BUG-001: Never swallow SMTP delivery failures (even in debug mode) and never log plaintext OTP
 	if err := s.mail.SendPasswordResetCode(&user, code); err != nil {
-		if s.cfg.AppDebug {
-			log.Printf("[MAIL-DEBUG] Mail delivery failed (%v), but in debug mode code is: %s", err, code)
-		} else {
-			return fmt.Errorf("Gagal mengirim email verifikasi (%v). Pastikan konfigurasi SMTP sistem sudah valid.", err)
-		}
+		log.Printf("[MAIL] Password reset email delivery failed for %s: %v", user.Email, err)
+		// Clean up undelivered token so stale token is not left behind
+		s.db.WithContext(ctx).Where("email = ?", user.Email).Delete(&models.PasswordResetToken{})
+		return errors.New("Gagal mengirim email kode verifikasi karena kendala layanan SMTP server. Silakan hubungi Administrator SOC.")
 	}
 
 	targetType := "user"

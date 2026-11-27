@@ -18,7 +18,11 @@ export async function checkAuth(): Promise<boolean> {
   authPromise = (async () => {
     try {
       const res = await fetch('/api/user', {
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-store'
+        },
+        cache: 'no-store',
         credentials: 'include'
       })
       isAuthenticated = res.ok
@@ -60,6 +64,9 @@ export async function loginUser(email: string, password: string, remember: boole
   }
 
   isAuthenticated = true
+  try {
+    sessionStorage.removeItem('tameng_logged_out')
+  } catch {}
   if (remember) {
     localStorage.setItem('tameng_remember_email', email)
     localStorage.setItem('tameng_remember_me', 'true')
@@ -131,6 +138,11 @@ export async function logoutUser(): Promise<void> {
   } finally {
     isAuthenticated = false
     authPromise = null
+    try {
+      localStorage.removeItem('tameng_soc_dashboard_cache_v3')
+      localStorage.removeItem('tameng_soc_dashboard_cache_v2')
+      sessionStorage.setItem('tameng_logged_out', '1')
+    } catch {}
   }
 }
 
@@ -170,7 +182,7 @@ export async function apiFetch<T = any>(endpoint: string, options: TamengRequest
   if (res.status === 401) {
     isAuthenticated = false
     if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-      window.location.href = '/login'
+      window.location.replace('/login')
     }
   }
 

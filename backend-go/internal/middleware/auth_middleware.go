@@ -12,6 +12,11 @@ import (
 
 func AuthRequired(authService *services.AuthService, cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Prevent browser / proxy caching of authenticated responses (fixes BUG-002 / SEC-002)
+		c.Header("Cache-Control", "no-store, no-cache, must-revalidate, private, max-age=0")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
+
 		var sessionToken string
 
 		// 1. Check session cookie

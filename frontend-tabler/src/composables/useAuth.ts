@@ -239,7 +239,13 @@ export function useAuth() {
       // ignore
     }
     currentUser.value = null
-    window.location.href = '/login'
+    try {
+      localStorage.removeItem('tameng_soc_dashboard_cache_v3')
+      localStorage.removeItem('tameng_soc_dashboard_cache_v2')
+      sessionStorage.setItem('tameng_logged_out', '1')
+    } catch {}
+    // Use replace() instead of href assignment so Back button cannot return to cached dashboard (BUG-002 / SEC-002)
+    window.location.replace('/login')
   }
 
   return {

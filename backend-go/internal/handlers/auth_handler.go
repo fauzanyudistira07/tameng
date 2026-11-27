@@ -176,17 +176,21 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	h.authService.Logout(c.Request.Context(), tokenStr, user, c.ClientIP(), c.Request.UserAgent())
 
-	// Clear session cookie
+	// Clear session cookie and prevent caching
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate, private, max-age=0")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
 	c.SetCookie(h.cfg.SessionCookieName, "", -1, "/", "", false, true)
 	c.SetCookie("XSRF-TOKEN", "", -1, "/", "", false, false)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Logged out.",
+		"message": "Berhasil keluar dari sesi.",
 	})
 }
 
 // ForgotPassword handles POST /api/forgot-password
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate, private, max-age=0")
 	var req ForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -199,7 +203,8 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	}
 
 	if err := h.authService.ForgotPassword(c.Request.Context(), req.Email, c.ClientIP(), c.Request.UserAgent()); err != nil {
-		c.JSON(http.StatusUnprocessableEntity, gin.H{
+		// Return explicit 503 if SMTP server failed so UI never falsely claims email was sent (BUG-001)
+		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"message": err.Error(),
 			"errors": gin.H{
 				"email": []string{err.Error()},
@@ -208,8 +213,9 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
+	// Generic anti-enumeration response for both existing and non-existing accounts (SEC-001 & UIX-003)
 	c.JSON(http.StatusOK, gin.H{
-		"message": "Kode verifikasi telah dikirim ke email " + req.Email + ". Silakan buka kotak masuk atau folder spam email Anda.",
+		"message": "Jika alamat email tersebut terdaftar dan aktif, kode verifikasi 6-digit telah dikirim. Silakan periksa kotak masuk (Inbox) atau folder Spam Anda.",
 		"email":   req.Email,
 	})
 }

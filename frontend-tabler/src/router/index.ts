@@ -166,26 +166,32 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-  const isAuthed = getIsAuthenticated() ? true : await checkAuth()
+  const loggedOutFlag = typeof window !== 'undefined' && sessionStorage.getItem('tameng_logged_out') === '1'
+  const isAuthed = (!loggedOutFlag && getIsAuthenticated()) ? true : await checkAuth()
 
   if (to.name === 'login') {
     if (isAuthed) {
       const { loadUser } = useAuth()
       const user = await loadUser()
       const role = user?.role?.name || ''
-      if (role === 'developer' || role === 'viewer') return next({ name: 'workspace' })
-      return next({ name: 'dashboard' })
+      if (role === 'developer' || role === 'viewer') return next({ name: 'workspace', replace: true })
+      return next({ name: 'dashboard', replace: true })
     }
     return next()
   }
 
   if (!isAuthed) {
-    return next({ name: 'login' })
+    const { currentUser } = useAuth()
+    currentUser.value = null
+    return next({ name: 'login', replace: true })
   }
 
   // Load user data untuk verifikasi wewenang role
   const { loadUser } = useAuth()
   const user = await loadUser()
+  if (!user) {
+    return next({ name: 'login', replace: true })
+  }
   const userRole = user?.role?.name || ''
 
   // Jika developer atau viewer mengakses root '/', alihkan langsung ke ruang kerja personal

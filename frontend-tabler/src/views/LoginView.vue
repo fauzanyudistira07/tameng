@@ -60,8 +60,8 @@ onMounted(() => {
 async function handleSubmit() {
   errorMessage.value = ''
   successMessage.value = ''
-  if (!email.value || !password.value) {
-    errorMessage.value = 'Email address and password are required.'
+  if (!email.value.trim() || !password.value) {
+    errorMessage.value = 'Alamat email dan kata sandi wajib diisi.'
     return
   }
 
@@ -71,12 +71,12 @@ async function handleSubmit() {
     const user = await loadUser(true)
     const role = user?.role?.name || ''
     if (role === 'developer' || role === 'viewer') {
-      router.push({ name: 'workspace' })
+      router.replace({ name: 'workspace' })
     } else {
-      router.push({ name: 'dashboard' })
+      router.replace({ name: 'dashboard' })
     }
   } catch (err: any) {
-    errorMessage.value = err?.message || 'Invalid email address or password. Please try again.'
+    errorMessage.value = err?.message || 'Email atau kata sandi tidak valid. Silakan coba lagi.'
   } finally {
     isLoading.value = false
   }
@@ -104,7 +104,7 @@ async function handleSendResetCode() {
   forgotError.value = ''
   forgotSuccess.value = ''
 
-  if (!forgotEmail.value) {
+  if (!forgotEmail.value.trim()) {
     forgotError.value = 'Silakan masukkan alamat email Anda.'
     return
   }
@@ -112,11 +112,11 @@ async function handleSendResetCode() {
   isForgotLoading.value = true
   try {
     const res = await requestPasswordReset(forgotEmail.value.trim())
-    forgotSuccess.value = res.message || 'Kode verifikasi telah dikirim ke alamat email Anda.'
+    forgotSuccess.value = res.message || 'Jika alamat email tersebut terdaftar dan aktif, kode verifikasi 6-digit telah dikirim. Silakan periksa kotak masuk (Inbox) atau folder Spam Anda.'
     resetToken.value = ''
     forgotStep.value = 'reset'
   } catch (err: any) {
-    forgotError.value = err?.message || 'Gagal membuat permintaan reset password.'
+    forgotError.value = err?.message || 'Gagal membuat permintaan reset kata sandi.'
   } finally {
     isForgotLoading.value = false
   }
@@ -125,15 +125,15 @@ async function handleSendResetCode() {
 async function handleResetPassword() {
   forgotError.value = ''
   if (!resetToken.value.trim()) {
-    forgotError.value = 'Silakan masukkan kode verifikasi.'
+    forgotError.value = 'Silakan masukkan kode verifikasi 6-digit.'
     return
   }
   if (!newPassword.value || newPassword.value.length < 8) {
-    forgotError.value = 'Password baru minimal harus 8 karakter.'
+    forgotError.value = 'Kata sandi baru minimal harus 8 karakter.'
     return
   }
   if (newPassword.value !== newPasswordConfirm.value) {
-    forgotError.value = 'Konfirmasi password tidak cocok.'
+    forgotError.value = 'Konfirmasi kata sandi tidak cocok.'
     return
   }
 
@@ -149,10 +149,10 @@ async function handleResetPassword() {
     isForgotMode.value = false
     email.value = forgotEmail.value.trim()
     password.value = ''
-    successMessage.value = res.message || 'Password berhasil direset! Silakan login dengan password baru Anda.'
+    successMessage.value = res.message || 'Kata sandi berhasil diperbarui! Silakan masuk dengan kata sandi baru Anda.'
     errorMessage.value = ''
   } catch (err: any) {
-    forgotError.value = err?.message || 'Gagal mereset password.'
+    forgotError.value = err?.message || 'Gagal memperbarui kata sandi.'
   } finally {
     isForgotLoading.value = false
   }
@@ -180,7 +180,7 @@ async function handleResetPassword() {
           <!-- ================= VIEW 1: SIGN IN ================= -->
           <template v-if="!isForgotMode">
             <h2 class="h3 text-center mb-3">
-              Login to your account
+              Masuk ke Akun Anda
             </h2>
 
             <!-- Success Alert -->
@@ -197,33 +197,33 @@ async function handleResetPassword() {
             <!-- Error Alert -->
             <div v-if="errorMessage" class="alert alert-danger alert-dismissible mb-3" role="alert">
               <div class="d-flex align-items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon flex-shrink-0" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                   <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                   <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
                   <path d="M12 8l0 4" />
                   <path d="M12 16l.01 0" />
                 </svg>
-                <span>{{ errorMessage }}</span>
+                <span class="fw-medium">{{ errorMessage }}</span>
               </div>
             </div>
 
             <form @submit.prevent="handleSubmit" autocomplete="off" novalidate>
               <div class="mb-3">
-                <label class="form-label">Email address</label>
+                <label class="form-label">Alamat Email</label>
                 <input
                   v-model="email"
                   type="email"
                   class="form-control"
-                  placeholder="your@email.com"
+                  placeholder="nama@instansi.go.id"
                   autocomplete="email"
                   required
                 />
               </div>
               <div class="mb-2">
                 <label class="form-label">
-                  Password
+                  Kata Sandi
                   <span class="form-label-description">
-                    <a href="./forgot-password.html" @click.prevent="openForgot">I forgot password</a>
+                    <a href="./forgot-password.html" @click.prevent="openForgot">Lupa kata sandi?</a>
                   </span>
                 </label>
                 <div class="input-group input-group-flat">
@@ -231,7 +231,7 @@ async function handleResetPassword() {
                     :type="showPassword ? 'text' : 'password'"
                     v-model="password"
                     class="form-control"
-                    placeholder="Your password"
+                    placeholder="Masukkan kata sandi Anda"
                     autocomplete="current-password"
                     required
                   />
@@ -239,7 +239,7 @@ async function handleResetPassword() {
                     <a
                       href="#"
                       class="link-secondary"
-                      :title="showPassword ? 'Hide password' : 'Show password'"
+                      :title="showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'"
                       data-bs-toggle="tooltip"
                       @click.prevent="showPassword = !showPassword"
                     >
@@ -261,13 +261,13 @@ async function handleResetPassword() {
               <div class="mb-2">
                 <label class="form-check">
                   <input v-model="rememberMe" type="checkbox" class="form-check-input" />
-                  <span class="form-check-label">Remember me on this device</span>
+                  <span class="form-check-label">Ingat saya di perangkat ini</span>
                 </label>
               </div>
               <div class="form-footer">
                 <button type="submit" class="btn btn-primary w-100" :disabled="isLoading">
                   <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                  Sign in
+                  Masuk
                 </button>
               </div>
             </form>
@@ -275,52 +275,47 @@ async function handleResetPassword() {
 
           <!-- ================= VIEW 2: FORGOT PASSWORD ================= -->
           <template v-else>
-            <h2 class="h3 text-center mb-3">Forgot password</h2>
+            <h2 class="h3 text-center mb-3">Lupa Kata Sandi</h2>
             <p class="text-secondary mb-4 text-center">
               {{ forgotStep === 'request'
-                ? 'Masukkan alamat email akun Anda untuk mendapatkan kode verifikasi reset password.'
-                : 'Masukkan kode verifikasi dan tentukan password baru akun Anda.'
+                ? 'Masukkan alamat email akun Anda untuk menerima kode verifikasi reset kata sandi.'
+                : 'Masukkan kode verifikasi 6-digit dan tentukan kata sandi baru akun Anda.'
               }}
             </p>
 
             <!-- Forgot Error Alert -->
             <div v-if="forgotError" class="alert alert-danger alert-dismissible mb-3" role="alert">
               <div class="d-flex align-items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon flex-shrink-0" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                   <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                   <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0" />
                   <path d="M12 8l0 4" />
                   <path d="M12 16l.01 0" />
                 </svg>
-                <span>{{ forgotError }}</span>
+                <span class="fw-medium">{{ forgotError }}</span>
               </div>
             </div>
 
-            <!-- Forgot Success / Verification Code Notice -->
+            <!-- Forgot Success / Verification Code Notice (UIX-003: single clean message, no duplicate instruction) -->
             <div v-if="forgotSuccess" class="alert alert-success mb-3" role="alert">
               <div class="d-flex align-items-start gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon text-success mt-1" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon alert-icon text-success flex-shrink-0 mt-1" width="20" height="20" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                   <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
                   <path d="M5 12l5 5l10 -10" />
                 </svg>
-                <div>
-                  <div class="fw-bold">{{ forgotSuccess }}</div>
-                  <div class="text-secondary small mt-1">
-                    Silakan periksa kotak masuk (Inbox) atau folder Spam pada email Anda untuk melihat kode 6-digit.
-                  </div>
-                </div>
+                <div class="fw-medium">{{ forgotSuccess }}</div>
               </div>
             </div>
 
             <!-- Step 1: Request Code Form -->
             <form v-if="forgotStep === 'request'" @submit.prevent="handleSendResetCode" autocomplete="off" novalidate>
               <div class="mb-3">
-                <label class="form-label">Email address</label>
+                <label class="form-label">Alamat Email</label>
                 <input
                   v-model="forgotEmail"
                   type="email"
                   class="form-control"
-                  placeholder="your@email.com"
+                  placeholder="nama@instansi.go.id"
                   autocomplete="email"
                   required
                 />
@@ -328,7 +323,7 @@ async function handleResetPassword() {
               <div class="form-footer">
                 <button type="submit" class="btn btn-primary w-100" :disabled="isForgotLoading">
                   <span v-if="isForgotLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                  Send reset code
+                  Kirim Kode Verifikasi
                 </button>
               </div>
             </form>
@@ -347,19 +342,20 @@ async function handleResetPassword() {
                 />
               </div>
               <div class="mb-3">
-                <label class="form-label">Password Baru (min. 8 karakter)</label>
+                <label class="form-label">Kata Sandi Baru (min. 8 karakter)</label>
                 <div class="input-group input-group-flat">
                   <input
                     :type="showNewPassword ? 'text' : 'password'"
                     v-model="newPassword"
                     class="form-control"
-                    placeholder="Password baru"
+                    placeholder="Kata sandi baru"
                     required
                   />
                   <span class="input-group-text">
                     <a
                       href="#"
                       class="link-secondary"
+                      :title="showNewPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'"
                       @click.prevent="showNewPassword = !showNewPassword"
                     >
                       <svg v-if="!showNewPassword" xmlns="http://www.w3.org/2000/svg" class="icon" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -378,19 +374,19 @@ async function handleResetPassword() {
                 </div>
               </div>
               <div class="mb-3">
-                <label class="form-label">Konfirmasi Password Baru</label>
+                <label class="form-label">Konfirmasi Kata Sandi Baru</label>
                 <input
                   :type="showNewPassword ? 'text' : 'password'"
                   v-model="newPasswordConfirm"
                   class="form-control"
-                  placeholder="Ulangi password baru"
+                  placeholder="Ulangi kata sandi baru"
                   required
                 />
               </div>
               <div class="form-footer">
                 <button type="submit" class="btn btn-primary w-100" :disabled="isForgotLoading">
                   <span v-if="isForgotLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                  Simpan Password Baru
+                  Simpan Kata Sandi Baru
                 </button>
               </div>
               <div class="text-center text-secondary small mt-2">
@@ -400,7 +396,7 @@ async function handleResetPassword() {
             </form>
 
             <div class="text-center text-secondary mt-3">
-              Forget it, <a href="#" @click.prevent="closeForgot">send me back</a> to the sign in screen.
+              Batal reset kata sandi? <a href="#" @click.prevent="closeForgot">Kembali ke halaman masuk</a>.
             </div>
           </template>
         </div>
