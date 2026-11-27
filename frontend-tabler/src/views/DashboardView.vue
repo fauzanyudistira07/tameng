@@ -69,12 +69,14 @@ interface FindingItem {
   project?: { name: string }
 }
 
-// State & LocalStorage Cache Hydration (Mencegah flash data 0 saat refresh)
-const CACHE_KEY = 'tameng_soc_dashboard_cache_v2'
+// State & LocalStorage Cache Hydration
+const CACHE_KEY = 'tameng_soc_dashboard_cache_v3'
 
 function getInitialTelemetry() {
   if (typeof window !== 'undefined') {
     try {
+      // Bersihkan cache lama v2 agar data historis lama tidak menempel di grafik
+      localStorage.removeItem('tameng_soc_dashboard_cache_v2')
       const raw = localStorage.getItem(CACHE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
@@ -96,30 +98,29 @@ const isSyncing = ref(false)
 const lastUpdated = ref<string>('')
 let timer: ReturnType<typeof setInterval> | null = null
 
-// Nilai awal langsung mengambil dari cache lokal (atau nilai baseline SOC) agar saat refresh tidak muncul angka 0
 const counts = ref<OverviewCounts>(
   cachedTelemetry?.counts || {
-    projects: 15,
-    repositories: 10,
-    targets: 5,
-    scan_jobs: 48,
+    projects: 0,
+    repositories: 0,
+    targets: 0,
+    scan_jobs: 0,
     active_scans: 0,
-    findings: 1381,
-    critical_findings: 34,
-    high_findings: 213,
-    medium_findings: 1075,
-    low_findings: 59,
-    workers: 20
+    findings: 0,
+    critical_findings: 0,
+    high_findings: 0,
+    medium_findings: 0,
+    low_findings: 0,
+    workers: 1
   }
 )
 
 const queue = ref<QueueTelemetry>(
   cachedTelemetry?.queue || {
     pending_jobs: 0,
-    failed_jobs: 3,
+    failed_jobs: 0,
     active_scans: 0,
-    status: 'warning',
-    label: '3 Job Gagal'
+    status: 'ready',
+    label: 'Queue Worker Siap'
   }
 )
 
@@ -250,6 +251,8 @@ async function loadDashboardData() {
       }
       if (overviewRes.value.findings_timeline) {
         findingsTimeline.value = overviewRes.value.findings_timeline
+      } else {
+        findingsTimeline.value = { dates: [], critical: [], high: [], medium: [], low: [] }
       }
     }
 
@@ -301,7 +304,12 @@ async function loadDashboardData() {
 let severityChart: any = null
 
 function generateSeverityTimeline() {
-  if (findingsTimeline.value && Array.isArray(findingsTimeline.value.dates) && findingsTimeline.value.dates.length > 0) {
+  if (
+    totalFindings.value > 0 &&
+    findingsTimeline.value &&
+    Array.isArray(findingsTimeline.value.dates) &&
+    findingsTimeline.value.dates.length > 0
+  ) {
     return {
       dates: findingsTimeline.value.dates,
       criticalSeries: findingsTimeline.value.critical,
@@ -311,13 +319,21 @@ function generateSeverityTimeline() {
     }
   }
 
-  // Fallback awal sinkron database riil
+  // Kondisi bersih (0 temuan): tampilkan baseline 0 untuk 7 hari terakhir
+  const dates: string[] = []
+  const now = new Date()
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(now.getDate() - i)
+    dates.push(d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }))
+  }
+  const zeros = dates.map(() => 0)
   return {
-    dates: ['02 Sep', '05 Sep', '16 Sep', '17 Sep'],
-    criticalSeries: [4, 34, 48, counts.value.critical_findings || 48],
-    highSeries: [18, 213, 307, counts.value.high_findings || 318],
-    mediumSeries: [123, 1075, 1545, counts.value.medium_findings || 1560],
-    lowSeries: [6, 59, 79, counts.value.low_findings || 85]
+    dates,
+    criticalSeries: [...zeros],
+    highSeries: [...zeros],
+    mediumSeries: [...zeros],
+    lowSeries: [...zeros]
   }
 }
 
@@ -401,8 +417,12 @@ function getSeverityChartOptions() {
       }
     },
     yaxis: {
+      min: 0,
+      max: totalFindings.value === 0 ? 10 : undefined,
+      forceNiceScale: true,
       labels: {
-        padding: 4
+        padding: 4,
+        formatter: (val: number) => Math.round(val).toString()
       }
     },
     colors: [

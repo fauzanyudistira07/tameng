@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"tameng-backend-go/internal/models"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -120,6 +121,62 @@ func (h *OverviewHandler) GetOverview(c *gin.Context) {
 	fcMed.Count(&medCount)
 	fcLow.Count(&lowCount)
 
+	// Findings Timeline (Cumulative daily trend from real database rows)
+	type dailyRow struct {
+		Day      string `gorm:"column:day"`
+		Severity string `gorm:"column:sev"`
+		Cnt      int64  `gorm:"column:cnt"`
+	}
+	var dailyRows []dailyRow
+	tlQuery := h.db.Model(&models.Finding{}).
+		Select("DATE_FORMAT(created_at, '%Y-%m-%d') AS day, LOWER(severity) AS sev, COUNT(*) AS cnt").
+		Group("day, sev").
+		Order("day ASC")
+	if !isAdmin && user != nil && len(allowedProjectIDs) > 0 {
+		tlQuery = tlQuery.Where("project_id IN (?)", allowedProjectIDs)
+	} else if !isAdmin && user != nil {
+		tlQuery = tlQuery.Where("1 = 0")
+	}
+	tlQuery.Scan(&dailyRows)
+
+	dateOrder := make([]string, 0)
+	dateSeen := make(map[string]bool)
+	dayCounts := make(map[string]map[string]int64)
+	for _, r := range dailyRows {
+		if r.Day == "" {
+			continue
+		}
+		if !dateSeen[r.Day] {
+			dateSeen[r.Day] = true
+			dateOrder = append(dateOrder, r.Day)
+			dayCounts[r.Day] = map[string]int64{}
+		}
+		dayCounts[r.Day][r.Severity] += r.Cnt
+	}
+
+	tlDates := make([]string, 0, len(dateOrder))
+	tlCrit := make([]int64, 0, len(dateOrder))
+	tlHigh := make([]int64, 0, len(dateOrder))
+	tlMed := make([]int64, 0, len(dateOrder))
+	tlLow := make([]int64, 0, len(dateOrder))
+
+	var cumCrit, cumHigh, cumMed, cumLow int64
+	for _, d := range dateOrder {
+		label := d
+		if parsed, err := time.Parse("2006-01-02", d); err == nil {
+			label = parsed.Format("02 Jan")
+		}
+		cumCrit += dayCounts[d]["critical"]
+		cumHigh += dayCounts[d]["high"]
+		cumMed += dayCounts[d]["medium"]
+		cumLow += dayCounts[d]["low"]
+		tlDates = append(tlDates, label)
+		tlCrit = append(tlCrit, cumCrit)
+		tlHigh = append(tlHigh, cumHigh)
+		tlMed = append(tlMed, cumMed)
+		tlLow = append(tlLow, cumLow)
+	}
+
 	// Jobs table count
 	var pendingJobs, failedJobs int64
 	h.db.Table("jobs").Count(&pendingJobs)
@@ -164,6 +221,13 @@ func (h *OverviewHandler) GetOverview(c *gin.Context) {
 			"active_scans": activeScans,
 			"status":       queueStatus,
 			"label":        queueLabel,
+		},
+		"findings_timeline": gin.H{
+			"dates":    tlDates,
+			"critical": tlCrit,
+			"high":     tlHigh,
+			"medium":   tlMed,
+			"low":      tlLow,
 		},
 		"scan_profiles": scanProfiles,
 	})
